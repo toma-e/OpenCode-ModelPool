@@ -164,6 +164,8 @@ class OpenCodeModelConfig:
     cost_input_per_m: float
     cost_output_per_m: float
     total_cost_per_m: float
+    supports_vision: bool = False
+    supports_reasoning: bool = False
 
 
 @dataclass(frozen=True)
@@ -177,6 +179,11 @@ class OpenCodeAgentConfig:
     min_context_window: Optional[int]
     allowed_providers: Optional[List[str]]
     max_monthly_budget: Optional[float]
+    sort_strategy: str
+    allow_free: bool
+    requires_vision: bool
+    requires_reasoning: bool
+    prefer_tier1: bool
     estimated_monthly_cost: float
     model: Optional[OpenCodeModelConfig]
     selection_status: str
@@ -203,6 +210,11 @@ def build_modelscope_report_data(
         min_context = agent_req.min_context_window if agent_req else None
         allowed_providers = agent_req.allowed_providers if agent_req else None
         max_budget = agent_req.max_monthly_budget if agent_req else None
+        sort_strategy = agent_req.sort_strategy if agent_req else "lowest_cost"
+        allow_free = agent_req.allow_free if agent_req else True
+        requires_vision = agent_req.requires_vision if agent_req else False
+        requires_reasoning = agent_req.requires_reasoning if agent_req else False
+        prefer_tier1 = agent_req.prefer_tier1 if agent_req else True
 
         agent_budget = budget_by_agent.get(res.agent_name)
         monthly_cost = agent_budget.monthly_total_cost if agent_budget else 0.0
@@ -219,6 +231,8 @@ def build_modelscope_report_data(
                 cost_input_per_m=res.model.cost_input_per_m,
                 cost_output_per_m=res.model.cost_output_per_m,
                 total_cost_per_m=res.model.total_cost_per_m,
+                supports_vision=res.model.supports_vision,
+                supports_reasoning=res.model.supports_reasoning,
             )
             agent_conf = OpenCodeAgentConfig(
                 name=res.agent_name,
@@ -228,6 +242,11 @@ def build_modelscope_report_data(
                 min_context_window=min_context,
                 allowed_providers=allowed_providers,
                 max_monthly_budget=max_budget,
+                sort_strategy=sort_strategy,
+                allow_free=allow_free,
+                requires_vision=requires_vision,
+                requires_reasoning=requires_reasoning,
+                prefer_tier1=prefer_tier1,
                 estimated_monthly_cost=monthly_cost,
                 model=model_conf,
                 selection_status=status_str,
@@ -243,6 +262,11 @@ def build_modelscope_report_data(
                 min_context_window=min_context,
                 allowed_providers=allowed_providers,
                 max_monthly_budget=max_budget,
+                sort_strategy=sort_strategy,
+                allow_free=allow_free,
+                requires_vision=requires_vision,
+                requires_reasoning=requires_reasoning,
+                prefer_tier1=prefer_tier1,
                 estimated_monthly_cost=0.0,
                 model=None,
                 selection_status="unassigned",

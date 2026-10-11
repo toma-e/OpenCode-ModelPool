@@ -63,6 +63,54 @@ class TestFetcher(unittest.TestCase):
         self.assertTrue(model.supports_tools)
         self.assertEqual(model.tier, "pay_as_you_go")
         self.assertEqual(model.complexity_score, 5)
+        self.assertTrue(model.supports_vision)
+        self.assertFalse(model.supports_reasoning)
+
+    def test_parse_openrouter_model_reasoning_and_vision_modalities(self) -> None:
+        raw_r1 = {
+            "id": "deepseek/deepseek-r1",
+            "pricing": {"prompt": "0.00000055", "completion": "0.00000219"},
+            "context_length": 128000,
+            "supported_parameters": ["tools"],
+            "architecture": {"modality": "text->text"},
+        }
+        model_r1 = parse_openrouter_model(raw_r1)
+        self.assertIsNotNone(model_r1)
+        assert model_r1 is not None
+        self.assertTrue(model_r1.supports_reasoning)
+        self.assertFalse(model_r1.supports_vision)
+
+        raw_vl = {
+            "id": "qwen/qwen-2.5-vl-72b-instruct",
+            "pricing": {"prompt": "0.0000004", "completion": "0.0000004"},
+            "context_length": 128000,
+            "supported_parameters": ["tools"],
+            "architecture": {"modality": "text+image->text"},
+            "input_modalities": ["text", "image"],
+        }
+        model_vl = parse_openrouter_model(raw_vl)
+        self.assertIsNotNone(model_vl)
+        assert model_vl is not None
+        self.assertTrue(model_vl.supports_vision)
+        self.assertFalse(model_vl.supports_reasoning)
+
+        # Modèle avec reasoning objet et vision dans architecture.input_modalities
+        raw_sonnet = {
+            "id": "anthropic/claude-sonnet-5.5",
+            "pricing": {"prompt": "0.000002", "completion": "0.00001"},
+            "context_length": 200000,
+            "supported_parameters": ["tools"],
+            "architecture": {
+                "modality": "text+image->text",
+                "input_modalities": ["text", "image", "file"],
+            },
+            "reasoning": {"mandatory": True, "supported_efforts": ["high", "low"]},
+        }
+        model_sonnet = parse_openrouter_model(raw_sonnet)
+        self.assertIsNotNone(model_sonnet)
+        assert model_sonnet is not None
+        self.assertTrue(model_sonnet.supports_vision)
+        self.assertTrue(model_sonnet.supports_reasoning)
 
     def test_parse_openrouter_model_free(self) -> None:
         raw = {

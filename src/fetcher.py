@@ -141,6 +141,38 @@ def parse_openrouter_model(raw: dict[str, Any]) -> Optional[Model]:
         supported_params = []
     supports_tools = "tools" in supported_params or "tool_choice" in supported_params
 
+    # Détection de la vision (multimodalité)
+    architecture = raw.get("architecture")
+    modality = ""
+    arch_input_modalities: list[str] = []
+    if isinstance(architecture, dict):
+        modality = str(architecture.get("modality", "")).lower()
+        aim = architecture.get("input_modalities")
+        if isinstance(aim, list):
+            arch_input_modalities = [str(x).lower() for x in aim]
+    input_modalities = raw.get("input_modalities", [])
+    if not isinstance(input_modalities, list):
+        input_modalities = []
+    all_input_modalities = set(arch_input_modalities + [str(x).lower() for x in input_modalities])
+    has_image_input = "image" in all_input_modalities or "image" in modality
+    model_id_lower = model_id.lower()
+    vision_keywords = (
+        "-vl", "-vision", "vision-", "/vision", "omni",
+        "gpt-4", "gpt-5", "gpt-6", "gemini-", "claude-",
+        "openai/o1", "openai/o3", "openai/o4"
+    )
+    supports_vision = has_image_input or any(kw in model_id_lower for kw in vision_keywords)
+
+    # Détection des modèles de raisonnement (reasoning / thinking models)
+    reasoning_obj = raw.get("reasoning")
+    has_reasoning_field = reasoning_obj is not None and reasoning_obj is not False
+    reasoning_keywords = ("o1", "o3", "o4", "r1", "qwq", "thinking", "reasoning", "reasoner")
+    is_reasoning_id = any(
+        re.search(rf"(?:^|[-_/:])({re.escape(kw)})(?:$|[-_/:])", model_id_lower)
+        for kw in reasoning_keywords
+    )
+    supports_reasoning = has_reasoning_field or is_reasoning_id or "reasoning" in supported_params
+
     complexity_score = estimate_complexity_score(model_id, cost_in)
 
     try:
@@ -153,6 +185,8 @@ def parse_openrouter_model(raw: dict[str, Any]) -> Optional[Model]:
             context_window=context_window,
             supports_tools=supports_tools,
             complexity_score=complexity_score,
+            supports_vision=supports_vision,
+            supports_reasoning=supports_reasoning,
         )
     except ValueError:
         return None
@@ -294,6 +328,8 @@ def sync_models_from_openrouter(
                 "context_window": m.context_window,
                 "supports_tools": m.supports_tools,
                 "complexity_score": m.complexity_score,
+                "supports_vision": m.supports_vision,
+                "supports_reasoning": m.supports_reasoning,
             }
             for m in parsed_models
         ],

@@ -74,7 +74,11 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
             return
 
         parsed = urlparse(self.path)
-        fallback = self._read_fallback_from_body(self.allow_fallback)
+        body = self._read_json_body()
+        fallback = self.allow_fallback
+        if isinstance(body, dict) and "fallback" in body and isinstance(body["fallback"], bool):
+            fallback = body["fallback"]
+
         if parsed.path == "/api/recalculate":
             self._send_operation(self.service.build_report_result(allow_fallback=fallback))
             return
@@ -84,26 +88,37 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/sync":
             self._send_operation(self.service.sync_catalogue(allow_fallback=fallback))
             return
+        if parsed.path == "/api/agent/update":
+            if not isinstance(body, dict):
+                self._send_json(400, {"ok": False, "message": "Corps JSON attendu."})
+                return
+            agent_name = body.get("agent_name")
+            updates = body.get("updates")
+            if not isinstance(agent_name, str) or not isinstance(updates, dict):
+                self._send_json(400, {"ok": False, "message": "Champs 'agent_name' (str) et 'updates' (dict) obligatoires."})
+                return
+            self._send_operation(self.service.update_agent_requirement(agent_name, updates, allow_fallback=fallback))
+            return
         self._send_json(404, {"ok": False, "message": "Ressource introuvable."})
 
-    def _read_fallback_from_body(self, default: bool) -> bool:
+    def _read_json_body(self) -> Any:
         length_header = self.headers.get("Content-Length", "0")
         try:
             length = int(length_header)
         except ValueError:
-            return default
+            return None
         if length <= 0 or length > self.MAX_POST_BODY_BYTES:
-            return default
+            return None
         raw = self.rfile.read(length)
         try:
-            payload: object = json.loads(raw.decode("utf-8") or "{}")
+            return json.loads(raw.decode("utf-8") or "{}")
         except (UnicodeDecodeError, json.JSONDecodeError):
-            return default
-        if not isinstance(payload, dict) or "fallback" not in payload:
-            return default
-        value = payload["fallback"]
-        if isinstance(value, bool):
-            return value
+            return None
+
+    def _read_fallback_from_body(self, default: bool) -> bool:
+        body = self._read_json_body()
+        if isinstance(body, dict) and "fallback" in body and isinstance(body["fallback"], bool):
+            return body["fallback"]
         return default
 
     def _send_operation(self, result: OperationResult) -> None:

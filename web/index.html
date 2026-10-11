@@ -65,13 +65,45 @@
     .status.unassigned { color: var(--bad); }
     ul { margin: 0.4rem 0 0; padding-left: 1.1rem; }
     code { font-size: 0.9rem; }
+    .form-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: center;
+      margin-top: 0.75rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--line);
+      background: rgba(0, 0, 0, 0.15);
+      padding: 0.6rem 0.8rem;
+      border-radius: 0.4rem;
+    }
+    .form-group {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.85rem;
+    }
+    select, input[type="number"] {
+      background: #131b26;
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 0.3rem;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.85rem;
+    }
+    button.btn-sm {
+      padding: 0.25rem 0.6rem;
+      font-size: 0.85rem;
+      background: #1f6feb;
+      border-color: #1f6feb;
+    }
   </style>
 </head>
 <body>
   <header>
     <div>
       <h1>ModelScope</h1>
-      <p class="muted">Interface locale — 127.0.0.1 — exigences d'agents en lecture seule</p>
+      <p class="muted">Interface locale — 127.0.0.1 — configuration interactive des agents</p>
     </div>
     <div class="actions">
       <label><input id="fallback" type="checkbox" checked> Surclassement (fallback)</label>
@@ -145,17 +177,116 @@
         const budgetLine = agent.budget
           ? `<p>Coût estimé ${money(agent.budget.monthly_total_cost)}${agent.budget.budget_exceeded ? " · plafond dépassé" : ""}${agent.budget.quota_warning ? " · " + escapeHtml(agent.budget.quota_warning) : ""}</p>`
           : "";
+        const c = agent.constraints || {};
+        const strategy = c.sort_strategy || "lowest_cost";
+        const allowFree = c.allow_free !== false;
+        const preferFree = Boolean(c.prefer_free);
+        const reqVision = Boolean(c.requires_vision);
+        const reqReasoning = Boolean(c.requires_reasoning);
+        const preferTier1 = c.prefer_tier1 !== false;
+        const minComp = c.min_complexity ?? 1;
+        const maxComp = c.max_complexity ?? 5;
+        const tierTag = !allowFree ? " · payant uniquement" : "";
+        const visionTag = reqVision ? " · vision requise" : "";
+        const reasoningTag = reqReasoning ? " · raisonnement requis" : "";
+        const tier1Tag = preferTier1 ? " · Tier 1 prioritaire" : "";
+
+        const modelBadges = agent.model
+          ? [
+              agent.model.supports_vision ? "vision" : null,
+              agent.model.supports_reasoning ? "reasoning" : null,
+            ].filter(Boolean).map((b) => `<span style="font-size:0.75rem;background:#23405f;padding:0.1rem 0.4rem;border-radius:0.2rem;margin-left:0.3rem;">${escapeHtml(b)}</span>`).join("")
+          : "";
+
         return `<article class="card">
-          <div class="status ${escapeHtml(agent.status)}">${escapeHtml(statusLabel(agent.status))}</div>
+          <div class="status ${escapeHtml(agent.status)}">${escapeHtml(statusLabel(agent.status))} · stratégie: ${escapeHtml(strategy)}${escapeHtml(tierTag)}${escapeHtml(visionTag)}${escapeHtml(reasoningTag)}${escapeHtml(tier1Tag)}</div>
           <h2>${escapeHtml(agent.name)}</h2>
           <p class="muted">${escapeHtml(agent.description)}</p>
-          ${model}
+          ${agent.model ? `<p><code>${escapeHtml(agent.model.id)}</code> · complexité ${escapeHtml(agent.model.complexity_score)} · ${escapeHtml(agent.model.tier)}${modelBadges}</p>` : "<p class='muted'>Aucun modèle retenu.</p>"}
           <p>${escapeHtml(agent.reason)}</p>
           ${budgetLine}
           ${alternatives ? `<p class="muted">Alternatives</p><ul>${alternatives}</ul>` : ""}
+
+          <form class="form-row" onsubmit="saveAgentRequirements(event, '${escapeHtml(agent.name)}')">
+            <div class="form-group">
+              <label for="strat-${escapeHtml(agent.name)}">Stratégie :</label>
+              <select id="strat-${escapeHtml(agent.name)}">
+                <option value="lowest_cost"${strategy === "lowest_cost" ? " selected" : ""}>Coût minimal (lowest_cost)</option>
+                <option value="max_performance"${strategy === "max_performance" ? " selected" : ""}>Performance max (max_performance)</option>
+                <option value="max_context"${strategy === "max_context" ? " selected" : ""}>Contexte max (max_context)</option>
+                <option value="balanced"${strategy === "balanced" ? " selected" : ""}>Équilibré (balanced)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label><input type="checkbox" id="prefer_tier1-${escapeHtml(agent.name)}"${preferTier1 ? " checked" : ""}> Préférer Tier 1 (Labs majeurs)</label>
+            </div>
+
+            <div class="form-group">
+              <label><input type="checkbox" id="allow_free-${escapeHtml(agent.name)}"${allowFree ? " checked" : ""}> Autoriser gratuit</label>
+            </div>
+
+            <div class="form-group">
+              <label><input type="checkbox" id="prefer_free-${escapeHtml(agent.name)}"${preferFree ? " checked" : ""}> Préférer gratuit</label>
+            </div>
+
+            <div class="form-group">
+              <label><input type="checkbox" id="req_vision-${escapeHtml(agent.name)}"${reqVision ? " checked" : ""}> Vision requise</label>
+            </div>
+
+            <div class="form-group">
+              <label><input type="checkbox" id="req_reasoning-${escapeHtml(agent.name)}"${reqReasoning ? " checked" : ""}> Raisonnement</label>
+            </div>
+
+            <button type="submit" class="btn-sm">Appliquer</button>
+          </form>
         </article>`;
       }).join("");
       assignments.innerHTML = (diagnostics ? `<article class="card"><h2>Diagnostics</h2><ul>${diagnostics}</ul></article>` : "") + cards;
+    }
+
+    async function saveAgentRequirements(event, agentName) {
+      event.preventDefault();
+      const strategyEl = document.getElementById("strat-" + agentName);
+      const allowFreeEl = document.getElementById("allow_free-" + agentName);
+      const preferFreeEl = document.getElementById("prefer_free-" + agentName);
+      const reqVisionEl = document.getElementById("req_vision-" + agentName);
+      const reqReasoningEl = document.getElementById("req_reasoning-" + agentName);
+      const preferTier1El = document.getElementById("prefer_tier1-" + agentName);
+
+      const allow_free = allowFreeEl.checked;
+      let prefer_free = preferFreeEl.checked;
+
+      if (!allow_free && prefer_free) {
+        prefer_free = false;
+        preferFreeEl.checked = false;
+      }
+
+      const updates = {
+        sort_strategy: strategyEl.value,
+        allow_free: allow_free,
+        prefer_free: prefer_free,
+        requires_vision: reqVisionEl.checked,
+        requires_reasoning: reqReasoningEl.checked,
+        prefer_tier1: preferTier1El.checked,
+      };
+
+      try {
+        const response = await fetch("/api/agent/update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            agent_name: agentName,
+            updates: updates,
+            fallback: fallbackEnabled(),
+          }),
+        });
+        const payload = await response.json();
+        showBanner(Boolean(payload.ok), payload.message || (payload.ok ? "Enregistré" : "Erreur"));
+        if (payload.report) render(payload.report);
+      } catch (error) {
+        showBanner(false, "Échec de l'enregistrement : " + error);
+      }
     }
 
     async function call(path, method) {

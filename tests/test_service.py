@@ -142,9 +142,38 @@ class TestService(unittest.TestCase):
             ressources_dir.mkdir()
             (ressources_dir / "opencode.jsonc").write_text("{ unclosed invalid json", encoding="utf-8")
             service = ApplicationService(directory)
-            result = service.export_config()
+    def test_update_agent_requirement_success(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            write_valid_workspace(directory)
+            service = ApplicationService(directory)
+            result = service.update_agent_requirement(
+                "agent",
+                {"sort_strategy": "max_performance", "allow_free": False, "prefer_free": False},
+            )
+            self.assertTrue(result.ok)
+            self.assertIn("mises à jour", result.message)
+            # Vérifier la persistance dans le fichier JSON
+            saved_agents = json.loads(service.agents_path.read_text(encoding="utf-8"))["agents"]
+            agent_data = saved_agents[0]
+            self.assertEqual(agent_data["sort_strategy"], "max_performance")
+            self.assertFalse(agent_data["allow_free"])
+            # Vérifier le rapport renvoyé
+            self.assertIsNotNone(result.report)
+            self.assertEqual(result.report.results[0].model.id, "test/alt")  # test/model exclu car gratuit
+
+    def test_update_agent_requirement_invalid_validation_rejects(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            write_valid_workspace(directory)
+            service = ApplicationService(directory)
+            # Contradiction allow_free=False et prefer_free=True
+            result = service.update_agent_requirement(
+                "agent",
+                {"allow_free": False, "prefer_free": True},
+            )
             self.assertFalse(result.ok)
-            self.assertIn("Fichier de base OpenCode invalide", result.message)
+            self.assertIn("Validation échouée", result.message)
 
 
 if __name__ == "__main__":

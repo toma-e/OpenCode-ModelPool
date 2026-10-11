@@ -8,13 +8,13 @@ from __future__ import annotations
 
 import json
 import threading
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Optional
 
 from src.budget import AgentBudgetReport, FleetBudgetReport, simulate_fleet_budget
 from src.exporter import export_opencode_config, parse_json_or_jsonc
-from src.fetcher import sync_models_from_openrouter
+from src.fetcher import create_backup, sync_models_from_openrouter, write_json_atomic
 from src.selector import AgentRequirement, Model, SelectionResult, resolve_model_for_agent
 
 DEFAULT_EXPORT_RELATIVE = Path("config") / "opencode.json"
@@ -108,6 +108,8 @@ def _model_payload(model: Model) -> dict[str, Any]:
         "context_window": model.context_window,
         "supports_tools": model.supports_tools,
         "complexity_score": model.complexity_score,
+        "supports_vision": model.supports_vision,
+        "supports_reasoning": model.supports_reasoning,
         "is_free": model.is_free,
     }
 
@@ -161,6 +163,11 @@ def serialize_report(report: FleetReport) -> dict[str, Any]:
                     "allowed_providers": agent.allowed_providers,
                     "excluded_providers": agent.excluded_providers,
                     "max_monthly_budget": agent.max_monthly_budget,
+                    "sort_strategy": agent.sort_strategy,
+                    "allow_free": agent.allow_free,
+                    "requires_vision": agent.requires_vision,
+                    "requires_reasoning": agent.requires_reasoning,
+                    "prefer_tier1": agent.prefer_tier1,
                 },
             }
         )
@@ -293,4 +300,81 @@ class ApplicationService:
             except OSError as error:
                 return OperationResult(False, f"Écriture de l'export impossible : {error}")
             return OperationResult(True, f"Configuration OpenCode exportée : {exported}", report)
+
+    def update_agent_requirement(
+        self,
+        agent_name: str,
+        updates: dict[str, Any],
+        allow_fallback: bool = True,
+    ) -> OperationResult:
+        """Met à jour les exigences d'un agent avec validation, backup et écriture atomique."""
+        with self._lock:
+            try:
+                raw_data = _load_json(self.agents_path, "Exigences des agents")
+                agents_list = raw_data.get("agents")
+                if not isinstance(agents_list, list):
+                    return OperationResult(False, "Format de configuration invalide : 'agents' doit être une liste.")
+
+                target_dict: Optional[dict[str, Any]] = None
+                for item in agents_list:
+                    if isinstance(item, dict) and item.get("name") == agent_name:
+                        target_dict = item
+                        break
+
+                if target_dict is None:
+                    return OperationResult(False, f"Agent '{agent_name}' introuvable.")
+
+                # On applique les modifications sur une copie pour valider
+                merged = dict(target_dict)
+                merged.update(updates)
+                # Validation stricte via AgentRequirement
+                validated_req = AgentRequirement.from_dict(merged, f"agent '{agent_name}'")
+
+                # Reconstruire le dictionnaire propre pour le JSON en retirant les clés None optionnelles
+                new_dict: dict[str, Any] = {
+                    "name": validated_req.name,
+                    "description": validated_req.description,
+                    "min_complexity": validated_req.min_complexity,
+                    "max_complexity": validated_req.max_complexity,
+                    "requires_tools": validated_req.requires_tools,
+                    "prefer_free": validated_req.prefer_free,
+                    "allow_free": validated_req.allow_free,
+                    "sort_strategy": validated_req.sort_strategy,
+                    "requires_vision": validated_req.requires_vision,
+                    "requires_reasoning": validated_req.requires_reasoning,
+                    "prefer_tier1": validated_req.prefer_tier1,
+                }
+                if validated_req.min_context_window is not None:
+                    new_dict["min_context_window"] = validated_req.min_context_window
+                if validated_req.allowed_providers is not None:
+                    new_dict["allowed_providers"] = validated_req.allowed_providers
+                if validated_req.excluded_providers is not None:
+                    new_dict["excluded_providers"] = validated_req.excluded_providers
+                if validated_req.force_model is not None:
+                    new_dict["force_model"] = validated_req.force_model
+                if validated_req.mode is not None:
+                    new_dict["mode"] = validated_req.mode
+                if validated_req.estimated_tokens_input > 0:
+                    new_dict["estimated_tokens_input"] = validated_req.estimated_tokens_input
+                if validated_req.estimated_tokens_output > 0:
+                    new_dict["estimated_tokens_output"] = validated_req.estimated_tokens_output
+                if validated_req.max_monthly_budget is not None:
+                    new_dict["max_monthly_budget"] = validated_req.max_monthly_budget
+
+                # Remplacement dans la liste
+                index = agents_list.index(target_dict)
+                agents_list[index] = new_dict
+
+                # Backup puis écriture atomique
+                create_backup(self.agents_path)
+                write_json_atomic(self.agents_path, {"agents": agents_list})
+
+                # Recalcul du rapport
+                report = self._build_report_unlocked(allow_fallback)
+                return OperationResult(True, f"Exigences de l'agent '{agent_name}' mises à jour.", report)
+            except ValueError as error:
+                return OperationResult(False, f"Validation échouée : {error}")
+            except Exception as error:
+                return OperationResult(False, f"Erreur lors de la mise à jour : {error}")
+
 

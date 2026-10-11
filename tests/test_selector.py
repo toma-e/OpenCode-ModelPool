@@ -22,6 +22,8 @@ class TestSelector(unittest.TestCase):
             context_window=8192,
             supports_tools=False,
             complexity_score=1,
+            supports_vision=False,
+            supports_reasoning=False,
         )
         self.gemini_lite = Model(
             id="google/gemini-2.5-flash-lite",
@@ -32,6 +34,8 @@ class TestSelector(unittest.TestCase):
             context_window=1000000,
             supports_tools=True,
             complexity_score=2,
+            supports_vision=True,
+            supports_reasoning=False,
         )
         self.gpt_4o_mini = Model(
             id="openai/gpt-4o-mini",
@@ -42,6 +46,8 @@ class TestSelector(unittest.TestCase):
             context_window=128000,
             supports_tools=True,
             complexity_score=2,
+            supports_vision=True,
+            supports_reasoning=False,
         )
         self.gemini_flash = Model(
             id="google/gemini-2.5-flash",
@@ -52,6 +58,8 @@ class TestSelector(unittest.TestCase):
             context_window=1000000,
             supports_tools=True,
             complexity_score=3,
+            supports_vision=True,
+            supports_reasoning=False,
         )
         self.llama_70b = Model(
             id="meta-llama/llama-3.3-70b-instruct",
@@ -62,6 +70,20 @@ class TestSelector(unittest.TestCase):
             context_window=128000,
             supports_tools=True,
             complexity_score=4,
+            supports_vision=False,
+            supports_reasoning=False,
+        )
+        self.deepseek_r1 = Model(
+            id="deepseek/deepseek-r1",
+            provider="deepseek",
+            tier="pay_as_you_go",
+            cost_input_per_m=0.55,
+            cost_output_per_m=2.19,
+            context_window=128000,
+            supports_tools=True,
+            complexity_score=5,
+            supports_vision=False,
+            supports_reasoning=True,
         )
         self.claude_sonnet = Model(
             id="anthropic/claude-3-5-sonnet",
@@ -72,6 +94,8 @@ class TestSelector(unittest.TestCase):
             context_window=200000,
             supports_tools=True,
             complexity_score=5,
+            supports_vision=True,
+            supports_reasoning=False,
         )
         self.models = [
             self.llama_1b,
@@ -79,6 +103,7 @@ class TestSelector(unittest.TestCase):
             self.gpt_4o_mini,
             self.gemini_flash,
             self.llama_70b,
+            self.deepseek_r1,
             self.claude_sonnet,
         ]
 
@@ -144,7 +169,7 @@ class TestSelector(unittest.TestCase):
         self.assertEqual(result_fallback.model.id, "google/gemini-2.5-flash-lite")
 
     def test_architect_agent_selection(self) -> None:
-        """architect_agent (complexité 5) doit choisir claude-3-5-sonnet."""
+        """architect_agent (complexité 5, requires_vision) doit choisir claude-3-5-sonnet."""
         req = AgentRequirement(
             name="architect_agent",
             description="",
@@ -152,6 +177,7 @@ class TestSelector(unittest.TestCase):
             max_complexity=5,
             requires_tools=True,
             prefer_free=False,
+            requires_vision=True,
         )
         selected = select_model_for_agent(req, self.models)
         self.assertIsNotNone(selected)
@@ -312,6 +338,240 @@ class TestSelector(unittest.TestCase):
         self.assertEqual(selected.id, "google/gemini-2.5-flash-lite")
 
 
+    def test_agent_validation_rejects_invalid_sort_strategy(self) -> None:
+        invalid = {
+            "name": "bad_strategy",
+            "min_complexity": 1,
+            "max_complexity": 2,
+            "requires_tools": False,
+            "sort_strategy": "unknown_strategy",
+        }
+        with self.assertRaisesRegex(ValueError, "sort_strategy"):
+            AgentRequirement.from_dict(invalid)
+
+    def test_sort_strategy_max_performance(self) -> None:
+        """max_performance doit préférer le modèle à complexité maximale dans la plage autorisée."""
+        # Modèles compatibles pour plage 2 à 4 avec tools:
+        # gemini_lite (compl 2, $0), gpt_4o_mini (compl 2, $0.75), gemini_flash (compl 3, $0), llama_70b (compl 4, $0.42)
+        # lowest_cost prendrait gemini_flash (compl 3, $0) ou gemini_lite ($0)
+        # max_performance avec prefer_free=False doit prendre llama_70b (compl 4)
+        req = AgentRequirement(
+            name="perf_agent",
+            description="",
+            min_complexity=2,
+            max_complexity=4,
+            requires_tools=True,
+            prefer_free=False,
+            sort_strategy="max_performance",
+        )
+        result = resolve_model_for_agent(req, self.models)
+        self.assertIsNotNone(result.model)
+        self.assertEqual(result.model.id, "meta-llama/llama-3.3-70b-instruct")
+        self.assertEqual(result.model.complexity_score, 4)
+        self.assertIn("stratégie: max_performance", result.reason)
+
+    def test_sort_strategy_max_context(self) -> None:
+        """max_context doit choisir le modèle offrant la plus grande fenêtre de contexte."""
+        # Modèles de complexité 4-5 :
+        # llama_70b : context_window = 128_000
+        # claude_sonnet : context_window = 200_000
+        # Avec lowest_cost : llama_70b est choisi ($0.42 vs $18.0)
+        # Avec max_context : claude_sonnet est choisi (200k > 128k)
+        req = AgentRequirement(
+            name="context_agent",
+            description="",
+            min_complexity=4,
+            max_complexity=5,
+            requires_tools=True,
+            prefer_free=False,
+            sort_strategy="max_context",
+        )
+        selected = select_model_for_agent(req, self.models)
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected.id, "anthropic/claude-3-5-sonnet")
+        self.assertEqual(selected.context_window, 200000)
+
+    def test_sort_strategy_balanced(self) -> None:
+        """balanced choisit selon le compromis score qualité/contexte/prix."""
+        req = AgentRequirement(
+            name="balanced_agent",
+            description="",
+            min_complexity=2,
+            max_complexity=4,
+            requires_tools=True,
+            prefer_free=False,
+            sort_strategy="balanced",
+        )
+        result = resolve_model_for_agent(req, self.models)
+        self.assertIsNotNone(result.model)
+        self.assertIn("stratégie: balanced", result.reason)
+
+    def test_sort_strategy_fallback_max_performance(self) -> None:
+        """En cas de fallback, max_performance sélectionne parmi les modèles au-dessus de max_complexity."""
+        # Agent voulant complexité 1 avec tools (aucun en complexité 1 n'a tools: llama_1b n'a pas tools)
+        # Les modèles éligibles en fallback sont gemini_lite (2), gpt_4o_mini (2), gemini_flash (3), llama_70b (4), claude_sonnet (5)
+        # En max_performance avec prefer_free=False, le modèle le plus puissant claude_sonnet (5) doit être choisi
+        req = AgentRequirement(
+            name="fallback_agent",
+            description="",
+            min_complexity=1,
+            max_complexity=1,
+            requires_tools=True,
+            prefer_free=False,
+            sort_strategy="max_performance",
+        )
+        result = resolve_model_for_agent(req, self.models, allow_fallback=True)
+        self.assertIsNotNone(result.model)
+        self.assertTrue(result.is_fallback)
+        self.assertEqual(result.model.id, "deepseek/deepseek-r1")
+        self.assertEqual(result.model.complexity_score, 5)
+        self.assertIn("stratégie: max_performance", result.reason)
+
+
+    def test_agent_validation_rejects_prefer_free_when_allow_free_is_false(self) -> None:
+        invalid = {
+            "name": "contradictory_agent",
+            "min_complexity": 1,
+            "max_complexity": 2,
+            "requires_tools": False,
+            "prefer_free": True,
+            "allow_free": False,
+        }
+        with self.assertRaisesRegex(ValueError, "prefer_free.*allow_free"):
+            AgentRequirement.from_dict(invalid)
+
+    def test_allow_free_false_excludes_free_models(self) -> None:
+        """allow_free=False exclut les modèles gratuits (tier free_tier ou coût 0)."""
+        # Complexité 2 avec tools :
+        # gemini_lite (free_tier, $0)
+        # gpt_4o_mini (pay_as_you_go, $0.75)
+        req = AgentRequirement(
+            name="paid_only_agent",
+            description="",
+            min_complexity=2,
+            max_complexity=2,
+            requires_tools=True,
+            prefer_free=False,
+            allow_free=False,
+        )
+        # gemini_lite doit être incompatible à cause de allow_free=False
+        self.assertFalse(is_model_compatible(self.gemini_lite, req))
+        self.assertTrue(is_model_compatible(self.gpt_4o_mini, req))
+
+        selected = select_model_for_agent(req, self.models)
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected.id, "openai/gpt-4o-mini")
+
+    def test_allow_free_false_when_only_free_models_available(self) -> None:
+        """Si seuls des modèles gratuits sont disponibles, aucun modèle n'est retenu."""
+        # Modèles de complexité 3 avec tools : seulement gemini_flash (free_tier)
+        req = AgentRequirement(
+            name="strict_paid_agent",
+            description="",
+            min_complexity=3,
+            max_complexity=3,
+            requires_tools=True,
+            prefer_free=False,
+            allow_free=False,
+        )
+        self.assertFalse(is_model_compatible(self.gemini_flash, req))
+        result = resolve_model_for_agent(req, self.models, allow_fallback=False)
+        self.assertIsNone(result.model)
+    def test_requires_vision_filter(self) -> None:
+        """requires_vision=True filtre les modèles sans support vision."""
+        # Modèles de complexité 4 avec tools :
+        # llama_70b (supports_vision=False)
+        # S'il y a un agent qui demande vision en complexité 4, llama_70b est rejeté
+        req = AgentRequirement(
+            name="vision_agent",
+            description="",
+            min_complexity=4,
+            max_complexity=4,
+            requires_tools=True,
+            prefer_free=False,
+            requires_vision=True,
+        )
+        self.assertFalse(is_model_compatible(self.llama_70b, req))
+        result = resolve_model_for_agent(req, self.models, allow_fallback=False)
+        self.assertIsNone(result.model)
+        # Avec fallback vers complexité 5, claude_sonnet supporte la vision !
+        result_fb = resolve_model_for_agent(req, self.models, allow_fallback=True)
+        self.assertIsNotNone(result_fb.model)
+        self.assertEqual(result_fb.model.id, "anthropic/claude-3-5-sonnet")
+
+    def test_requires_reasoning_filter(self) -> None:
+        """requires_reasoning=True ne retient que les modèles de réflexion."""
+        # En complexité 5 avec tools :
+        # deepseek_r1 (supports_reasoning=True)
+        # claude_sonnet (supports_reasoning=False)
+        req = AgentRequirement(
+            name="reasoning_agent",
+            description="",
+            min_complexity=5,
+            max_complexity=5,
+            requires_tools=True,
+            prefer_free=False,
+            requires_reasoning=True,
+        )
+        self.assertTrue(is_model_compatible(self.deepseek_r1, req))
+        self.assertFalse(is_model_compatible(self.claude_sonnet, req))
+        selected = select_model_for_agent(req, self.models)
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected.id, "deepseek/deepseek-r1")
+
+    def test_prefer_tier1_prioritization(self) -> None:
+        """prefer_tier1=True classe les modèles Tier 1 avant les fournisseurs communautaires à score et coût similaires."""
+        niche_model = Model(
+            id="unknown-lab/niche-model",
+            provider="unknown-lab",
+            tier="pay_as_you_go",
+            cost_input_per_m=0.10,
+            cost_output_per_m=0.10,
+            context_window=100000,
+            supports_tools=True,
+            complexity_score=4,
+            supports_vision=False,
+            supports_reasoning=False,
+        )
+        tier1_model = Model(
+            id="openai/standard-model",
+            provider="openai",
+            tier="pay_as_you_go",
+            cost_input_per_m=0.15,
+            cost_output_per_m=0.15,
+            context_window=100000,
+            supports_tools=True,
+            complexity_score=4,
+            supports_vision=False,
+            supports_reasoning=False,
+        )
+        test_pool = [niche_model, tier1_model]
+        req_with_tier1 = AgentRequirement(
+            name="dev_agent",
+            description="",
+            min_complexity=4,
+            max_complexity=4,
+            requires_tools=True,
+            prefer_free=False,
+            prefer_tier1=True,
+        )
+        selected = select_model_for_agent(req_with_tier1, test_pool)
+        self.assertEqual(selected.id, "openai/standard-model")
+
+        req_without_tier1 = AgentRequirement(
+            name="dev_agent_cheap",
+            description="",
+            min_complexity=4,
+            max_complexity=4,
+            requires_tools=True,
+            prefer_free=False,
+            prefer_tier1=False,
+        )
+        selected_cheap = select_model_for_agent(req_without_tier1, test_pool)
+        self.assertEqual(selected_cheap.id, "unknown-lab/niche-model")
+
+
 if __name__ == "__main__":
     unittest.main()
+
 
