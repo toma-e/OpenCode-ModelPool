@@ -18,11 +18,17 @@ try {
 # Resoudre le chemin WSL du projet
 $wslProjectDir = ""
 try {
-    $wslProjectDir = (wsl wslpath "$PSScriptRoot" 2>$null).Trim()
+    $scriptDir = $PSScriptRoot.TrimEnd('\')
+    if ($scriptDir -match '^\\\\(?:wsl\.localhost|wsl\$)\\[^\\]+(?<wslpath>\\.*)$') {
+        $wslProjectDir = $matches['wslpath'] -replace '\\', '/'
+    } else {
+        $wslProjectDir = (wsl wslpath -a "$scriptDir" 2>$null).Trim()
+    }
 } catch {}
 if (-not $wslProjectDir) {
     Write-Host "[ERREUR] Impossible de determiner le chemin WSL du projet." -ForegroundColor Red
-    Write-Host "Veuillez executer ce script depuis un environnement WSL valide." -ForegroundColor Yellow
+    Write-Host "Chemin detecte : $PSScriptRoot" -ForegroundColor Yellow
+    Write-Host "Vous pouvez lancer directement dans WSL avec : python3 main.py --serve 8765" -ForegroundColor Yellow
     exit 1
 }
 

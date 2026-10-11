@@ -20,11 +20,23 @@ if not errorlevel 1 (
 )
 
 REM Resoudre le chemin WSL du projet
+set "SCRIPT_DIR=%~dp0"
+REM Retirer l'antislash final si present
+if "%SCRIPT_DIR:~-1%"=="\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
+
 set "WSL_PROJECT_DIR="
-for /f "usebackq delims=" %%i in (`wsl wslpath "%~dp0" 2^>nul`) do set "WSL_PROJECT_DIR=%%i"
+REM 1. Tenter la conversion via wsl wslpath
+for /f "usebackq delims=" %%i in (`wsl wslpath "%SCRIPT_DIR%" 2^>nul`) do set "WSL_PROJECT_DIR=%%i"
+
+REM 2. Si echec ou UNC (\\wsl.localhost\... ou \\wsl$\...), extraire via PowerShell
+if "%WSL_PROJECT_DIR%"=="" (
+    for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "$p = '%SCRIPT_DIR%'; if ($p -match '^\\\\(?:wsl\.localhost|wsl\$)\\[^\\]+(?<wslpath>\\.*)$') { $matches['wslpath'] -replace '\\', '/' } else { (wsl wslpath -a $p 2>$null) }" 2^>nul`) do set "WSL_PROJECT_DIR=%%i"
+)
+
 if "%WSL_PROJECT_DIR%"=="" (
     echo [ERREUR] Impossible de determiner le chemin WSL du projet.
-    echo Veuillez definir la variable WSL_PROJECT_DIR manuellement.
+    echo Chemin Windows detecte : %SCRIPT_DIR%
+    echo Vous pouvez lancer directement dans WSL avec : python3 main.py --serve 8765
     pause
     exit /b 1
 )
