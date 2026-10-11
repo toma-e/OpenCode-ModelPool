@@ -22,7 +22,12 @@ if not errorlevel 1 (
 REM Resoudre le chemin WSL du projet
 set "WSL_PROJECT_DIR="
 for /f "usebackq delims=" %%i in (`wsl wslpath "%~dp0" 2^>nul`) do set "WSL_PROJECT_DIR=%%i"
-if "%WSL_PROJECT_DIR%"=="" set "WSL_PROJECT_DIR=/home/thomas/code/projets/ModelScope-Anti/modelscope-Anti"
+if "%WSL_PROJECT_DIR%"=="" (
+    echo [ERREUR] Impossible de determiner le chemin WSL du projet.
+    echo Veuillez definir la variable WSL_PROJECT_DIR manuellement.
+    pause
+    exit /b 1
+)
 
 echo [1/2] Preparation de l'ouverture du navigateur...
 start "" powershell -WindowStyle Hidden -NoProfile -Command "for ($i=0; $i -lt 15; $i++) { try { $r = (Invoke-WebRequest -Uri 'http://127.0.0.1:8765/' -UseBasicParsing -TimeoutSec 1).StatusCode; if ($r -eq 200) { Start-Process 'http://127.0.0.1:8765/'; break } } catch { Start-Sleep -Seconds 1 } }"

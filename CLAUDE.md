@@ -1,51 +1,17 @@
-# CLAUDE.md - Directives pour Claude Code / Agents Anthropic
+# Directives de Développement : ModelScope 🤖
 
-Ce fichier synthétise les commandes et conventions du projet ModelScope pour une prise en main rapide.
+Ce dépôt est piloté par l'agent **Antigravity**. Pour toute information détaillée sur l'architecture, la suite de tests, la conformité OpenCode et la feuille de route, veuillez vous référer au document canonique :
 
-## Commandes Canoniques
+👉 **[AGENTS.md](AGENTS.md)**
 
-### Tests Unitaires
+## Commandes Canoniques Rapides
 ```bash
-# Exécuter l'intégralité de la suite de tests
+# Tests unitaires
 python3 -m unittest discover tests
 
-# Exécuter un fichier de test spécifique
-python3 -m unittest tests/test_selector.py
-python3 -m unittest tests/test_budget.py
-python3 -m unittest tests/test_fetcher.py
-python3 -m unittest tests/test_exporter.py
-python3 -m unittest tests/test_service.py
-python3 -m unittest tests/test_web.py
-```
+# Validation à sec
+python3 main.py --validate
 
-### Exécution du Projet
-```bash
-# Attribution automatique et affichage console
-python3 main.py
-
-# Attribution avec export pour OpenCode (config/opencode.json)
+# Export OpenCode
 python3 main.py --export
-
-# Forcer la synchronisation des modèles OpenRouter (avec backup horodaté)
-python3 main.py --sync
-
-# Interface web locale (127.0.0.1:8765)
-python3 main.py --serve
 ```
-
-## Structure du Projet
-- `src/selector.py` : Logique pure d'évaluation, filtrage et surclassement (fallback). **Zéro I/O**.
-- `src/fetcher.py` : Téléchargement dynamique des modèles OpenRouter et archivage dans `data/backups/`.
-- `src/budget.py` : Calculs de coûts prévisionnels mensuels et alertes de quotas free-tier.
-- `src/exporter.py` : Génération du fichier de configuration standard pour OpenCode.
-- `src/service.py` : Orchestration I/O partagée par le CLI et le web.
-- `src/web.py` : Serveur HTTP local (stdlib, `127.0.0.1`).
-- `config/agents_requirements.json` : Profils de contraintes des agents.
-- `data/models.json` : Catalogue actif des modèles LLM.
-
-## Invariants Techniques
-1. **Pureté :** `src/selector.py` ne doit contenir aucun appel réseau ni lecture de fichier.
-2. **Typage strict :** Utiliser `dataclass(frozen=True)` et les annotations de types complètes (`typing`).
-3. **Backups systématiques :** Toute écriture dans `data/models.json` via `src/fetcher.py` doit générer une sauvegarde horodatée dans `data/backups/` et un fichier `data/models.json.bak`.
-4. **Documentation :** Docstrings claires rédigées en français.
-5. **Tests obligatoires :** Toujours valider `python3 -m unittest discover tests` avant toute validation de code.

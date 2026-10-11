@@ -64,6 +64,42 @@ class TestMain(unittest.TestCase):
             args = main.build_parser().parse_args([])
             self.assertEqual(main.run(args, directory), 2)
 
+    def test_run_custom_models_and_agents_and_validate(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            custom_models = directory / "custom_models.json"
+            custom_agents = directory / "custom_agents.json"
+            custom_models.write_text(json.dumps({"models": [{
+                "id": "vendor/model", "provider": "vendor", "tier": "free_tier",
+                "cost_input_per_m": 0, "cost_output_per_m": 0, "context_window": 4096,
+                "supports_tools": True, "complexity_score": 3,
+            }]}), encoding="utf-8")
+            custom_agents.write_text(json.dumps({"agents": [{
+                "name": "tester", "description": "", "min_complexity": 3,
+                "max_complexity": 3, "requires_tools": True, "prefer_free": True,
+            }]}), encoding="utf-8")
+
+            # Succès de validation
+            args_valid = main.build_parser().parse_args([
+                "--models", str(custom_models),
+                "--agents", str(custom_agents),
+                "--validate",
+            ])
+            self.assertEqual(main.run(args_valid, directory), 0)
+
+            # Échec de validation si un agent exige un modèle incompatible
+            custom_agents.write_text(json.dumps({"agents": [{
+                "name": "impossible_agent", "description": "", "min_complexity": 5,
+                "max_complexity": 5, "requires_tools": True, "prefer_free": True,
+            }]}), encoding="utf-8")
+            args_fail = main.build_parser().parse_args([
+                "--models", str(custom_models),
+                "--agents", str(custom_agents),
+                "--validate",
+                "--no-fallback",
+            ])
+            self.assertEqual(main.run(args_fail, directory), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

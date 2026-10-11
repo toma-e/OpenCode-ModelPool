@@ -35,6 +35,7 @@ htmlcov/
 
 # Local backups & runtime data
 data/backups/
+config/backups/
 *.bak
 
 # IDE

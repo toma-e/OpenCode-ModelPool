@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "last_updated": "2026-10-11T09:26:48.630546+00:00",
+  "last_updated": "2026-10-11T10:53:27.152575+00:00",
   "source": "https://openrouter.ai/api/v1/models",
   "total_models": 375,
   "models": [
@@ -648,11 +648,11 @@
       "id": "~z-ai/glm-latest",
       "provider": "~z-ai",
       "tier": "pay_as_you_go",
-      "cost_input_per_m": 0.039,
+      "cost_input_per_m": 0.07,
       "cost_output_per_m": 4.8,
       "context_window": 1048576,
       "supports_tools": true,
-      "complexity_score": 2
+      "complexity_score": 3
     },
     {
       "id": "tencent/hy-mt2-7b",
@@ -668,11 +668,11 @@
       "id": "z-ai/glm-5.3",
       "provider": "z-ai",
       "tier": "pay_as_you_go",
-      "cost_input_per_m": 0.039,
+      "cost_input_per_m": 0.07,
       "cost_output_per_m": 4.8,
       "context_window": 1048576,
       "supports_tools": true,
-      "complexity_score": 2
+      "complexity_score": 3
     },
     {
       "id": "qwen/qwen3.8-27b",
@@ -682,7 +682,7 @@
       "cost_output_per_m": 2.3,
       "context_window": 1000000,
       "supports_tools": true,
-      "complexity_score": 2
+      "complexity_score": 3
     },
     {
       "id": "dots-studio/dots-3-note-preview:free",
@@ -762,7 +762,7 @@
       "cost_output_per_m": 0.0,
       "context_window": 65536,
       "supports_tools": true,
-      "complexity_score": 3
+      "complexity_score": 2
     },
     {
       "id": "nvidia/nemotron-3.5-lightning",
@@ -802,7 +802,7 @@
       "cost_output_per_m": 0.36,
       "context_window": 524288,
       "supports_tools": true,
-      "complexity_score": 5
+      "complexity_score": 3
     },
     {
       "id": "meta/muse-glimmer-30b",
@@ -828,7 +828,7 @@
       "id": "~deepseek/deepseek-v4-flash-latest",
       "provider": "~deepseek",
       "tier": "pay_as_you_go",
-      "cost_input_per_m": 0.0143,
+      "cost_input_per_m": 0.0168,
       "cost_output_per_m": 0.64,
       "context_window": 1048576,
       "supports_tools": true,
@@ -838,7 +838,7 @@
       "id": "deepseek/deepseek-v4-flash-0731",
       "provider": "deepseek",
       "tier": "pay_as_you_go",
-      "cost_input_per_m": 0.0143,
+      "cost_input_per_m": 0.0168,
       "cost_output_per_m": 0.64,
       "context_window": 1048576,
       "supports_tools": true,
@@ -1742,7 +1742,7 @@
       "cost_output_per_m": 1.25,
       "context_window": 400000,
       "supports_tools": true,
-      "complexity_score": 5
+      "complexity_score": 1
     },
     {
       "id": "openai/gpt-5.4-mini",
@@ -1752,7 +1752,7 @@
       "cost_output_per_m": 4.5,
       "context_window": 400000,
       "supports_tools": true,
-      "complexity_score": 5
+      "complexity_score": 2
     },
     {
       "id": "mistralai/mistral-small-2603",
@@ -2362,7 +2362,7 @@
       "cost_output_per_m": 2.0,
       "context_window": 400000,
       "supports_tools": true,
-      "complexity_score": 5
+      "complexity_score": 2
     },
     {
       "id": "moonshotai/kimi-k2-thinking",
@@ -2442,7 +2442,7 @@
       "cost_output_per_m": 2.0,
       "context_window": 400000,
       "supports_tools": false,
-      "complexity_score": 5
+      "complexity_score": 2
     },
     {
       "id": "anthropic/claude-haiku-4.5",
@@ -2682,7 +2682,7 @@
       "cost_output_per_m": 2.0,
       "context_window": 400000,
       "supports_tools": true,
-      "complexity_score": 5
+      "complexity_score": 2
     },
     {
       "id": "openai/gpt-5-nano",
@@ -2692,7 +2692,7 @@
       "cost_output_per_m": 0.4,
       "context_window": 400000,
       "supports_tools": true,
-      "complexity_score": 5
+      "complexity_score": 1
     },
     {
       "id": "openai/gpt-oss-120b",
@@ -2712,7 +2712,7 @@
       "cost_output_per_m": 0.09,
       "context_window": 131072,
       "supports_tools": true,
-      "complexity_score": 2
+      "complexity_score": 3
     },
     {
       "id": "anthropic/claude-opus-4.1",
@@ -3012,7 +3012,7 @@
       "cost_output_per_m": 4.4,
       "context_window": 200000,
       "supports_tools": true,
-      "complexity_score": 5
+      "complexity_score": 4
     },
     {
       "id": "openai/o3",
@@ -3032,7 +3032,7 @@
       "cost_output_per_m": 4.4,
       "context_window": 200000,
       "supports_tools": true,
-      "complexity_score": 5
+      "complexity_score": 3
     },
     {
       "id": "openai/gpt-4.1",
@@ -3062,7 +3062,7 @@
       "cost_output_per_m": 0.4,
       "context_window": 1047576,
       "supports_tools": true,
-      "complexity_score": 5
+      "complexity_score": 1
     },
     {
       "id": "meta-llama/llama-4-maverick",
@@ -3122,7 +3122,7 @@
       "cost_output_per_m": 0.1,
       "context_window": 131072,
       "supports_tools": false,
-      "complexity_score": 3
+      "complexity_score": 2
     },
     {
       "id": "google/gemma-3-12b-it",
@@ -3222,7 +3222,7 @@
       "cost_output_per_m": 4.4,
       "context_window": 200000,
       "supports_tools": true,
-      "complexity_score": 5
+      "complexity_score": 4
     },
     {
       "id": "aion-labs/aion-rp-llama-3.1-8b",
@@ -3262,7 +3262,7 @@
       "cost_output_per_m": 4.4,
       "context_window": 200000,
       "supports_tools": true,
-      "complexity_score": 5
+      "complexity_score": 3
     },
     {
       "id": "mistralai/mistral-small-24b-instruct-2501",
@@ -3332,7 +3332,7 @@
       "cost_output_per_m": 0.75,
       "context_window": 131072,
       "supports_tools": false,
-      "complexity_score": 5
+      "complexity_score": 4
     },
     {
       "id": "openai/o1",
@@ -3512,7 +3512,7 @@
       "cost_output_per_m": 0.85,
       "context_window": 131072,
       "supports_tools": false,
-      "complexity_score": 5
+      "complexity_score": 4
     },
     {
       "id": "nousresearch/hermes-3-llama-3.1-70b",
@@ -3542,7 +3542,7 @@
       "cost_output_per_m": 0.05,
       "context_window": 8192,
       "supports_tools": false,
-      "complexity_score": 5
+      "complexity_score": 3
     },
     {
       "id": "openai/gpt-4o-2024-08-06",
@@ -3612,7 +3612,7 @@
       "cost_output_per_m": 0.65,
       "context_window": 8192,
       "supports_tools": false,
-      "complexity_score": 4
+      "complexity_score": 3
     },
     {
       "id": "openai/gpt-4o",

@@ -24,6 +24,23 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sync", action="store_true", help="Synchronise le catalogue OpenRouter avec backup.")
     parser.add_argument("--no-fallback", action="store_true", help="Désactive le surclassement automatique.")
     parser.add_argument(
+        "--models",
+        type=Path,
+        metavar="PATH",
+        help="Chemin personnalisé vers models.json (défaut : data/models.json).",
+    )
+    parser.add_argument(
+        "--agents",
+        type=Path,
+        metavar="PATH",
+        help="Chemin personnalisé vers agents_requirements.json (défaut : config/agents_requirements.json).",
+    )
+    parser.add_argument(
+        "--validate",
+        action="store_true",
+        help="Validation sans export : renvoie un code de sortie 1 si au moins un agent reste non attribué.",
+    )
+    parser.add_argument(
         "--export",
         nargs="?",
         const="config/opencode.json",
@@ -59,7 +76,9 @@ def render_results(report: FleetReport) -> None:
 
 def run(args: argparse.Namespace, base_dir: Path = BASE_DIR) -> int:
     """Exécute le flux CLI et renvoie un code de sortie POSIX."""
-    service = ApplicationService(base_dir)
+    models_path = args.models.resolve() if getattr(args, "models", None) else None
+    agents_path = args.agents.resolve() if getattr(args, "agents", None) else None
+    service = ApplicationService(base_dir, models_path=models_path, agents_path=agents_path)
     allow_fallback = not args.no_fallback
     if args.sync or (args.serve is None and not service.models_path.exists()):
         print("🔄 Synchronisation du catalogue depuis OpenRouter...")
@@ -81,6 +100,13 @@ def run(args: argparse.Namespace, base_dir: Path = BASE_DIR) -> int:
         print(f"❌ {built.message}", file=sys.stderr)
         return 2
     render_results(built.report)
+    if getattr(args, "validate", False):
+        unassigned = [r.agent_name for r in built.report.results if r.model is None]
+        if unassigned:
+            print(f"❌ Validation échouée : {len(unassigned)} agent(s) sans modèle ({', '.join(unassigned)}).", file=sys.stderr)
+            return 1
+        print("✅ Validation réussie : tous les agents disposent d'un modèle compatible.")
+        return 0
     if args.export:
         exported = service.export_config(args.export, allow_fallback=allow_fallback)
         if not exported.ok:

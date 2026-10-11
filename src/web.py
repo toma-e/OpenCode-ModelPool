@@ -23,6 +23,21 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: object) -> None:
         return
 
+    MAX_POST_BODY_BYTES: ClassVar[int] = 1_000_000
+
+    def _is_safe_origin(self) -> bool:
+        """Vérifie que la requête provient bien d'une origine locale (protection CSRF/rebinding)."""
+        host = self.headers.get("Host", "").split(":")[0].strip().lower()
+        if host not in {"127.0.0.1", "localhost"}:
+            return False
+        origin = self.headers.get("Origin")
+        if origin:
+            parsed_origin = urlparse(origin)
+            origin_host = (parsed_origin.hostname or "").lower()
+            if origin_host not in {"127.0.0.1", "localhost"}:
+                return False
+        return True
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path in {"/", "/index.html"}:
@@ -35,6 +50,15 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
         self._send_json(404, {"ok": False, "message": "Ressource introuvable."})
 
     def do_POST(self) -> None:
+        if not self._is_safe_origin():
+            self._send_json(403, {"ok": False, "message": "Accès refusé : origine ou hôte non autorisé."})
+            return
+
+        content_type = self.headers.get("Content-Type", "")
+        if "application/json" not in content_type:
+            self._send_json(415, {"ok": False, "message": "Content-Type doit être 'application/json'."})
+            return
+
         parsed = urlparse(self.path)
         fallback = self._read_fallback_from_body(self.allow_fallback)
         if parsed.path == "/api/recalculate":
@@ -54,7 +78,7 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
             length = int(length_header)
         except ValueError:
             return default
-        if length <= 0:
+        if length <= 0 or length > self.MAX_POST_BODY_BYTES:
             return default
         raw = self.rfile.read(length)
         try:

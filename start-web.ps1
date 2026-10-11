@@ -21,7 +21,9 @@ try {
     $wslProjectDir = (wsl wslpath "$PSScriptRoot" 2>$null).Trim()
 } catch {}
 if (-not $wslProjectDir) {
-    $wslProjectDir = "/home/thomas/code/projets/ModelScope-Anti/modelscope-Anti"
+    Write-Host "[ERREUR] Impossible de determiner le chemin WSL du projet." -ForegroundColor Red
+    Write-Host "Veuillez executer ce script depuis un environnement WSL valide." -ForegroundColor Yellow
+    exit 1
 }
 
 # Lancer la surveillance pour ouvrir le navigateur des que pret

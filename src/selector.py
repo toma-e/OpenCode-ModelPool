@@ -94,6 +94,7 @@ class AgentRequirement:
     allowed_providers: Optional[list[str]] = None
     excluded_providers: Optional[list[str]] = None
     force_model: Optional[str] = None
+    mode: Optional[str] = None
     estimated_tokens_input: int = 0
     estimated_tokens_output: int = 0
     max_monthly_budget: Optional[float] = None
@@ -129,6 +130,9 @@ class AgentRequirement:
         force_model = data.get("force_model")
         if force_model is not None and (not isinstance(force_model, str) or not force_model):
             raise ValueError(f"{context}: 'force_model' doit être une chaîne non vide.")
+        mode = data.get("mode")
+        if mode is not None and mode not in {"primary", "subagent"}:
+            raise ValueError(f"{context}: 'mode' doit être 'primary' ou 'subagent'.")
         max_budget = data.get("max_monthly_budget")
         if max_budget is not None:
             max_budget = _number(max_budget, "max_monthly_budget", context)
@@ -143,6 +147,7 @@ class AgentRequirement:
             allowed_providers=allowed,
             excluded_providers=excluded,
             force_model=force_model,
+            mode=mode,
             estimated_tokens_input=_int(data.get("estimated_tokens_input", 0), "estimated_tokens_input", context),
             estimated_tokens_output=_int(data.get("estimated_tokens_output", 0), "estimated_tokens_output", context),
             max_monthly_budget=max_budget,

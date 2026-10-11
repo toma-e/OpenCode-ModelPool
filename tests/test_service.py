@@ -134,6 +134,18 @@ class TestService(unittest.TestCase):
             self.assertEqual(loaded["provider"]["ollama"]["name"], "Ollama Local")
             self.assertIn("agent", loaded["agent"])
 
+    def test_export_config_fails_explicitly_on_corrupted_base_config(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            write_valid_workspace(directory)
+            ressources_dir = directory / "Ressources"
+            ressources_dir.mkdir()
+            (ressources_dir / "opencode.jsonc").write_text("{ unclosed invalid json", encoding="utf-8")
+            service = ApplicationService(directory)
+            result = service.export_config()
+            self.assertFalse(result.ok)
+            self.assertIn("Fichier de base OpenCode invalide", result.message)
+
 
 if __name__ == "__main__":
     unittest.main()

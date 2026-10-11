@@ -4,7 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from urllib.error import URLError
 
 from src.fetcher import (
@@ -13,6 +13,7 @@ from src.fetcher import (
     fetch_openrouter_models,
     parse_openrouter_model,
     prune_timestamped_backups,
+    sync_models_from_openrouter,
     write_json_atomic,
 )
 
@@ -29,8 +30,15 @@ class TestFetcher(unittest.TestCase):
         self.assertEqual(estimate_complexity_score("google/gemma-4-31b-it", 0.0), 3)
         self.assertEqual(estimate_complexity_score("qwen/qwen3.6-35b-a3b", 0.0), 4)
         self.assertEqual(estimate_complexity_score("microsoft/wizardlm-2-8x22b", 0.0), 4)
-        self.assertEqual(estimate_complexity_score("openai/o4-mini", 0.0), 5)
-        self.assertEqual(estimate_complexity_score("openai/o4-mini-high", 0.0), 5)
+        # Cas réels o-series et nano/mini
+        self.assertEqual(estimate_complexity_score("openai/o4-mini", 0.0), 3)
+        self.assertEqual(estimate_complexity_score("openai/o4-mini-high", 0.0), 4)
+        self.assertEqual(estimate_complexity_score("openai/o1-mini", 0.0), 3)
+        self.assertEqual(estimate_complexity_score("openai/o1", 0.0), 5)
+        self.assertEqual(estimate_complexity_score("openai/gpt-5-nano", 0.0), 1)
+        self.assertEqual(estimate_complexity_score("openai/gpt-4.1-nano", 0.0), 1)
+        self.assertEqual(estimate_complexity_score("sao10k/l3-lunaris-8b", 0.0), 3)
+        self.assertEqual(estimate_complexity_score("upstage/solar-pro4", 0.0), 3)
 
     @patch("src.fetcher.urllib.request.urlopen", side_effect=URLError("timeout"))
     def test_fetch_openrouter_models_propagates_network_error(self, mocked_urlopen: object) -> None:
@@ -127,6 +135,111 @@ class TestFetcher(unittest.TestCase):
                     "models_20260104_000000.json",
                 ],
             )
+
+    def test_parse_openrouter_model_malformed_inputs(self) -> None:
+        self.assertIsNone(parse_openrouter_model("not a dict"))  # type: ignore[arg-type]
+        self.assertIsNone(parse_openrouter_model({}))
+        self.assertIsNone(parse_openrouter_model({"id": ""}))
+        self.assertIsNone(parse_openrouter_model({"id": 123}))  # type: ignore[dict-item]
+
+        # Cas pricing non-dict et context_length non-int
+        model = parse_openrouter_model({"id": "vendor/fallback", "pricing": None, "context_length": "invalid"})
+        self.assertIsNotNone(model)
+        assert model is not None
+        self.assertEqual(model.cost_input_per_m, 0.0)
+        self.assertEqual(model.context_window, 4096)
+
+    def test_estimate_complexity_score_pricing_fallbacks(self) -> None:
+        # Modèles inconnus sans mots-clés ni tailles identifiables, s'appuyant sur le tarif
+        self.assertEqual(estimate_complexity_score("custom/unknown-model", 2.5), 5)
+        self.assertEqual(estimate_complexity_score("custom/unknown-model", 0.8), 4)
+        self.assertEqual(estimate_complexity_score("custom/unknown-model", 0.08), 3)
+        self.assertEqual(estimate_complexity_score("custom/unknown-model", 0.01), 2)
+        self.assertEqual(estimate_complexity_score("custom/unknown-model", 0.0), 3)
+
+    def test_sync_models_from_openrouter_enforces_threshold(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            target = Path(tmp_dir) / "models.json"
+            fake_models = [{"id": f"test/m{i}", "pricing": {"prompt": "0"}} for i in range(3)]
+            with patch("src.fetcher.fetch_openrouter_models", return_value=fake_models):
+                with self.assertRaises(ValueError) as ctx:
+                    sync_models_from_openrouter(target, min_models_threshold=5)
+                self.assertIn("Catalogue OpenRouter anormalement réduit", str(ctx.exception))
+
+    def test_sync_models_from_openrouter_full_flow(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            target = Path(tmp_dir) / "models.json"
+            target.write_text(json.dumps({"models": []}), encoding="utf-8")
+            fake_models = [
+                {
+                    "id": f"provider/model-{i}",
+                    "pricing": {"prompt": "0.000001", "completion": "0.000002"},
+                    "context_length": 8192,
+                    "supported_parameters": ["tools"],
+                }
+                for i in range(12)
+            ]
+            fake_models.append({
+                "id": "provider/batch-model:batch",
+                "pricing": {"prompt": "0.000001"},
+            })
+
+            with patch("src.fetcher.fetch_openrouter_models", return_value=fake_models):
+                count, backup_path = sync_models_from_openrouter(target, min_models_threshold=5, exclude_batch=True)
+                self.assertEqual(count, 12)
+                self.assertIsNotNone(backup_path)
+                assert backup_path is not None
+                self.assertTrue(backup_path.exists())
+                saved = json.loads(target.read_text(encoding="utf-8"))
+                self.assertEqual(saved["total_models"], 12)
+                self.assertEqual(len(saved["models"]), 12)
+                # Vérifier que le modèle :batch a bien été exclu
+                self.assertFalse(any(":batch" in m["id"] for m in saved["models"]))
+
+    def test_fetch_openrouter_models_payload_validation(self) -> None:
+        # Réponse non-dict ou sans liste data
+        fake_response_non_dict = MagicMock()
+        fake_response_non_dict.__enter__.return_value = fake_response_non_dict
+        fake_response_non_dict.read.return_value = b'["not", "a", "dict"]'
+        with patch("src.fetcher.urllib.request.urlopen", return_value=fake_response_non_dict):
+            with self.assertRaises(ValueError) as ctx:
+                fetch_openrouter_models()
+            self.assertIn("liste 'data' absente", str(ctx.exception))
+
+        # Réponse avec taille excédant la limite
+        fake_large_response = MagicMock()
+        fake_large_response.__enter__.return_value = fake_large_response
+        fake_large_response.read.return_value = b"x" * 100
+        with patch("src.fetcher.urllib.request.urlopen", return_value=fake_large_response):
+            with self.assertRaises(ValueError) as ctx:
+                fetch_openrouter_models(max_bytes=50)
+            self.assertIn("trop volumineuse", str(ctx.exception))
+
+        # Réponse valide contenant un élément non-dict ignoré
+        fake_valid_response = MagicMock()
+        fake_valid_response.__enter__.return_value = fake_valid_response
+        fake_valid_response.read.return_value = json.dumps({
+            "data": [{"id": "m1"}, "corrupted_item", {"id": "m2"}]
+        }).encode("utf-8")
+        with patch("src.fetcher.urllib.request.urlopen", return_value=fake_valid_response):
+            models = fetch_openrouter_models()
+            self.assertEqual(len(models), 2)
+            self.assertEqual(models[0]["id"], "m1")
+            self.assertEqual(models[1]["id"], "m2")
+
+    def test_parse_openrouter_model_edge_conditions(self) -> None:
+        # Prompt négatif
+        self.assertIsNone(parse_openrouter_model({"id": "m", "pricing": {"prompt": "-0.1"}}))
+        # Completion négatif
+        self.assertIsNone(parse_openrouter_model({"id": "m", "pricing": {"completion": "-0.1"}}))
+        # Context length <= 0
+        model = parse_openrouter_model({"id": "m", "context_length": 0})
+        self.assertIsNotNone(model)
+        assert model is not None
+        self.assertEqual(model.context_window, 4096)
+        # Exception ValueError depuis Model constructor
+        with patch("src.fetcher.Model", side_effect=ValueError("bad model")):
+            self.assertIsNone(parse_openrouter_model({"id": "m"}))
 
 
 if __name__ == "__main__":

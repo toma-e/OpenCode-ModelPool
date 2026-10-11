@@ -166,10 +166,10 @@ push et pull request.
 ## 🤝 Collaboration Multi-Agents
 
 Ce projet est conçu pour être développé et maintenu par plusieurs agents de code en parallèle :
-- **Cursor / Windsurf :** pilotés via [`.cursorrules`](file:///home/thomas/code/projets/ModelScope-Anti/modelscope-Anti/.cursorrules)
-- **Claude Code (Anthropic) :** piloté via [`CLAUDE.md`](file:///home/thomas/code/projets/ModelScope-Anti/modelscope-Anti/CLAUDE.md)
-- **GitHub Copilot / OpenAI Codex :** piloté via [`.github/copilot-instructions.md`](file:///home/thomas/code/projets/ModelScope-Anti/modelscope-Anti/.github/copilot-instructions.md)
-- **Mistral AI / Codestral :** piloté via [`MISTRAL.md`](file:///home/thomas/code/projets/ModelScope-Anti/modelscope-Anti/MISTRAL.md)
-- **OpenCode, Antigravity, Aider & autres :** pilotés via [`AGENTS.md`](file:///home/thomas/code/projets/ModelScope-Anti/modelscope-Anti/AGENTS.md)
+- **Cursor / Windsurf :** pilotés via [`.cursorrules`](.cursorrules)
+- **Claude Code (Anthropic) :** piloté via [`CLAUDE.md`](CLAUDE.md)
+- **GitHub Copilot / OpenAI Codex :** piloté via [`.github/copilot-instructions.md`](.github/copilot-instructions.md)
+- **Mistral AI / Codestral :** piloté via [`MISTRAL.md`](MISTRAL.md)
+- **OpenCode, Antigravity, Aider & autres :** pilotés via [`AGENTS.md`](AGENTS.md)
 
-Consultez [AGENTS.md](file:///home/thomas/code/projets/ModelScope-Anti/modelscope-Anti/AGENTS.md) pour la documentation complète d'onboarding, les invariants et l'architecture.
+Consultez [AGENTS.md](AGENTS.md) pour la documentation complète d'onboarding, les invariants et l'architecture.

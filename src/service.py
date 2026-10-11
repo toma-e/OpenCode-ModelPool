@@ -183,10 +183,15 @@ def serialize_report(report: FleetReport) -> dict[str, Any]:
 class ApplicationService:
     """Orchestration locale du catalogue, de la sélection et des écritures."""
 
-    def __init__(self, base_dir: Path) -> None:
+    def __init__(
+        self,
+        base_dir: Path,
+        models_path: Optional[Path] = None,
+        agents_path: Optional[Path] = None,
+    ) -> None:
         self.base_dir = base_dir
-        self.models_path = base_dir / "data" / "models.json"
-        self.agents_path = base_dir / "config" / "agents_requirements.json"
+        self.models_path = models_path if models_path is not None else (base_dir / "data" / "models.json")
+        self.agents_path = agents_path if agents_path is not None else (base_dir / "config" / "agents_requirements.json")
         self.default_export_path = base_dir / DEFAULT_EXPORT_RELATIVE
         self._lock = threading.RLock()
 
@@ -245,7 +250,11 @@ class ApplicationService:
             return OperationResult(True, message, report)
 
     def load_base_opencode_config(self) -> dict[str, Any] | None:
-        """Charge la configuration de base OpenCode depuis le dossier Ressources si disponible."""
+        """Charge la configuration de base OpenCode depuis le dossier Ressources si disponible.
+
+        Raises:
+            ValueError: Si un fichier de configuration de base trouvé est corrompu ou invalide.
+        """
         candidates = [
             self.base_dir / "Ressources" / "opencode.jsonc",
             self.base_dir / "Ressources" / "opencode.json",
@@ -256,8 +265,8 @@ class ApplicationService:
             if candidate.is_file():
                 try:
                     return parse_json_or_jsonc(candidate.read_text(encoding="utf-8"))
-                except Exception:
-                    continue
+                except ValueError as error:
+                    raise ValueError(f"Fichier de base OpenCode invalide ({candidate}) : {error}") from error
         return None
 
     def export_config(

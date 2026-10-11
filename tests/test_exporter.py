@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from src.exporter import (
+    build_modelscope_report_data,
     build_opencode_config,
     export_opencode_config,
     parse_json_or_jsonc,
@@ -55,22 +56,30 @@ class TestExporter(unittest.TestCase):
     def test_build_opencode_config_structure(self) -> None:
         config = build_opencode_config([self.assigned_result], [self.agent_req])
         self.assertEqual(config["$schema"], "https://opencode.ai/config.json")
-        self.assertEqual(config["model"], "test/model-fast")
-        self.assertEqual(config["version"], "1.0")
-        self.assertEqual(config["metadata"]["total_agents"], 1)
-        self.assertEqual(config["metadata"]["assigned_agents"], 1)
-        self.assertEqual(config["metadata"]["unassigned_agents"], 0)
-        self.assertTrue(config["generated_at"].endswith("+00:00"))
+        self.assertEqual(config["model"], "openrouter/test/model-fast")
+
+        # Vérifier que les clés interdites par OpenCode sont absentes de la config OpenCode
+        self.assertNotIn("metadata", config)
+        self.assertNotIn("budget_simulation", config)
+        self.assertNotIn("agents", config)
+        self.assertNotIn("version", config)
 
         # Section native OpenCode (agent[name])
         self.assertIn("coder_agent", config["agent"])
         native_coder = config["agent"]["coder_agent"]
-        self.assertEqual(native_coder["model"], "test/model-fast")
+        self.assertEqual(native_coder["model"], "openrouter/test/model-fast")
         self.assertEqual(native_coder["mode"], "primary")
         self.assertEqual(native_coder["description"], "Agent de code")
 
-        # Section ModelScope (agents[name]) pour rétrocompatibilité
-        agent_entry = config["agents"]["coder_agent"]
+    def test_build_modelscope_report_data(self) -> None:
+        report = build_modelscope_report_data([self.assigned_result], [self.agent_req])
+        self.assertEqual(report["version"], "1.0")
+        self.assertEqual(report["metadata"]["total_agents"], 1)
+        self.assertEqual(report["metadata"]["assigned_agents"], 1)
+        self.assertEqual(report["metadata"]["unassigned_agents"], 0)
+        self.assertTrue(report["generated_at"].endswith("+00:00"))
+
+        agent_entry = report["agents"]["coder_agent"]
         self.assertTrue(agent_entry["enabled"])
         self.assertEqual(agent_entry["selection_status"], "exact")
         self.assertIsNotNone(agent_entry["model"])
@@ -79,15 +88,13 @@ class TestExporter(unittest.TestCase):
 
     def test_build_opencode_config_unassigned(self) -> None:
         config = build_opencode_config([self.unassigned_result], [])
-        self.assertEqual(config["metadata"]["assigned_agents"], 0)
-        self.assertEqual(config["metadata"]["unassigned_agents"], 1)
-
-        # Section native OpenCode
         self.assertIn("unknown_agent", config["agent"])
         self.assertTrue(config["agent"]["unknown_agent"]["disable"])
 
-        # Section ModelScope
-        agent_entry = config["agents"]["unknown_agent"]
+        report = build_modelscope_report_data([self.unassigned_result], [])
+        self.assertEqual(report["metadata"]["assigned_agents"], 0)
+        self.assertEqual(report["metadata"]["unassigned_agents"], 1)
+        agent_entry = report["agents"]["unknown_agent"]
         self.assertFalse(agent_entry["enabled"])
         self.assertEqual(agent_entry["selection_status"], "unassigned")
         self.assertIsNone(agent_entry["model"])
@@ -116,6 +123,19 @@ class TestExporter(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_json_or_jsonc('["not", "a", "dict"]')
 
+        # Cas critique : URL avec double slash et chaînes avec virgules
+        complex_sample = """
+        {
+            "url": "https://example.com/api//v1",
+            "regex": "foo, bar, } baz",
+            "tags": ["a", "b", ],
+        }
+        """
+        complex_parsed = parse_json_or_jsonc(complex_sample)
+        self.assertEqual(complex_parsed["url"], "https://example.com/api//v1")
+        self.assertEqual(complex_parsed["regex"], "foo, bar, } baz")
+        self.assertEqual(complex_parsed["tags"], ["a", "b"])
+
     def test_build_opencode_config_with_base_config(self) -> None:
         base = {
             "model": "openrouter/free",
@@ -136,7 +156,7 @@ class TestExporter(unittest.TestCase):
         self.assertEqual(config["provider"]["ollama"]["name"], "Ollama Local")
         self.assertIn("custom_agent", config["agent"])
         self.assertIn("coder_agent", config["agent"])
-        self.assertEqual(config["agent"]["coder_agent"]["model"], "test/model-fast")
+        self.assertEqual(config["agent"]["coder_agent"]["model"], "openrouter/test/model-fast")
 
     def test_export_opencode_config_file_writing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -147,9 +167,16 @@ class TestExporter(unittest.TestCase):
             self.assertTrue(exported_path.exists())
             with open(exported_path, "r", encoding="utf-8") as f:
                 loaded = json.load(f)
-            self.assertIn("coder_agent", loaded["agents"])
             self.assertIn("coder_agent", loaded["agent"])
+            self.assertNotIn("agents", loaded)
             self.assertEqual(loaded["$schema"], "https://opencode.ai/config.json")
+
+            report_file = Path(tmp_dir) / "modelscope-report.json"
+            self.assertTrue(report_file.exists())
+            with open(report_file, "r", encoding="utf-8") as f:
+                loaded_report = json.load(f)
+            self.assertIn("coder_agent", loaded_report["agents"])
+            self.assertEqual(loaded_report["version"], "1.0")
 
 
 if __name__ == "__main__":

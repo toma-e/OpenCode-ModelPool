@@ -13,7 +13,7 @@ Le projet est fonctionnel, bien structuré et cohérent. L'architecture 4 module
 ## 🔴 Bugs Avérés (Priorité Haute)
 
 ### Bug 1 — Faux positifs dans `estimate_complexity_score` : substring matching
-> **Fichier :** [src/fetcher.py#L48](file:///home/thomas/code/projets/ModelScope-Anti/modelscope-Anti/src/fetcher.py#L48)
+> **Fichier :** [src/fetcher.py#L48](src/fetcher.py#L48)
 
 Le matching par substring `"1b" in m_id` capture les modèles dont l'ID contient `1b` comme sous-chaîne, même si ce n'est pas un modèle à 1 milliard de paramètres :
 
@@ -40,7 +40,7 @@ if re.search(r'(?:^|[-_/.])(?:1b|0\.5b)(?:[-_/.:$]|$)', m_id) or \
 ```
 
 ### Bug 2 — `o4-mini` classé en score 2 au lieu de 4-5
-> **Fichier :** [src/fetcher.py#L38](file:///home/thomas/code/projets/ModelScope-Anti/modelscope-Anti/src/fetcher.py#L38)
+> **Fichier :** [src/fetcher.py#L38](src/fetcher.py#L38)
 
 Les modèles de la série `o4` d'OpenAI (raisonnement avancé) ne sont pas reconnus par les patterns score-5 :
 - `openai/o4-mini` → score **2** (mini regex match) au lieu de **4-5**
@@ -100,7 +100,7 @@ Le CLI (`main.py`, 181 lignes) n'a aucun test :
 ## 🟡 Points d'Architecture (Priorité Moyenne)
 
 ### 1. `force_model` ne valide rien
-> **Fichier :** [src/selector.py#L241-L257](file:///home/thomas/code/projets/ModelScope-Anti/modelscope-Anti/src/selector.py#L241-L257)
+> **Fichier :** [src/selector.py#L241-L257](src/selector.py#L241-L257)
 
 Quand `force_model` est défini, le modèle est retourné **sans vérifier** :
 - S'il supporte les tools requis
@@ -111,7 +111,7 @@ Quand `force_model` est défini, le modèle est retourné **sans vérifier** :
 C'est un choix de design assumé (forçage = override total), mais dangereux. Au minimum, un **warning** dans `SelectionResult.reason` signalerait les incompatibilités.
 
 ### 2. Double parsing des modèles dans `resolve_model_for_agent`
-> **Fichier :** [src/selector.py#L228-L294](file:///home/thomas/code/projets/ModelScope-Anti/modelscope-Anti/src/selector.py#L228-L294)
+> **Fichier :** [src/selector.py#L228-L294](src/selector.py#L228-L294)
 
 `resolve_model_for_agent` parse les modèles (L238), puis appelle `rank_models_for_agent` qui les re-parse (L200). Avec 386 modèles, c'est 772 instanciations de `Model` inutiles.
 
@@ -157,10 +157,10 @@ Aucune utilisation du module `logging`. Tout passe par `print()` avec des codes 
 | Constat | Fichier | Détail |
 |---------|---------|--------|
 | `typing.List`, `typing.Dict` obsolètes | Tous | Python 3.11+ permet `list[...]`, `dict[...]` nativement. `from typing import List, Dict` est inutile. |
-| `datetime.now()` sans timezone | [fetcher.py#L133](file:///home/thomas/code/projets/ModelScope-Anti/modelscope-Anti/src/fetcher.py#L133), [exporter.py#L149](file:///home/thomas/code/projets/ModelScope-Anti/modelscope-Anti/src/exporter.py#L149) | `datetime.now()` produit un datetime naïf (sans TZ). Utiliser `datetime.now(timezone.utc)` pour la traçabilité. |
+| `datetime.now()` sans timezone | [fetcher.py#L133](src/fetcher.py#L133), [exporter.py#L149](src/exporter.py#L149) | `datetime.now()` produit un datetime naïf (sans TZ). Utiliser `datetime.now(timezone.utc)` pour la traçabilité. |
 | Pas de `__all__` dans les modules | `src/*.py` | Rend l'API publique implicite. |
-| `Sequence[Union[Model, dict]]` partout | [selector.py](file:///home/thomas/code/projets/ModelScope-Anti/modelscope-Anti/src/selector.py) | L'acceptation de `dict` dans les signatures de `rank_models_for_agent` et `resolve_model_for_agent` dilue le typage. Mieux vaut séparer parsing (dans `main.py`) et logique pure (dans `selector.py`). |
-| `is_free` a une double logique | [selector.py#L29-L33](file:///home/thomas/code/projets/ModelScope-Anti/modelscope-Anti/src/selector.py#L29-L33) | `tier == "free_tier"` OU `cost == 0`. Redondant avec le parsing dans `fetcher.py` qui fixe déjà le `tier` en fonction du coût. |
+| `Sequence[Union[Model, dict]]` partout | [selector.py](src/selector.py) | L'acceptation de `dict` dans les signatures de `rank_models_for_agent` et `resolve_model_for_agent` dilue le typage. Mieux vaut séparer parsing (dans `main.py`) et logique pure (dans `selector.py`). |
+| `is_free` a une double logique | [selector.py#L29-L33](src/selector.py#L29-L33) | `tier == "free_tier"` OU `cost == 0`. Redondant avec le parsing dans `fetcher.py` qui fixe déjà le `tier` en fonction du coût. |
 
 ### Données
 

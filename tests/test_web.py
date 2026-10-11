@@ -83,6 +83,30 @@ class TestWeb(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertTrue(self.service.default_export_path.exists())
 
+    def test_post_rejects_untrusted_origin(self) -> None:
+        request = urllib.request.Request(
+            self.base + "/api/export",
+            data=b"{}",
+            method="POST",
+            headers={"Content-Type": "application/json", "Origin": "https://evil-site.com"},
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(request, timeout=5)
+        self.assertEqual(ctx.exception.code, 403)
+        ctx.exception.close()
+
+    def test_post_rejects_missing_json_content_type(self) -> None:
+        request = urllib.request.Request(
+            self.base + "/api/export",
+            data=b"{}",
+            method="POST",
+            headers={"Content-Type": "text/plain"},
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(request, timeout=5)
+        self.assertEqual(ctx.exception.code, 415)
+        ctx.exception.close()
+
 
 if __name__ == "__main__":
     unittest.main()

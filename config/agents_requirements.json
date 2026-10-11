@@ -20,6 +20,7 @@
       "requires_tools": true,
       "prefer_free": true,
       "min_context_window": 64000,
+      "mode": "primary",
       "estimated_tokens_input": 1200000,
       "estimated_tokens_output": 400000,
       "max_monthly_budget": 10.0

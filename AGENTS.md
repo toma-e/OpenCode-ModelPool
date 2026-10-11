@@ -1,6 +1,6 @@
-# Guide Multi-Agents : ModelScope 🤖
+# Guide de Développement : ModelScope 🤖
 
-Ce document est le **point d'entrée pour tout agent IA** (Antigravity, Cursor, Claude Code, GitHub Copilot / Codex, Mistral / Codestral, Windsurf, OpenCode, Aider...) intervenant sur le dépôt. Il garantit la continuité opérationnelle, la cohérence des choix techniques et le respect des conventions établies.
+Ce document est le **point d'entrée de référence pour l'agent Antigravity** opérant sur le dépôt. Il garantit la continuité opérationnelle, la cohérence des choix techniques et le respect des conventions établies.
 
 ---
 
@@ -38,9 +38,9 @@ flowchart TD
 
 Lorsqu'un nouvel agent prend en main ce projet, il doit :
 1. **Consulter les fichiers clés :**
-   - [.cursorrules](file:///home/thomas/code/projets/ModelScope-Anti/modelscope-Anti/.cursorrules) : Directives strictes et conventions de code.
-   - [config/agents_requirements.json](file:///home/thomas/code/projets/ModelScope-Anti/modelscope-Anti/config/agents_requirements.json) : Exigences déclarées pour les agents.
-   - [src/selector.py](file:///home/thomas/code/projets/ModelScope-Anti/modelscope-Anti/src/selector.py) : Cœur logique pur de l'attribution.
+   - [.cursorrules](.cursorrules) : Directives strictes et conventions de code.
+   - [config/agents_requirements.json](config/agents_requirements.json) : Exigences déclarées pour les agents.
+   - [src/selector.py](src/selector.py) : Cœur logique pur de l'attribution.
 2. **Exécuter la suite de tests pour vérifier l'intégrité :**
    ```bash
    python3 -m unittest discover tests
@@ -57,13 +57,13 @@ Lorsqu'un nouvel agent prend en main ce projet, il doit :
 
 | Module / Fichier | Responsabilité Principale | Contraintes Particulières |
 |---|---|---|
-| [`src/selector.py`](file:///home/thomas/code/projets/ModelScope-Anti/modelscope-Anti/src/selector.py) | Filtrage, tri, sélection et surclassement | **Fonctions pures uniquement**. Aucun appel I/O, réseau ou HTTP. |
-| [`src/fetcher.py`](file:///home/thomas/code/projets/ModelScope-Anti/modelscope-Anti/src/fetcher.py) | Récupération OpenRouter & scoring heuristique | Backup puis écriture atomique ; rétention des sauvegardes horodatées. |
-| [`src/budget.py`](file:///home/thomas/code/projets/ModelScope-Anti/modelscope-Anti/src/budget.py) | Calcul des coûts au token & alertes de quotas | Seuil critique free-tier : `1_000_000` tokens/mois. |
-| [`src/exporter.py`](file:///home/thomas/code/projets/ModelScope-Anti/modelscope-Anti/src/exporter.py) | Génération du JSON pour OpenCode | Structure immuable avec `metadata`, `budget_simulation` et `agents`. |
-| [`src/service.py`](file:///home/thomas/code/projets/ModelScope-Anti/modelscope-Anti/src/service.py) | Chargement, orchestration, export et sync | Seule couche I/O ; verrou pour les écritures concurrentes. |
-| [`src/web.py`](file:///home/thomas/code/projets/ModelScope-Anti/modelscope-Anti/src/web.py) | Interface HTTP locale | Bind `127.0.0.1` uniquement ; stdlib ; pas de logique métier. |
-| [`main.py`](file:///home/thomas/code/projets/ModelScope-Anti/modelscope-Anti/main.py) | Interface CLI en ligne de commande | Supporte `--sync`, `--export [path]`, `--no-fallback`, `--serve [port]`. |
+| [`src/selector.py`](src/selector.py) | Filtrage, tri, sélection et surclassement | **Fonctions pures uniquement**. Aucun appel I/O, réseau ou HTTP. |
+| [`src/fetcher.py`](src/fetcher.py) | Récupération OpenRouter & scoring heuristique | Backup puis écriture atomique ; rétention des sauvegardes horodatées. |
+| [`src/budget.py`](src/budget.py) | Calcul des coûts au token & alertes de quotas | Seuil critique free-tier : `1_000_000` tokens/mois. |
+| [`src/exporter.py`](src/exporter.py) | Génération du JSON pour OpenCode | Schéma officiel OpenCode strict (`opencode.json`) + rapport d'audit séparé (`modelscope-report.json`). |
+| [`src/service.py`](src/service.py) | Chargement, orchestration, export et sync | Seule couche I/O ; verrou pour les écritures concurrentes. |
+| [`src/web.py`](src/web.py) | Interface HTTP locale | Bind `127.0.0.1` uniquement ; stdlib ; protections CSRF/Origin ; pas de logique métier. |
+| [`main.py`](main.py) | Interface CLI en ligne de commande | Supporte `--sync`, `--export [path]`, `--no-fallback`, `--serve [port]`. |
 
 ---
 
@@ -72,20 +72,20 @@ Lorsqu'un nouvel agent prend en main ce projet, il doit :
 - ✅ **Jalon 1 (MVP) :** Structures `Model` et `AgentRequirement`, filtrage des outils et complexité, priorisation du gratuit.
 - ✅ **Jalon 2 (Catalogue & Fallback) :** Intégration de modèles légers (scores 1-2), logique de surclassement (`fallback`) et tests de compatibilité.
 - ✅ **Jalon 3 (Sync OpenRouter & Backups) :** Téléchargement dynamique via l'API OpenRouter, filtrage des tarifs négatifs, backups horodatés dans `data/backups/`.
-- ✅ **Jalon 4 (Export OpenCode) :** Module d'export standardisé générant `config/opencode.json`.
+- ✅ **Jalon 4 (Export OpenCode) :** Module d'export standardisé générant `config/opencode.json` et `config/modelscope-report.json`.
 - ✅ **Jalon 5 (Filtres Avancés) :** `min_context_window`, `allowed_providers`, `excluded_providers`, `force_model`.
 - ✅ **Jalon 6 (Simulation Budgétaire) :** Calculs de coût mensuel au token, alertes de quotas free-tier, gestion du `max_monthly_budget`.
 - ✅ **Jalon 7 (Interface web locale) :** Service applicatif partagé, serveur `127.0.0.1`, page unique de consultation.
+- ✅ **Jalon 8 (Conformité & Durcissement) :** Schéma officiel OpenCode strict (additionalProperties: false), scoring de complexité par jetons délimités, sécurité CSRF/Origin et écritures atomiques.
 
 ---
 
 ## 6. Prochaines Étapes Recommandées (Roadmap)
 
 Si le projet doit continuer d'évoluer, les tâches prioritaires suivantes sont identifiées :
-1. **Packaging & Dépendances :** Créer `pyproject.toml` ou `requirements.txt` avec support optionnel de `pytest`, `ruff` et `mypy`.
-2. **CI/CD GitHub Actions :** Workflow pour exécuter automatiquement les tests unitaires à chaque push / PR.
-3. **Automatisation de la veille de modèles :** Cron GitHub Actions (ou tâche planifiée) pour mettre à jour `data/models.json` chaque semaine depuis OpenRouter.
-4. **Gestion multi-sources :** Permettre d'agréger d'autres sources de modèles (ex: Ollama pour les modèles 100% locaux hors-ligne, AWS Bedrock, etc.).
+1. **Automatisation de la veille de modèles :** Cron GitHub Actions (ou tâche planifiée) pour mettre à jour `data/models.json` chaque semaine depuis OpenRouter.
+2. **Gestion multi-sources :** Permettre d'agréger d'autres sources de modèles (ex: Ollama pour les modèles 100% locaux hors-ligne, AWS Bedrock, etc.).
+3. **Pénalité de fiabilité free-tier :** Pondération ou option de désactivation des modèles `:free` pour les agents critiques.
 
 ---
 

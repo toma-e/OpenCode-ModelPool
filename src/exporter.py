@@ -9,18 +9,34 @@ avec inclusion de la simulation budgétaire prévisionnelle.
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
 from src.budget import simulate_fleet_budget
+from src.fetcher import create_backup, write_json_atomic
 from src.selector import AgentRequirement, SelectionResult
 
 
+def format_opencode_model_id(model_id: str, default_prefix: str = "openrouter") -> str:
+    """Préfixe l'identifiant de modèle par le fournisseur attendu par OpenCode si nécessaire.
+
+    Exemples:
+        'openai/gpt-5-mini' -> 'openrouter/openai/gpt-5-mini'
+        'openrouter/free' -> 'openrouter/free'
+    """
+    if not model_id:
+        return model_id
+    if default_prefix and not model_id.startswith(f"{default_prefix}/"):
+        return f"{default_prefix}/{model_id}"
+    return model_id
+
+
 def parse_json_or_jsonc(content: str) -> Dict[str, Any]:
-    """Parse une chaîne au format JSON ou JSONC (avec commentaires // et /* */).
+    """Parse une chaîne au format JSON ou JSONC (avec commentaires // et /* */ et trailing commas).
+
+    Préserve rigoureusement le contenu des chaînes littérales (ex: URL avec // ou ponctuation).
 
     Args:
         content: Chaîne brute au format JSON ou JSONC.
@@ -31,15 +47,100 @@ def parse_json_or_jsonc(content: str) -> Dict[str, Any]:
     Raises:
         ValueError: Si le contenu n'est pas un objet JSON valide.
     """
-    # Retrait des commentaires multi-lignes /* ... */
-    cleaned = re.sub(r"/\*.*?\*/", "", content, flags=re.DOTALL)
-    # Retrait des commentaires mono-lignes //
-    lines: List[str] = []
-    for line in cleaned.splitlines():
-        lines.append(re.sub(r"(?<!:)//.*$", "", line))
-    cleaned = "\n".join(lines)
-    # Retrait des virgules traînantes devant une fermeture d'accolade ou de crochet
-    cleaned = re.sub(r",\s*([\]}])", r"\1", cleaned)
+    # 1. Retrait des commentaires en préservant le contenu des chaînes littérales
+    out: List[str] = []
+    in_string = False
+    escape = False
+    in_single_line_comment = False
+    in_multi_line_comment = False
+    i = 0
+    n = len(content)
+
+    while i < n:
+        char = content[i]
+        next_char = content[i + 1] if i + 1 < n else ""
+
+        if in_single_line_comment:
+            if char in ("\r", "\n"):
+                in_single_line_comment = False
+                out.append(char)
+            i += 1
+            continue
+
+        if in_multi_line_comment:
+            if char == "*" and next_char == "/":
+                in_multi_line_comment = False
+                i += 2
+            else:
+                i += 1
+            continue
+
+        if in_string:
+            out.append(char)
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            i += 1
+            continue
+
+        if char == '"':
+            in_string = True
+            out.append(char)
+            i += 1
+        elif char == "/" and next_char == "/":
+            in_single_line_comment = True
+            i += 2
+        elif char == "/" and next_char == "*":
+            in_multi_line_comment = True
+            i += 2
+        else:
+            out.append(char)
+            i += 1
+
+    no_comments = "".join(out)
+
+    # 2. Retrait des virgules traînantes en préservant le contenu des chaînes littérales
+    out2: List[str] = []
+    in_string = False
+    escape = False
+    j = 0
+    m = len(no_comments)
+    while j < m:
+        c = no_comments[j]
+        if in_string:
+            out2.append(c)
+            if escape:
+                escape = False
+            elif c == "\\":
+                escape = True
+            elif c == '"':
+                in_string = False
+            j += 1
+            continue
+
+        if c == '"':
+            in_string = True
+            out2.append(c)
+            j += 1
+            continue
+
+        if c == ",":
+            # Vérifier si le prochain caractère non-blanc est '}' ou ']'
+            k = j + 1
+            while k < m and no_comments[k] in (" ", "\t", "\r", "\n"):
+                k += 1
+            if k < m and no_comments[k] in ("}", "]"):
+                # Ignorer la virgule traînante
+                j += 1
+                continue
+
+        out2.append(c)
+        j += 1
+
+    cleaned = "".join(out2)
 
     try:
         data = json.loads(cleaned)
@@ -67,7 +168,7 @@ class OpenCodeModelConfig:
 
 @dataclass(frozen=True)
 class OpenCodeAgentConfig:
-    """Configuration complète d'un agent OpenCode."""
+    """Configuration complète d'un agent OpenCode (vue rapport ModelScope)."""
 
     name: str
     description: str
@@ -82,35 +183,18 @@ class OpenCodeAgentConfig:
     selection_reason: str
 
 
-def build_opencode_config(
+def build_modelscope_report_data(
     results: Sequence[SelectionResult],
     agents: Sequence[AgentRequirement],
-    base_config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Construit le dictionnaire de configuration pour OpenCode.
-
-    Génère les sections conformes au schéma officiel OpenCode (https://opencode.ai/config.json),
-    notamment `$schema`, `model`, `agent`, tout en préservant les sections existantes
-    (ex: `permission`, `provider`) et les métadonnées de simulation de ModelScope.
-
-    Args:
-        results: Résultats de la sélection pour chaque agent.
-        agents: Exigences initiales des agents.
-        base_config: Configuration OpenCode de base optionnelle à enrichir (ex: permissions, providers).
-
-    Returns:
-        Dictionnaire au format OpenCode contenant les agents configurés,
-        les métadonnées et la simulation budgétaire consolidée.
-    """
+    """Construit le rapport d'analyse et de simulation ModelScope."""
     agents_by_name = {a.name: a for a in agents}
     fleet_budget = simulate_fleet_budget(results, agents)
     budget_by_agent = {r.agent_name: r for r in fleet_budget.agent_reports}
 
     configured_agents: Dict[str, Dict[str, Any]] = {}
-    opencode_agent_configs: Dict[str, Dict[str, Any]] = {}
     assigned_count = 0
     unassigned_count = 0
-    first_assigned_model_id: Optional[str] = None
 
     for res in results:
         agent_req = agents_by_name.get(res.agent_name)
@@ -125,8 +209,6 @@ def build_opencode_config(
 
         if res.model:
             assigned_count += 1
-            if first_assigned_model_id is None:
-                first_assigned_model_id = res.model.id
             status_str = "fallback" if res.is_fallback else "exact"
             model_conf = OpenCodeModelConfig(
                 id=res.model.id,
@@ -151,15 +233,6 @@ def build_opencode_config(
                 selection_status=status_str,
                 selection_reason=res.reason,
             )
-            # Configuration native attendue par OpenCode (agent[name])
-            agent_mode = "primary" if res.agent_name in {"coder_agent", "build", "orchestrator", "orchestrator-free"} else "subagent"
-            native_agent: Dict[str, Any] = {
-                "model": res.model.id,
-                "mode": agent_mode,
-            }
-            if description:
-                native_agent["description"] = description
-            opencode_agent_configs[res.agent_name] = native_agent
         else:
             unassigned_count += 1
             agent_conf = OpenCodeAgentConfig(
@@ -175,12 +248,6 @@ def build_opencode_config(
                 selection_status="unassigned",
                 selection_reason=res.reason,
             )
-            native_unassigned: Dict[str, Any] = {
-                "disable": True,
-            }
-            if description:
-                native_unassigned["description"] = description
-            opencode_agent_configs[res.agent_name] = native_unassigned
 
         configured_agents[res.agent_name] = asdict(agent_conf)
 
@@ -203,6 +270,76 @@ def build_opencode_config(
         ],
     }
 
+    return {
+        "version": "1.0",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "metadata": {
+            "generator": "ModelScope",
+            "total_agents": len(results),
+            "assigned_agents": assigned_count,
+            "unassigned_agents": unassigned_count,
+        },
+        "budget_simulation": budget_summary,
+        "agents": configured_agents,
+    }
+
+
+def build_opencode_config(
+    results: Sequence[SelectionResult],
+    agents: Sequence[AgentRequirement],
+    base_config: Optional[Dict[str, Any]] = None,
+    default_provider_prefix: str = "openrouter",
+) -> Dict[str, Any]:
+    """Construit le dictionnaire de configuration strictement conforme au schéma OpenCode.
+
+    Ne produit que les clés autorisées par OpenCode (https://opencode.ai/config.json).
+    Les métadonnées de simulation de ModelScope sont exportées dans un rapport séparé.
+
+    Args:
+        results: Résultats de la sélection pour chaque agent.
+        agents: Exigences initiales des agents.
+        base_config: Configuration OpenCode de base optionnelle à enrichir (ex: permissions, providers).
+        default_provider_prefix: Préfixe du fournisseur OpenCode pour router les modèles (défaut 'openrouter').
+
+    Returns:
+        Dictionnaire conforme au schéma officiel OpenCode.
+    """
+    agents_by_name = {a.name: a for a in agents}
+    opencode_agent_configs: Dict[str, Dict[str, Any]] = {}
+    first_assigned_model_id: Optional[str] = None
+
+    for res in results:
+        agent_req = agents_by_name.get(res.agent_name)
+        description = agent_req.description if agent_req else ""
+
+        if res.model:
+            formatted_model_id = format_opencode_model_id(res.model.id, default_provider_prefix)
+            if first_assigned_model_id is None:
+                first_assigned_model_id = formatted_model_id
+
+            # Choix du mode : spécifié par l'agent, sinon heuristique
+            if agent_req and agent_req.mode:
+                agent_mode = agent_req.mode
+            elif res.agent_name in {"coder_agent", "build", "orchestrator", "orchestrator-free"}:
+                agent_mode = "primary"
+            else:
+                agent_mode = "subagent"
+
+            native_agent: Dict[str, Any] = {
+                "model": formatted_model_id,
+                "mode": agent_mode,
+            }
+            if description:
+                native_agent["description"] = description
+            opencode_agent_configs[res.agent_name] = native_agent
+        else:
+            native_unassigned: Dict[str, Any] = {
+                "disable": True,
+            }
+            if description:
+                native_unassigned["description"] = description
+            opencode_agent_configs[res.agent_name] = native_unassigned
+
     # Initialisation à partir de la configuration de base si fournie
     final_config: Dict[str, Any] = dict(base_config) if base_config else {}
 
@@ -218,18 +355,6 @@ def build_opencode_config(
     existing_native_agents.update(opencode_agent_configs)
     final_config["agent"] = existing_native_agents
 
-    # Métadonnées et simulation de ModelScope (rétrocompatibilité et auditabilité)
-    final_config["version"] = "1.0"
-    final_config["generated_at"] = datetime.now(timezone.utc).isoformat()
-    final_config["metadata"] = {
-        "generator": "ModelScope",
-        "total_agents": len(results),
-        "assigned_agents": assigned_count,
-        "unassigned_agents": unassigned_count,
-    }
-    final_config["budget_simulation"] = budget_summary
-    final_config["agents"] = configured_agents
-
     return final_config
 
 
@@ -238,22 +363,43 @@ def export_opencode_config(
     agents: Sequence[AgentRequirement],
     output_path: Path,
     base_config: Optional[Dict[str, Any]] = None,
+    default_provider_prefix: str = "openrouter",
+    create_backup_file: bool = True,
+    report_output_path: Optional[Path] = None,
 ) -> Path:
-    """Génère et sauvegarde le fichier de configuration JSON pour OpenCode.
+    """Génère et sauvegarde de manière atomique la configuration OpenCode et le rapport ModelScope.
 
     Args:
         results: Résultats de la sélection des modèles.
         agents: Exigences initiales des agents.
-        output_path: Fichier de destination (ex: config/opencode.json).
+        output_path: Fichier de destination OpenCode (ex: config/opencode.json).
         base_config: Configuration OpenCode de base optionnelle à fusionner.
+        default_provider_prefix: Préfixe du fournisseur OpenCode (défaut 'openrouter').
+        create_backup_file: Crée un backup de l'ancien fichier opencode.json si présent.
+        report_output_path: Fichier de destination pour le rapport ModelScope (par défaut
+            config/modelscope-report.json au même niveau).
 
     Returns:
         Chemin absolu du fichier écrit.
     """
-    config_data = build_opencode_config(results, agents, base_config=base_config)
+    config_data = build_opencode_config(
+        results,
+        agents,
+        base_config=base_config,
+        default_provider_prefix=default_provider_prefix,
+    )
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(config_data, f, indent=2, ensure_ascii=False)
+    if create_backup_file and output_path.exists():
+        create_backup(output_path)
+
+    write_json_atomic(output_path, config_data)
+
+    target_report_path = (
+        report_output_path
+        if report_output_path is not None
+        else output_path.parent / "modelscope-report.json"
+    )
+    report_data = build_modelscope_report_data(results, agents)
+    write_json_atomic(target_report_path, report_data)
 
     return output_path.resolve()

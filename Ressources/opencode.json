@@ -4,13 +4,13 @@
   "permission": {
     "read": {
       "*": "allow",
-      "/home/thomas/.local/share/opencode/auth.json": "deny",
+      "~/.local/share/opencode/auth.json": "deny",
       "*.env": "deny",
       "*.env.*": "deny"
     },
     "edit": {
       "*": "allow",
-      "/home/thomas/.local/share/opencode/auth.json": "deny",
+      "~/.local/share/opencode/auth.json": "deny",
       "*.env": "deny",
       "*.env.*": "deny"
     },
