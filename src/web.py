@@ -38,6 +38,20 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
                 return False
         return True
 
+    def do_HEAD(self) -> None:
+        parsed = urlparse(self.path)
+        if parsed.path in {"/", "/index.html"}:
+            self._send_static("index.html", "text/html; charset=utf-8", head_only=True)
+            return
+        if parsed.path == "/api/report":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            return
+        self.send_response(404)
+        self.end_headers()
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path in {"/", "/index.html"}:
@@ -99,27 +113,34 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
         status = 200 if result.ok else 400
         self._send_json(status, payload)
 
-    def _send_static(self, filename: str, content_type: str) -> None:
+    def _send_static(self, filename: str, content_type: str, head_only: bool = False) -> None:
         target = (WEB_DIR / filename).resolve()
         if not str(target).startswith(str(WEB_DIR.resolve())) or not target.is_file():
             self._send_json(404, {"ok": False, "message": "Page introuvable."})
             return
         body = target.read_bytes()
-        self.send_response(200)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            if not head_only:
+                self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def _send_json(self, status: int, payload: dict[str, Any]) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
 
 def _query_fallback(query: str, default: bool) -> bool:
@@ -144,6 +165,17 @@ def make_handler(service: ApplicationService, allow_fallback: bool = True) -> ty
     )
 
 
+class ModelScopeServer(ThreadingHTTPServer):
+    """Serveur HTTP multithread filtrant les déconnexions client inoffensives."""
+
+    def handle_error(self, request: Any, client_address: Any) -> None:
+        import sys
+        _cls, exc, _tb = sys.exc_info()
+        if isinstance(exc, (BrokenPipeError, ConnectionResetError)):
+            return
+        super().handle_error(request, client_address)
+
+
 def create_server(
     service: ApplicationService,
     port: int = 8765,
@@ -151,7 +183,7 @@ def create_server(
 ) -> ThreadingHTTPServer:
     """Instancie le serveur lié exclusivement à 127.0.0.1."""
     handler = make_handler(service, allow_fallback=allow_fallback)
-    return ThreadingHTTPServer((LISTEN_HOST, port), handler)
+    return ModelScopeServer((LISTEN_HOST, port), handler)
 
 
 def serve_local_interface(
