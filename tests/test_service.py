@@ -111,6 +111,30 @@ class TestService(unittest.TestCase):
             self.assertTrue(result.ok)
             self.assertTrue(service.default_export_path.exists())
 
+    def test_export_config_merges_base_opencode_config_from_ressources(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            write_valid_workspace(directory)
+            ressources_dir = directory / "Ressources"
+            ressources_dir.mkdir()
+            (ressources_dir / "opencode.jsonc").write_text(
+                json.dumps({
+                    "$schema": "https://opencode.ai/config.json",
+                    "model": "openrouter/free",
+                    "permission": {"bash": {"*": "allow"}},
+                    "provider": {"ollama": {"name": "Ollama Local"}},
+                }),
+                encoding="utf-8",
+            )
+            service = ApplicationService(directory)
+            result = service.export_config()
+            self.assertTrue(result.ok)
+            loaded = json.loads(service.default_export_path.read_text(encoding="utf-8"))
+            self.assertEqual(loaded["permission"]["bash"]["*"], "allow")
+            self.assertEqual(loaded["provider"]["ollama"]["name"], "Ollama Local")
+            self.assertIn("agent", loaded["agent"])
+
 
 if __name__ == "__main__":
     unittest.main()
+

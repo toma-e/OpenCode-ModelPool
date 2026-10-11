@@ -1,0 +1,55 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  // Modèle par défaut pour OpenCode
+  "model": "openrouter/free",
+
+  // Règles de sécurité et permissions
+  "permission": {
+    "read": {
+      "*": "allow",
+      "/home/thomas/.local/share/opencode/auth.json": "deny",
+      "*.env": "deny",
+      "*.env.*": "deny"
+    },
+
+    "edit": {
+      "*": "allow",
+      "/home/thomas/.local/share/opencode/auth.json": "deny",
+      "*.env": "deny",
+      "*.env.*": "deny"
+    },
+
+    "bash": {
+      "*": "allow",
+      "*auth.json*": "deny",
+      "*OPENROUTER_API_KEY*": "deny",
+      "*GROQ_API_KEY*": "deny",
+      "*GOOGLE_API_KEY*": "deny",
+      "*MISTRAL_API_KEY*": "deny",
+      "*CEREBRAS_API_KEY*": "deny"
+    }
+  },
+
+  // Fournisseurs de modèles personnalisés (ex: Ollama local)
+  "provider": {
+    "ollama": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama Local",
+      "options": {
+        "baseURL": "http://localhost:11434/v1"
+      },
+      "models": {
+        "qwen3.5:9b": {
+          "name": "Qwen 3.5 9B Local",
+          "tools": true,
+          "reasoning": true,
+          "limit": {
+            "context": 32768,
+            "output": 8192
+          }
+        }
+      }
+    }
+  }
+}

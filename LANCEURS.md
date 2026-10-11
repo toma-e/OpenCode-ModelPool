@@ -1,82 +1,75 @@
 # Lanceurs pour l'Interface Web Locale
 
-Ce dossier contient des scripts pour demarrer et arreter facilement l'interface web locale de ModelScope.
+Ce dossier contient des scripts pour démarrer et arrêter facilement l'interface web locale de ModelScope.
 
 ## Windows (via WSL)
 
-### Demarrer le serveur
+### Démarrer le serveur
 
-**Option 1: Script PowerShell (recommande)**
-Windows PowerShell
-Copyright (C) Microsoft Corporation. All rights reserved.
+**Option 1 : Script Batch**
+Double-cliquez sur `start-web.bat` ou exécutez dans un terminal Windows :
+```cmd
+start-web.bat
+```
 
-PS Microsoft.PowerShell.Core\FileSystem::\wsl.localhost\Ubuntu\home\thomas\code\projets\ModelScope-Anti\modelscope-Anti> 
+**Option 2 : Script PowerShell**
+Exécutez dans PowerShell :
+```powershell
+.\start-web.ps1
+```
 
-**Option 2: Script Batch**
-Microsoft Windows [version 10.0.26300.9457]
-(c) Microsoft Corporation. Tous droits rservs.
+Ces scripts effectuent :
+- La détection automatique si le serveur est déjà actif (pour éviter les doublons).
+- Le lancement propre du serveur dans WSL sur `http://127.0.0.1:8765/`.
+- L'ouverture automatique du navigateur Windows par défaut dès que le serveur est prêt.
+- L'affichage des requêtes HTTP en direct dans la console.
+- L'arrêt propre en fermant la console ou avec `Ctrl+C`.
 
-C:\Windows>
+### Arrêter le serveur
 
-Ces scripts:
-- Lancement automatique du serveur dans WSL
-- Ouverture automatique du navigateur Windows sur http://127.0.0.1:8765/
-- Affichage des logs en temps reel
-- Le serveur continue de tourner meme apres fermeture de la fenetre
+Si le serveur a été lancé dans une console distincte ou en arrière-plan :
 
-### Arreter le serveur
+**Option 1 : Script Batch**
+Double-cliquez sur `stop-web.bat` ou exécutez :
+```cmd
+stop-web.bat
+```
 
-**Option 1: Script PowerShell (recommande)**
-Windows PowerShell
-Copyright (C) Microsoft Corporation. All rights reserved.
+**Option 2 : Script PowerShell**
+Exécutez dans PowerShell :
+```powershell
+.\stop-web.ps1
+```
 
-PS Microsoft.PowerShell.Core\FileSystem::\wsl.localhost\Ubuntu\home\thomas\code\projets\ModelScope-Anti\modelscope-Anti> 
+---
 
-**Option 2: Script Batch**
-Microsoft Windows [version 10.0.26300.9457]
-(c) Microsoft Corporation. Tous droits rservs.
+## Linux / WSL Direct
 
-C:\Windows>
+### Démarrer le serveur
+Dans un terminal bash sous Linux ou WSL :
+```bash
+./start-web.sh
+```
 
-## Linux/WSL Direct
+### Arrêter le serveur
+Dans un autre terminal :
+```bash
+./stop-web.sh
+```
+Ou simplement `Ctrl+C` dans le terminal où tourne `start-web.sh`.
 
-### Demarrer le serveur
-========================================
-ModelScope - Interface Web Locale
-========================================
+---
 
-### Arreter le serveur
-========================================
-Arret du serveur ModelScope
-========================================
+## Dépannage
 
-Recherche des processus Python en cours...
-OK Serveur arrete avec succes
-
-Verification...
-OK Aucun processus serveur en cours d'execution
-
-Ou manuellement:
-
-
-## Depannage
-
-### Le serveur ne demarre pas
-- Verifiez que Python 3 est installe dans WSL: python3 --version
-- Verifiez que les dependances sont installees: pip install -r requirements.txt
-- Consultez les logs: wsl bash -c "cat /tmp/modelscope-web.log"
+### Le serveur ne démarre pas
+- Vérifiez que Python 3 est installé dans WSL : `python3 --version`
+- Vérifiez que le port 8765 n'est pas déjà occupé : `curl http://127.0.0.1:8765/`
+- Consultez les logs ou lancez manuellement : `python3 main.py --serve 8765`
 
 ### Le navigateur ne s'ouvre pas
-- Ouvrez manuellement: http://127.0.0.1:8765/
-- Verifiez qu'aucun autre processus n'utilise le port 8765
+- Ouvrez manuellement votre navigateur sur [http://127.0.0.1:8765/](http://127.0.0.1:8765/)
+- Vérifiez qu'aucun pare-feu ne bloque les connexions locales loopback sur le port 8765.
 
 ### Erreur "WSL n'est pas disponible"
-- Assurez-vous que WSL est installe et active sur Windows
-- Redemarrez WSL: wsl --shutdown puis relancez
-
-## Notes
-
-- Les scripts Windows utilisent wsl bash pour executer les commandes dans WSL
-- Les logs sont stockes dans /tmp/modelscope-web.log dans WSL
-- Le serveur ecoute sur 127.0.0.1:8765 (localhost uniquement)
-- Pour changer le port, modifiez le script et remplacez 8765 par le port souhaite
+- Assurez-vous que WSL 2 est installé et actif sur Windows (`wsl --status`).

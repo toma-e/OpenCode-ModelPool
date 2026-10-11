@@ -1,4 +1,7 @@
 @echo off
+setlocal
+chcp 65001 >nul
+
 REM Arrete le serveur ModelScope en cours d'execution dans WSL
 
 echo ========================================
@@ -10,18 +13,18 @@ echo Recherche des processus Python en cours...
 wsl bash -c "pkill -f 'python3 main.py --serve'"
 
 if errorlevel 1 (
-    echo [INFO] Aucun processus serveur trouve ou deja arrete
+    echo [INFO] Aucun processus serveur trouve ou deja arrete.
 ) else (
-    echo [OK] Serveur arrete avec succes
+    echo [OK] Signal d'arret envoye avec succes.
 )
 
 echo.
 echo Verification...
-wsl bash -c "ps aux | grep 'python3 main.py --serve' | grep -v grep"
+wsl bash -c "ps aux | grep 'python3 main.py --serve' | grep -v grep" >nul 2>&1
 if errorlevel 1 (
-    echo [OK] Aucun processus serveur en cours d'execution
+    echo [OK] Aucun processus serveur en cours d'execution.
 ) else (
-    echo [AVERTISSEMENT] Des processus sont encore actifs
+    echo [AVERTISSEMENT] Des processus sont encore actifs.
 )
 
 echo.

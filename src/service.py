@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from src.budget import AgentBudgetReport, FleetBudgetReport, simulate_fleet_budget
-from src.exporter import export_opencode_config
+from src.exporter import export_opencode_config, parse_json_or_jsonc
 from src.fetcher import sync_models_from_openrouter
 from src.selector import AgentRequirement, Model, SelectionResult, resolve_model_for_agent
 
@@ -244,22 +244,44 @@ class ApplicationService:
                 message += f" (sauvegarde : {backup})"
             return OperationResult(True, message, report)
 
+    def load_base_opencode_config(self) -> dict[str, Any] | None:
+        """Charge la configuration de base OpenCode depuis le dossier Ressources si disponible."""
+        candidates = [
+            self.base_dir / "Ressources" / "opencode.jsonc",
+            self.base_dir / "Ressources" / "opencode.json",
+            self.base_dir / "ressources" / "opencode.jsonc",
+            self.base_dir / "ressources" / "opencode.json",
+        ]
+        for candidate in candidates:
+            if candidate.is_file():
+                try:
+                    return parse_json_or_jsonc(candidate.read_text(encoding="utf-8"))
+                except Exception:
+                    continue
+        return None
+
     def export_config(
         self,
         path: str | Path | None = None,
         allow_fallback: bool = True,
+        base_config: dict[str, Any] | None = None,
     ) -> OperationResult:
         """Exporte la configuration OpenCode sous verrou d'écriture."""
         with self._lock:
             try:
                 report = self._build_report_unlocked(allow_fallback)
+                effective_base = (
+                    base_config if base_config is not None else self.load_base_opencode_config()
+                )
                 exported = export_opencode_config(
                     report.results,
                     report.agents,
                     self.resolve_export_path(path),
+                    base_config=effective_base,
                 )
             except ValueError as error:
                 return OperationResult(False, str(error))
             except OSError as error:
                 return OperationResult(False, f"Écriture de l'export impossible : {error}")
             return OperationResult(True, f"Configuration OpenCode exportée : {exported}", report)
+

@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "last_updated": "2026-10-10T12:35:45.984241+00:00",
+  "last_updated": "2026-10-11T09:26:48.630546+00:00",
   "source": "https://openrouter.ai/api/v1/models",
   "total_models": 375,
   "models": [
@@ -318,8 +318,8 @@
       "id": "~deepseek/deepseek-pro-latest",
       "provider": "~deepseek",
       "tier": "pay_as_you_go",
-      "cost_input_per_m": 0.22,
-      "cost_output_per_m": 4.0,
+      "cost_input_per_m": 0.2191,
+      "cost_output_per_m": 0.6574,
       "context_window": 1048576,
       "supports_tools": true,
       "complexity_score": 3
@@ -328,8 +328,8 @@
       "id": "~deepseek/deepseek-flash-latest",
       "provider": "~deepseek",
       "tier": "pay_as_you_go",
-      "cost_input_per_m": 0.0001,
-      "cost_output_per_m": 0.6,
+      "cost_input_per_m": 0.0348,
+      "cost_output_per_m": 0.1392,
       "context_window": 1048576,
       "supports_tools": true,
       "complexity_score": 3
@@ -678,11 +678,11 @@
       "id": "qwen/qwen3.8-27b",
       "provider": "qwen",
       "tier": "pay_as_you_go",
-      "cost_input_per_m": 0.425,
-      "cost_output_per_m": 2.55,
+      "cost_input_per_m": 0.04,
+      "cost_output_per_m": 2.3,
       "context_window": 1000000,
       "supports_tools": true,
-      "complexity_score": 3
+      "complexity_score": 2
     },
     {
       "id": "dots-studio/dots-3-note-preview:free",
@@ -828,8 +828,8 @@
       "id": "~deepseek/deepseek-v4-flash-latest",
       "provider": "~deepseek",
       "tier": "pay_as_you_go",
-      "cost_input_per_m": 0.0116,
-      "cost_output_per_m": 1.28,
+      "cost_input_per_m": 0.0143,
+      "cost_output_per_m": 0.64,
       "context_window": 1048576,
       "supports_tools": true,
       "complexity_score": 3
@@ -838,8 +838,8 @@
       "id": "deepseek/deepseek-v4-flash-0731",
       "provider": "deepseek",
       "tier": "pay_as_you_go",
-      "cost_input_per_m": 0.0116,
-      "cost_output_per_m": 1.28,
+      "cost_input_per_m": 0.0143,
+      "cost_output_per_m": 0.64,
       "context_window": 1048576,
       "supports_tools": true,
       "complexity_score": 3
@@ -968,8 +968,8 @@
       "id": "moonshotai/kimi-k3",
       "provider": "moonshotai",
       "tier": "pay_as_you_go",
-      "cost_input_per_m": 0.64,
-      "cost_output_per_m": 13.5,
+      "cost_input_per_m": 0.8,
+      "cost_output_per_m": 10.0,
       "context_window": 1048576,
       "supports_tools": true,
       "complexity_score": 4
@@ -1238,8 +1238,8 @@
       "id": "nvidia/nemotron-3-ultra-550b-a55b",
       "provider": "nvidia",
       "tier": "pay_as_you_go",
-      "cost_input_per_m": 0.5,
-      "cost_output_per_m": 2.2,
+      "cost_input_per_m": 0.6,
+      "cost_output_per_m": 2.4,
       "context_window": 262144,
       "supports_tools": true,
       "complexity_score": 4
@@ -1418,11 +1418,11 @@
       "id": "~moonshotai/kimi-latest",
       "provider": "~moonshotai",
       "tier": "pay_as_you_go",
-      "cost_input_per_m": 0.31,
-      "cost_output_per_m": 14.89,
+      "cost_input_per_m": 0.75,
+      "cost_output_per_m": 14.9,
       "context_window": 1048576,
       "supports_tools": true,
-      "complexity_score": 3
+      "complexity_score": 4
     },
     {
       "id": "~google/gemini-flash-latest",
@@ -1468,8 +1468,8 @@
       "id": "qwen/qwen3.6-35b-a3b",
       "provider": "qwen",
       "tier": "pay_as_you_go",
-      "cost_input_per_m": 0.15,
-      "cost_output_per_m": 1.0,
+      "cost_input_per_m": 0.1,
+      "cost_output_per_m": 0.95,
       "context_window": 262144,
       "supports_tools": true,
       "complexity_score": 4
@@ -1508,17 +1508,17 @@
       "id": "deepseek/deepseek-v4-pro",
       "provider": "deepseek",
       "tier": "pay_as_you_go",
-      "cost_input_per_m": 0.9483,
-      "cost_output_per_m": 1.8966,
+      "cost_input_per_m": 0.2088,
+      "cost_output_per_m": 0.4176,
       "context_window": 1048576,
       "supports_tools": true,
-      "complexity_score": 4
+      "complexity_score": 3
     },
     {
       "id": "deepseek/deepseek-v4-flash",
       "provider": "deepseek",
       "tier": "pay_as_you_go",
-      "cost_input_per_m": 0.0216,
+      "cost_input_per_m": 0.03,
       "cost_output_per_m": 1.28,
       "context_window": 1048576,
       "supports_tools": true,
@@ -1578,11 +1578,11 @@
       "id": "moonshotai/kimi-k2.6",
       "provider": "moonshotai",
       "tier": "pay_as_you_go",
-      "cost_input_per_m": 0.465,
-      "cost_output_per_m": 2.45,
+      "cost_input_per_m": 0.65,
+      "cost_output_per_m": 3.41,
       "context_window": 262144,
       "supports_tools": true,
-      "complexity_score": 3
+      "complexity_score": 4
     },
     {
       "id": "anthropic/claude-opus-4.7",

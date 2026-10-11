@@ -1,37 +1,43 @@
 @echo off
-REM Lanceur pour l'interface web ModelScope
-REM Ce script lance le serveur dans WSL et ouvre le navigateur Windows
+setlocal
+chcp 65001 >nul
 
 echo ========================================
 echo ModelScope - Interface Web Locale
 echo ========================================
 echo.
 
-REM Lancer le serveur dans WSL en arriere-plan
-echo [1/2] Demarrage du serveur dans WSL...
-wsl bash -c "cd /home/thomas/code/projets/ModelScope-Anti/modelscope-Anti && python3 main.py --serve 8765 > /tmp/modelscope-web.log 2>&1 &"
-if errorlevel 1 (
-    echo [ERREUR] Impossible de lancer le serveur WSL
-    pause
-    exit /b 1
+REM Verifier si le serveur tourne deja
+powershell -NoProfile -Command "try { $r = (Invoke-WebRequest -Uri 'http://127.0.0.1:8765/' -UseBasicParsing -TimeoutSec 1).StatusCode; if ($r -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
+if not errorlevel 1 (
+    echo [INFO] Le serveur est deja actif sur http://127.0.0.1:8765/
+    echo Ouverture du navigateur...
+    start "" http://127.0.0.1:8765/
+    echo.
+    echo Appuyez sur une touche pour quitter ce lanceur...
+    pause >nul
+    exit /b 0
 )
 
-REM Attendre que le serveur soit pret
-echo [2/2] Attente du demarrage du serveur...
-timeout /t 3 /nobreak >nul
+REM Resoudre le chemin WSL du projet
+set "WSL_PROJECT_DIR="
+for /f "usebackq delims=" %%i in (`wsl wslpath "%~dp0" 2^>nul`) do set "WSL_PROJECT_DIR=%%i"
+if "%WSL_PROJECT_DIR%"=="" set "WSL_PROJECT_DIR=/home/thomas/code/projets/ModelScope-Anti/modelscope-Anti"
 
-REM Ouvrir le navigateur
-echo Ouverture du navigateur...
-start http://127.0.0.1:8765/
+echo [1/2] Preparation de l'ouverture du navigateur...
+start "" powershell -WindowStyle Hidden -NoProfile -Command "for ($i=0; $i -lt 15; $i++) { try { $r = (Invoke-WebRequest -Uri 'http://127.0.0.1:8765/' -UseBasicParsing -TimeoutSec 1).StatusCode; if ($r -eq 200) { Start-Process 'http://127.0.0.1:8765/'; break } } catch { Start-Sleep -Seconds 1 } }"
 
+echo [2/2] Demarrage du serveur ModelScope dans WSL...
 echo.
 echo ========================================
-echo Serveur lance sur http://127.0.0.1:8765/
-echo Pour arreter le serveur, fermez cette fenetre ou utilisez Ctrl+C
+echo Serveur actif sur http://127.0.0.1:8765/
+echo Le navigateur va s'ouvrir automatiquement.
+echo Pour arreter le serveur : fermez cette fenetre ou faites Ctrl+C.
 echo ========================================
 echo.
-echo Logs disponibles dans WSL: /tmp/modelscope-web.log
-echo.
 
-REM Garder la fenetre ouverte pour que le serveur continue de tourner
-wsl bash -c "tail -f /tmp/modelscope-web.log"
+wsl bash -c "cd \"%WSL_PROJECT_DIR%\" && python3 main.py --serve 8765"
+if errorlevel 1 (
+    echo.
+    echo Le serveur a ete arrete.
+)

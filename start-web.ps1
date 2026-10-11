@@ -4,23 +4,46 @@ Write-Host "ModelScope - Interface Web Locale" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-Write-Host "[1/2] Demarrage du serveur dans WSL..." -ForegroundColor Yellow
-wsl bash -c "cd /home/thomas/code/projets/ModelScope-Anti/modelscope-Anti && python3 main.py --serve 8765 > /tmp/modelscope-web.log 2>&1 &"
+# Verifier si le serveur tourne deja
+try {
+    $existing = (Invoke-WebRequest -Uri "http://127.0.0.1:8765/" -UseBasicParsing -TimeoutSec 1 -ErrorAction SilentlyContinue).StatusCode
+    if ($existing -eq 200) {
+        Write-Host "[INFO] Le serveur est deja actif sur http://127.0.0.1:8765/" -ForegroundColor Green
+        Write-Host "Ouverture du navigateur..." -ForegroundColor Yellow
+        Start-Process "http://127.0.0.1:8765/"
+        exit 0
+    }
+} catch {}
 
-Write-Host "[2/2] Attente du demarrage du serveur..." -ForegroundColor Yellow
-Start-Sleep -Seconds 3
+# Resoudre le chemin WSL du projet
+$wslProjectDir = ""
+try {
+    $wslProjectDir = (wsl wslpath "$PSScriptRoot" 2>$null).Trim()
+} catch {}
+if (-not $wslProjectDir) {
+    $wslProjectDir = "/home/thomas/code/projets/ModelScope-Anti/modelscope-Anti"
+}
 
-Write-Host "Ouverture du navigateur..." -ForegroundColor Yellow
-Start-Process "http://127.0.0.1:8765/"
+# Lancer la surveillance pour ouvrir le navigateur des que pret
+Start-Job -ScriptBlock {
+    for ($i = 0; $i -lt 15; $i++) {
+        try {
+            $r = (Invoke-WebRequest -Uri "http://127.0.0.1:8765/" -UseBasicParsing -TimeoutSec 1).StatusCode
+            if ($r -eq 200) {
+                Start-Process "http://127.0.0.1:8765/"
+                break
+            }
+        } catch {
+            Start-Sleep -Seconds 1
+        }
+    }
+} | Out-Null
 
-Write-Host ""
+Write-Host "Demarrage du serveur dans WSL..." -ForegroundColor Yellow
+Write-Host "Serveur accessible sur : http://127.0.0.1:8765/" -ForegroundColor Green
+Write-Host "Le navigateur va s'ouvrir automatiquement." -ForegroundColor Gray
+Write-Host "Pour arreter le serveur : faites Ctrl+C ou fermez cette fenetre." -ForegroundColor Gray
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Serveur lance sur http://127.0.0.1:8765/" -ForegroundColor Green
-Write-Host "Pour arreter le serveur, executez: stop-web.ps1" -ForegroundColor White
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "Logs disponibles dans WSL: /tmp/modelscope-web.log" -ForegroundColor Gray
 Write-Host ""
 
-Write-Host "Affichage des logs (Ctrl+C pour arreter):" -ForegroundColor Gray
-wsl bash -c "tail -f /tmp/modelscope-web.log"
+wsl bash -c "cd `"$wslProjectDir`" && python3 main.py --serve 8765"
