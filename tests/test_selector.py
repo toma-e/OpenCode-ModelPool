@@ -660,6 +660,24 @@ class TestSelector(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "nombre fini"):
             Model.from_dict(invalid)
 
+    def test_agent_requirement_accepts_mode_all(self) -> None:
+        """AgentRequirement.from_dict accepte le mode 'all' en plus de 'primary' et 'subagent'."""
+        data = {
+            "name": "omni_agent",
+            "description": "Agent multi-mode",
+            "min_complexity": 3,
+            "max_complexity": 3,
+            "requires_tools": True,
+            "mode": "all",
+        }
+        req = AgentRequirement.from_dict(data)
+        self.assertEqual(req.mode, "all")
+
+        # Mode non supporté rejeté
+        data_invalid = dict(data, mode="unknown_mode")
+        with self.assertRaises(ValueError):
+            AgentRequirement.from_dict(data_invalid)
+
 
 if __name__ == "__main__":
     unittest.main()

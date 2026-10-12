@@ -212,6 +212,11 @@ def write_json_atomic(path: Path, data: object) -> None:
             json.dump(data, file, indent=2, ensure_ascii=False)
             file.flush()
             os.fsync(file.fileno())
+        # mkstemp crée par défaut un fichier en 0o600 ; on rétablit les permissions de lecture standard (0o644)
+        try:
+            os.chmod(temporary_path, 0o644)
+        except OSError:
+            pass
         os.replace(temporary_path, path)
     except Exception:
         temporary_path.unlink(missing_ok=True)
@@ -322,6 +327,7 @@ def sync_models_from_openrouter(
     create_backup_file: bool = True,
     exclude_batch: bool = True,
     min_models_threshold: int = 10,
+    raw_models: Optional[List[dict[str, Any]]] = None,
 ) -> Tuple[int, Optional[Path]]:
     """Télécharge les modèles d'OpenRouter, met à jour le fichier JSON et gère le backup.
 
@@ -330,11 +336,13 @@ def sync_models_from_openrouter(
         create_backup_file: Indique s'il faut sauvegarder l'ancienne version.
         exclude_batch: Exclut les variantes ':batch' d'OpenRouter pour alléger le registre.
         min_models_threshold: Seuil minimal de modèles requis pour écraser le catalogue existant.
+        raw_models: Liste brute pré-téléchargée de modèles OpenRouter (optionnel).
 
     Returns:
         Tuple contenant (nombre_de_modèles_enregistrés, chemin_de_la_sauvegarde).
     """
-    raw_models = fetch_openrouter_models()
+    if raw_models is None:
+        raw_models = fetch_openrouter_models()
 
     parsed_models: List[Model] = []
     for raw in raw_models:

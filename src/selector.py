@@ -72,6 +72,12 @@ class Model:
         """Somme des coûts d'entrée et de sortie par million de tokens."""
         return self.cost_input_per_m + self.cost_output_per_m
 
+    def calculate_cost(self, input_tokens: int, output_tokens: int) -> tuple[float, float, float]:
+        """Calcule les coûts d'entrée, de sortie et total pour un volume de tokens donné, arrondis à 4 décimales."""
+        cost_in = (input_tokens / 1_000_000) * self.cost_input_per_m
+        cost_out = (output_tokens / 1_000_000) * self.cost_output_per_m
+        return round(cost_in, 4), round(cost_out, 4), round(cost_in + cost_out, 4)
+
     @classmethod
     def from_dict(cls, data: dict[str, Any], context: str = "modèle") -> Model:
         """Instancie un modèle après validation stricte de son dictionnaire."""
@@ -175,8 +181,8 @@ class AgentRequirement:
         if force_model is not None and (not isinstance(force_model, str) or not force_model):
             raise ValueError(f"{context}: 'force_model' doit être une chaîne non vide.")
         mode = data.get("mode")
-        if mode is not None and mode not in {"primary", "subagent"}:
-            raise ValueError(f"{context}: 'mode' doit être 'primary' ou 'subagent'.")
+        if mode is not None and mode not in {"primary", "subagent", "all"}:
+            raise ValueError(f"{context}: 'mode' doit être 'primary', 'subagent' ou 'all'.")
         max_budget = data.get("max_monthly_budget")
         if max_budget is not None:
             max_budget = _number(max_budget, "max_monthly_budget", context)
@@ -244,11 +250,11 @@ def common_constraint_violations(model: Model, agent_req: AgentRequirement) -> l
     if not agent_req.allow_free and model.is_free:
         violations.append("modèle gratuit interdit")
     if agent_req.max_monthly_budget is not None:
-        cost = (
-            agent_req.estimated_tokens_input / 1_000_000 * model.cost_input_per_m
-            + agent_req.estimated_tokens_output / 1_000_000 * model.cost_output_per_m
+        _cost_in, _cost_out, total_cost = model.calculate_cost(
+            agent_req.estimated_tokens_input,
+            agent_req.estimated_tokens_output,
         )
-        if cost > agent_req.max_monthly_budget:
+        if total_cost > agent_req.max_monthly_budget:
             violations.append("plafond budgétaire mensuel")
     return violations
 

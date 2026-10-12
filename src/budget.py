@@ -56,9 +56,7 @@ def calculate_agent_cost(
     output_tokens: int,
 ) -> tuple[float, float, float]:
     """Calcule les coûts d'entrée, de sortie et total pour un volume de tokens donné."""
-    cost_in = (input_tokens / 1_000_000) * model.cost_input_per_m
-    cost_out = (output_tokens / 1_000_000) * model.cost_output_per_m
-    return round(cost_in, 4), round(cost_out, 4), round(cost_in + cost_out, 4)
+    return model.calculate_cost(input_tokens, output_tokens)
 
 
 def simulate_agent_budget(

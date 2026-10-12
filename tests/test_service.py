@@ -96,11 +96,33 @@ class TestService(unittest.TestCase):
             write_valid_workspace(directory)
             service = ApplicationService(directory)
             before = service.models_path.read_text(encoding="utf-8")
-            with patch("src.service.sync_models_from_openrouter", side_effect=OSError("offline")):
+            with patch("src.service.fetch_openrouter_models", side_effect=OSError("offline")):
                 result = service.sync_catalogue()
             self.assertFalse(result.ok)
             self.assertIn("offline", result.message)
             self.assertEqual(service.models_path.read_text(encoding="utf-8"), before)
+
+    def test_sync_catalogue_success_flow(self) -> None:
+        """Vérifie le cycle complet de sync_catalogue avec modèles récupérés hors verrou."""
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            write_valid_workspace(directory)
+            service = ApplicationService(directory)
+            fake_raw_models = [
+                {
+                    "id": f"provider/model-{i}",
+                    "pricing": {"prompt": "0.000001", "completion": "0.000002"},
+                    "context_length": 8192,
+                    "supported_parameters": ["tools"],
+                }
+                for i in range(15)
+            ]
+            with patch("src.service.fetch_openrouter_models", return_value=fake_raw_models):
+                result = service.sync_catalogue()
+            self.assertTrue(result.ok)
+            self.assertIn("15 modèles synchronisés", result.message)
+            self.assertIsNotNone(result.report)
+            self.assertEqual(len(result.report.models), 15)
 
     def test_export_config_writes_opencode_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

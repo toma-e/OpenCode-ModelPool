@@ -24,7 +24,12 @@ from src.exporter import (
     build_opencode_config,
     parse_json_or_jsonc,
 )
-from src.fetcher import create_backup, sync_models_from_openrouter, write_json_atomic
+from src.fetcher import (
+    create_backup,
+    fetch_openrouter_models,
+    sync_models_from_openrouter,
+    write_json_atomic,
+)
 from src.selector import AgentRequirement, Model, SelectionResult, resolve_model_for_agent
 
 DEFAULT_EXPORT_RELATIVE = Path("config") / "opencode.json"
@@ -273,10 +278,22 @@ class ApplicationService:
         return OperationResult(True, "Rapport calculé.", report)
 
     def sync_catalogue(self, allow_fallback: bool = True) -> OperationResult:
-        """Synchronise OpenRouter puis recalcule le rapport, sous verrou d'écriture."""
+        """Synchronise OpenRouter puis recalcule le rapport.
+
+        L'appel réseau est réalisé hors verrou (évite le Head-of-Line Blocking),
+        puis l'écriture atomique et le recalcul s'effectuent sous verrou exclusif.
+        """
+        try:
+            raw_models = fetch_openrouter_models()
+        except Exception as error:
+            return OperationResult(False, f"Échec de la synchronisation : {error}")
+
         with self._lock, self._file_lock():
             try:
-                count, backup = sync_models_from_openrouter(self.models_path)
+                count, backup = sync_models_from_openrouter(
+                    self.models_path,
+                    raw_models=raw_models,
+                )
             except Exception as error:
                 return OperationResult(False, f"Échec de la synchronisation : {error}")
             try:

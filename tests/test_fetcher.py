@@ -190,6 +190,9 @@ class TestFetcher(unittest.TestCase):
             write_json_atomic(target, {"ok": True, "count": 2})
             self.assertEqual(json.loads(target.read_text(encoding="utf-8")), {"ok": True, "count": 2})
             self.assertEqual(list(Path(tmp_dir).glob("*.tmp")), [])
+            # Vérifier que les permissions de lecture standard sont bien accordées (au moins 0o644)
+            file_mode = target.stat().st_mode & 0o777
+            self.assertEqual(file_mode & 0o444, 0o444)
 
     def test_write_json_atomic_preserves_previous_file_when_dump_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

@@ -115,7 +115,7 @@ python3 main.py --serve
 # Port personnalisé :
 python3 main.py --serve 9000
 ```
-Ouvrir ensuite `http://127.0.0.1:8765/`. Les exigences d'agents restent en lecture seule.
+Ouvrir ensuite `http://127.0.0.1:8765/`. L'interface permet de visualiser le catalogue, les attributions d'agents, les simulations budgétaires, et de modifier interactivement les exigences de chaque agent (stratégie, gratuit/payant, vision, raisonnement, tier 1) avec persistance atomique.
 
 #### Lanceurs Windows (via WSL)
 Si votre projet est dans WSL et vous utilisez Windows, des lanceurs sont disponibles :
@@ -136,8 +136,11 @@ Consultez LANCEURS.md pour plus de détails.
 | Option | Description |
 |---|---|
 | `--export [PATH]` | Génère le fichier de configuration OpenCode (défaut : `config/opencode.json`). |
+| `--validate` | Valide la compatibilité de tous les agents (code de sortie 1 si au moins un agent reste sans modèle). Enchaînable avec `--export`. |
 | `--sync` | Télécharge et met à jour le catalogue depuis OpenRouter avec création d'un backup. |
 | `--no-fallback` | Désactive le surclassement automatique si aucun modèle exact n'est trouvé. |
+| `--models PATH` | Spécifie un chemin personnalisé vers `models.json`. |
+| `--agents PATH` | Spécifie un chemin personnalisé vers `agents_requirements.json`. |
 | `--serve [PORT]` | Démarre l'interface web locale sur 127.0.0.1 (défaut : 8765). |
 | `-h`, `--help` | Affiche l'aide détaillée. |
 

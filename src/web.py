@@ -143,8 +143,18 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
             return body["fallback"]
         return default
 
+    def _sanitize_message(self, message: str) -> str:
+        """Supprime les chemins absolus internes du serveur dans les messages d'erreur HTTP."""
+        if not message:
+            return message
+        base_str = str(self.service.base_dir.resolve())
+        if base_str in message:
+            message = message.replace(base_str, ".")
+        return message
+
     def _send_operation(self, result: OperationResult) -> None:
-        payload: dict[str, Any] = {"ok": result.ok, "message": result.message}
+        sanitized_msg = self._sanitize_message(result.message)
+        payload: dict[str, Any] = {"ok": result.ok, "message": sanitized_msg}
         if result.report is not None:
             payload["report"] = serialize_report(result.report)
         status = 200 if result.ok else 400
@@ -230,6 +240,9 @@ def serve_local_interface(
     port: int = 8765,
     allow_fallback: bool = True,
 ) -> None:
-    """Démarre le serveur local jusqu'à interruption clavier."""
-    with create_server(service, port=port, allow_fallback=allow_fallback) as httpd:
-        httpd.serve_forever()
+    """Démarre le serveur local jusqu'à interruption clavier sans traceback brute."""
+    try:
+        with create_server(service, port=port, allow_fallback=allow_fallback) as httpd:
+            httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\n🛑 Arrêt du serveur local.")

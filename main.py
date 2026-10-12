@@ -16,6 +16,16 @@ DEFAULT_SERVE_PORT = 8765
 __all__ = ["BASE_DIR", "build_parser", "load_data", "main", "render_results", "run"]
 
 
+def _valid_port(value: str) -> int:
+    try:
+        port = int(value)
+        if not (1 <= port <= 65535):
+            raise ValueError
+        return port
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"Port invalide '{value}'. Un entier compris entre 1 et 65535 est attendu.")
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Construit le parseur d'arguments de la ligne de commande."""
     parser = argparse.ArgumentParser(
@@ -50,9 +60,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--serve",
         nargs="?",
         const=DEFAULT_SERVE_PORT,
-        type=int,
+        type=_valid_port,
         metavar="PORT",
-        help=f"Démarre l'interface web locale sur 127.0.0.1 (défaut : {DEFAULT_SERVE_PORT}).",
+        help=f"Démarre l'interface web locale sur 127.0.0.1 (défaut : {DEFAULT_SERVE_PORT}, plage : 1-65535).",
     )
     return parser
 
@@ -106,7 +116,8 @@ def run(args: argparse.Namespace, base_dir: Path = BASE_DIR) -> int:
             print(f"❌ Validation échouée : {len(unassigned)} agent(s) sans modèle ({', '.join(unassigned)}).", file=sys.stderr)
             return 1
         print("✅ Validation réussie : tous les agents disposent d'un modèle compatible.")
-        return 0
+        if not args.export:
+            return 0
     if args.export:
         exported = service.export_config(args.export, allow_fallback=allow_fallback)
         if not exported.ok:

@@ -48,13 +48,26 @@ class TestMain(unittest.TestCase):
             catalogue = directory / "data" / "models.json"
             before = catalogue.read_text(encoding="utf-8")
             args = main.build_parser().parse_args(["--sync"])
-            with patch("src.service.sync_models_from_openrouter", side_effect=OSError("offline")):
+            with patch("src.service.fetch_openrouter_models", side_effect=OSError("offline")):
                 self.assertEqual(main.run(args, directory), 1)
             self.assertEqual(catalogue.read_text(encoding="utf-8"), before)
 
     def test_parser_accepts_serve_default_port(self) -> None:
         args = main.build_parser().parse_args(["--serve"])
         self.assertEqual(args.serve, 8765)
+
+    def test_parser_accepts_valid_serve_port(self) -> None:
+        args = main.build_parser().parse_args(["--serve", "8080"])
+        self.assertEqual(args.serve, 8080)
+
+    def test_parser_rejects_invalid_serve_ports(self) -> None:
+        parser = main.build_parser()
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["--serve", "0"])
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["--serve", "70000"])
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["--serve", "not_a_number"])
 
     def test_run_returns_two_for_missing_configuration(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -99,6 +112,16 @@ class TestMain(unittest.TestCase):
                 "--no-fallback",
             ])
             self.assertEqual(main.run(args_fail, directory), 1)
+
+    def test_run_validate_and_export_chained(self) -> None:
+        """Vérifie que le chaînage --validate et --export effectue bien la validation ET l'export."""
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            self._write_valid_files(directory)
+            export_target = directory / "out_config.json"
+            args = main.build_parser().parse_args(["--validate", "--export", str(export_target)])
+            self.assertEqual(main.run(args, directory), 0)
+            self.assertTrue(export_target.exists())
 
 
 if __name__ == "__main__":

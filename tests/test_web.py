@@ -79,7 +79,7 @@ class TestWeb(unittest.TestCase):
 
     def test_post_sync_error_keeps_catalogue(self) -> None:
         before = self.service.models_path.read_text(encoding="utf-8")
-        with patch("src.service.sync_models_from_openrouter", side_effect=OSError("offline")):
+        with patch("src.service.fetch_openrouter_models", side_effect=OSError("offline")):
             status, payload = self._post("/api/sync")
         self.assertEqual(status, 400)
         self.assertFalse(payload["ok"])
@@ -194,6 +194,19 @@ class TestWeb(unittest.TestCase):
             urllib.request.urlopen(request, timeout=5)
         self.assertEqual(ctx.exception.code, 404)
         ctx.exception.close()
+
+    def test_error_message_sanitizes_absolute_paths(self) -> None:
+        """Les chemins internes absolus du serveur sont masqués dans les réponses d'erreur."""
+        from src.service import OperationResult
+
+        with patch.object(self.service, "sync_catalogue") as mock_sync:
+            internal_path = str(self.service.base_dir.resolve() / "secret_dir" / "file.txt")
+            mock_sync.return_value = OperationResult(False, f"Erreur avec le fichier {internal_path}")
+            status, payload = self._post("/api/sync")
+            self.assertEqual(status, 400)
+            self.assertFalse(payload["ok"])
+            self.assertNotIn(str(self.service.base_dir.resolve()), payload["message"])
+            self.assertIn("./secret_dir/file.txt", payload["message"])
 
 
 if __name__ == "__main__":
