@@ -9,9 +9,10 @@ ModelScope analyse dynamiquement un catalogue de modèles LLM (tarifs, fenêtres
 ## 💡 Pourquoi ModelScope ?
 
 Dans un écosystème multi-agents (comme **OpenCode**), affecter systématiquement un modèle coûteux (ex: Claude 3.5 Sonnet, GPT-5) à tous les agents est inefficace :
-- Un agent de documentation (`doc_agent`) n'a besoin que d'un modèle simple, rapide et si possible gratuit.
-- Un agent de refactoring (`coder_agent`) a besoin d'outils (`tools`) et d'une complexité intermédiaire.
-- Seul un agent de conception ou de débogage avancé (`architect_agent`) justifie un modèle de pointe.
+- **`build`** (agent principal de codage) requiert un support d'outils complet (`tools`), un fort raisonnement et une génération de code précise.
+- **`plan`** (agent principal d'architecture et de cadrage) requiert une très grande fenêtre de contexte, de la vision et du raisonnement de pointe, sans nécessiter d'outils d'écriture directe.
+- **`explore`** (sous-agent de recherche rapide) n'a besoin que d'un modèle simple, très rapide, en lecture seule et si possible gratuit.
+- **`general`** (sous-agent polyvalent) traite les tâches déléguées avec un compromis équilibré coût/performance.
 
 ModelScope automatise ce routage intelligent, simule votre budget prévisionnel et génère directement le fichier de configuration exploitable par OpenCode.
 
@@ -96,9 +97,32 @@ python3 main.py
 Pour attribuer les modèles et exporter la configuration pour OpenCode :
 ```bash
 python3 main.py --export
-# Ou vers un chemin personnalisé :
-python3 main.py --export /chemin/vers/opencode.json
 ```
+
+#### 🔗 Liaison avec votre environnement OpenCode
+
+OpenCode recherche sa configuration à deux emplacements standards :
+1. **Au niveau utilisateur (global) :** `~/.config/opencode/opencode.json`
+2. **Au niveau d'un projet spécifique :** `.opencode/opencode.json` ou `opencode.json` à la racine de votre projet.
+
+Vous pouvez lier ModelScope à OpenCode de trois manières :
+
+- **Option 1 : Export direct dans la configuration globale d'OpenCode**
+  ```bash
+  python3 main.py --export ~/.config/opencode/opencode.json
+  ```
+- **Option 2 : Export direct dans le projet de votre choix**
+  ```bash
+  python3 main.py --export /chemin/vers/mon-projet/.opencode/opencode.json
+  ```
+- **Option 3 : Liaison automatique via lien symbolique (Symlink)**
+  Conservez l'export dans `config/opencode.json` de ModelScope et créez un lien symbolique :
+  ```bash
+  mkdir -p ~/.config/opencode
+  ln -sf "$(pwd)/config/opencode.json" ~/.config/opencode/opencode.json
+  ```
+  *(Chaque ré-export ou mise à jour via l'interface web sera immédiatement pris en compte par OpenCode).*
+
 
 ### Forcer la Synchronisation depuis OpenRouter
 Pour télécharger les derniers modèles disponibles tout en archivant l'ancienne version :

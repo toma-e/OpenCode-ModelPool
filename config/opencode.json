@@ -45,20 +45,25 @@
     }
   },
   "agent": {
-    "doc_agent": {
-      "model": "openrouter/apodex/apodex-1.1-mini:free",
-      "mode": "subagent",
-      "description": "Génération de documentation et commentaires"
-    },
-    "coder_agent": {
-      "model": "openrouter/google/gemma-4-26b-a4b-it:free",
+    "build": {
+      "model": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
       "mode": "primary",
-      "description": "Écriture de fonctions et refactoring classique"
+      "description": "Agent de développement principal : écriture de code, refactoring et exécution de commandes"
     },
-    "architect_agent": {
-      "model": "openrouter/openai/gpt-5.6-luna",
+    "plan": {
+      "model": "openrouter/qwen/qwen3.5-35b-a3b",
+      "mode": "primary",
+      "description": "Agent d'architecture et de cadrage : analyse et élaboration de plans sans modification directe"
+    },
+    "explore": {
+      "model": "openrouter/google/lyria-3-clip-preview",
       "mode": "subagent",
-      "description": "Résolution de bugs complexes et conception système"
+      "description": "Sous-agent d'exploration rapide : recherche de fichiers et lecture du codebase en lecture seule"
+    },
+    "general": {
+      "model": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+      "mode": "subagent",
+      "description": "Sous-agent polyvalent : exécution de tâches déléguées et recherches complexes"
     }
   }
 }

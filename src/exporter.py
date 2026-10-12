@@ -362,7 +362,7 @@ def build_opencode_config(
             # Choix du mode : spécifié par l'agent, sinon heuristique
             if agent_req and agent_req.mode:
                 agent_mode = agent_req.mode
-            elif res.agent_name in {"coder_agent", "build", "orchestrator", "orchestrator-free"}:
+            elif res.agent_name in {"build", "plan", "coder_agent", "orchestrator", "orchestrator-free"}:
                 agent_mode = "primary"
             else:
                 agent_mode = "subagent"

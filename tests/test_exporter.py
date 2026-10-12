@@ -199,6 +199,23 @@ class TestExporter(unittest.TestCase):
         self.assertIn("coder_agent", report["agents"])
         self.assertEqual(report["version"], "1.0")
 
+    def test_build_opencode_config_native_modes(self) -> None:
+        """Vérifie que 'build' et 'plan' deviennent 'primary' par défaut et que 'explore'/'general' deviennent 'subagent'."""
+        agents = [
+            AgentRequirement("build", "Build agent", 4, 5, True, False),
+            AgentRequirement("plan", "Plan agent", 4, 5, False, False),
+            AgentRequirement("explore", "Explore agent", 2, 3, False, True),
+            AgentRequirement("general", "General agent", 3, 4, True, False),
+        ]
+        results = [
+            SelectionResult(a.name, self.model, False, [self.model], "ok") for a in agents
+        ]
+        config = build_opencode_config(results, agents)
+        self.assertEqual(config["agent"]["build"]["mode"], "primary")
+        self.assertEqual(config["agent"]["plan"]["mode"], "primary")
+        self.assertEqual(config["agent"]["explore"]["mode"], "subagent")
+        self.assertEqual(config["agent"]["general"]["mode"], "subagent")
+
 
 if __name__ == "__main__":
     unittest.main()

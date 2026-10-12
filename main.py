@@ -54,7 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--export",
         nargs="?",
         const="config/opencode.json",
-        help="Exporte la configuration OpenCode (chemin facultatif).",
+        help="Exporte la configuration OpenCode (défaut : config/opencode.json, ex: ~/.config/opencode/opencode.json ou .opencode/opencode.json).",
     )
     parser.add_argument(
         "--serve",

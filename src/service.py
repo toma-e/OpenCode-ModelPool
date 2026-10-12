@@ -256,10 +256,10 @@ class ApplicationService:
             yield
 
     def resolve_export_path(self, requested: str | Path | None = None) -> Path:
-        """Résout le chemin d'export OpenCode relativement à la racine du projet."""
+        """Résout le chemin d'export OpenCode relativement à la racine du projet ou au répertoire utilisateur (~)."""
         if requested is None:
             return self.default_export_path
-        target = Path(requested)
+        target = Path(requested).expanduser()
         return target if target.is_absolute() else self.base_dir / target
 
     def build_report(self, allow_fallback: bool = True) -> FleetReport:

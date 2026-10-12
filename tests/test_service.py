@@ -265,6 +265,14 @@ class TestService(unittest.TestCase):
             matching_diag = [d for d in report.diagnostics if "Le catalogue date de plus de" in d]
             self.assertEqual(len(matching_diag), 0)
 
+    def test_resolve_export_path_expands_tilde(self) -> None:
+        """Vérifie que les chemins d'export avec ~ sont correctement résolus en absolu."""
+        service = ApplicationService(Path("/dummy/base"))
+        resolved = service.resolve_export_path("~/.config/opencode/opencode.json")
+        self.assertTrue(resolved.is_absolute())
+        self.assertNotIn("~", str(resolved))
+        self.assertTrue(str(resolved).endswith(".config/opencode/opencode.json"))
+
 
 if __name__ == "__main__":
     unittest.main()
