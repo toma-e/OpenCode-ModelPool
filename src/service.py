@@ -13,10 +13,17 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Iterator, Optional
 
+from datetime import datetime, timezone
+
 try:
     import fcntl
 except ImportError:
     fcntl = None  # type: ignore[assignment]
+
+try:
+    import msvcrt
+except ImportError:
+    msvcrt = None  # type: ignore[assignment]
 
 from src.budget import AgentBudgetReport, FleetBudgetReport, simulate_fleet_budget
 from src.exporter import (
@@ -220,19 +227,28 @@ class ApplicationService:
 
     @contextlib.contextmanager
     def _file_lock(self) -> Iterator[None]:
-        """Verrou inter-processus utilisant fcntl.flock si supporté sur la plateforme."""
-        if fcntl is None:
+        """Verrou inter-processus utilisant fcntl.flock (POSIX) ou msvcrt.locking (Windows)."""
+        if fcntl is None and msvcrt is None:
             yield
             return
         try:
             self._lock_path.parent.mkdir(parents=True, exist_ok=True)
             with open(self._lock_path, "a+", encoding="utf-8") as lock_file:
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+                fd = lock_file.fileno()
+                if fcntl is not None:
+                    fcntl.flock(fd, fcntl.LOCK_EX)
+                elif msvcrt is not None:
+                    lock_file.seek(0)
+                    msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
                 try:
                     yield
                 finally:
                     try:
-                        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                        if fcntl is not None:
+                            fcntl.flock(fd, fcntl.LOCK_UN)
+                        elif msvcrt is not None:
+                            lock_file.seek(0)
+                            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
                     except OSError:
                         pass
         except OSError:
@@ -264,6 +280,19 @@ class ApplicationService:
             diagnostics.append("Aucun agent n'est déclaré dans la configuration.")
         if updated is None:
             diagnostics.append("La date de mise à jour du catalogue est absente.")
+        else:
+            try:
+                # Normalisation du parsing ISO avec fallback si fuseau horaire
+                updated_dt = datetime.fromisoformat(updated)
+                now_dt = datetime.now(timezone.utc) if updated_dt.tzinfo else datetime.now()
+                days_old = (now_dt - updated_dt).days
+                if days_old > 14:
+                    diagnostics.append(
+                        f"Le catalogue date de plus de {days_old} jours ({updated[:10]}). "
+                        "Pensez à exécuter 'python3 main.py --sync'."
+                    )
+            except (ValueError, TypeError):
+                pass
         unassigned = [result.agent_name for result in results if result.model is None]
         if unassigned:
             diagnostics.append("Agents sans modèle : " + ", ".join(unassigned) + ".")

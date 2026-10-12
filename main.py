@@ -82,6 +82,10 @@ def render_results(report: FleetReport) -> None:
     print("-" * 75)
     print(f"💰 Coût mensuel total estimé : ${report.budget.total_monthly_cost:.4f}")
     print(f"📊 Volume total estimé : {report.budget.total_tokens:,} tokens/mois")
+    if report.diagnostics:
+        print("\n⚠️  Diagnostics :")
+        for diag in report.diagnostics:
+            print(f"  • {diag}")
 
 
 def run(args: argparse.Namespace, base_dir: Path = BASE_DIR) -> int:

@@ -30,6 +30,10 @@ class TestFetcher(unittest.TestCase):
         self.assertEqual(estimate_complexity_score("google/gemma-4-31b-it", 0.0), 3)
         self.assertEqual(estimate_complexity_score("qwen/qwen3.6-35b-a3b", 0.0), 4)
         self.assertEqual(estimate_complexity_score("microsoft/wizardlm-2-8x22b", 0.0), 4)
+        # Cas MoE composites
+        self.assertEqual(estimate_complexity_score("mistralai/mixtral-8x7b-instruct", 0.0), 4)  # 8*7b = 56b >= 35
+        self.assertEqual(estimate_complexity_score("custom/model-4x2b", 0.0), 3)  # 4*2b = 8b -> 7.5 < 8 < 35 -> score 3
+        self.assertEqual(estimate_complexity_score("custom/model-2x0.5b", 0.0), 1)  # 2*0.5b = 1.0b <= 1.5 -> score 1
         # Cas réels o-series et nano/mini
         self.assertEqual(estimate_complexity_score("openai/o4-mini", 0.0), 3)
         self.assertEqual(estimate_complexity_score("openai/o4-mini-high", 0.0), 4)

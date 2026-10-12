@@ -45,8 +45,17 @@ def estimate_complexity_score(model_id: str, prompt_cost_per_m: float) -> int:
     has_mini = bool(re.search(r"(?:^|[-_/:])mini(?:$|[-_/:])", m_id))
     has_lite = bool("flash-lite" in m_id or re.search(r"(?:^|[-_/:])lite(?:$|[-_/:])", m_id))
 
-    parameter_tokens = re.findall(r"(?<![a-z0-9])(?:\d+x)?(\d+(?:\.\d+)?)b(?![a-z0-9])", m_id)
-    parameter_sizes = [float(token) for token in parameter_tokens]
+    # Extraction des tailles de paramètres (supportant le format standard et le format MoE NxMb)
+    parameter_sizes: list[float] = []
+    for num_experts_str, param_str in re.findall(
+        r"(?<![a-z0-9])(?:(\d+)x)?(\d+(?:\.\d+)?)b(?![a-z0-9])", m_id
+    ):
+        base_size = float(param_str)
+        if num_experts_str:
+            # Pour un MoE (ex: 8x22b, 4x7b), la masse totale de paramètres est experts * base
+            parameter_sizes.append(int(num_experts_str) * base_size)
+        else:
+            parameter_sizes.append(base_size)
 
     # Priorité 1 : Ultra-légers (nano, micro, tiny, <= 1.5B)
     if has_nano or any(size <= 1.5 for size in parameter_sizes):
@@ -70,10 +79,8 @@ def estimate_complexity_score(model_id: str, prompt_cost_per_m: float) -> int:
     if re.search(r"(?:^|[-_/:])gpt-5(?:\.\d+)?(?:$|[-_/:])", m_id) or re.search(r"(?:^|[-_/:])gpt-4(?:\.\d+)?(?:$|[-_/:])", m_id):
         return 5
 
-    # Priorité 4 : Modèles 70B+, MoE lourds et codeurs spécialisés
+    # Priorité 4 : Modèles 70B+, MoE lourds (>=35B cumulés) et codeurs spécialisés
     if any(k in m_id for k in ["mistral-large", "deepseek-v3", "codestral", "command-r+"]):
-        return 4
-    if re.search(r"(?<![a-z0-9])\d+x\d+(?:\.\d+)?b(?![a-z0-9])", m_id):
         return 4
     if parameter_sizes and max(parameter_sizes) >= 35:
         return 4

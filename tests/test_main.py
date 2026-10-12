@@ -13,11 +13,14 @@ class TestMain(unittest.TestCase):
     def _write_valid_files(self, directory: Path) -> None:
         (directory / "data").mkdir()
         (directory / "config").mkdir()
-        (directory / "data" / "models.json").write_text(json.dumps({"models": [{
-            "id": "test/model", "provider": "test", "tier": "free_tier",
-            "cost_input_per_m": 0, "cost_output_per_m": 0, "context_window": 4096,
-            "supports_tools": False, "complexity_score": 1,
-        }]}), encoding="utf-8")
+        (directory / "data" / "models.json").write_text(json.dumps({
+            "last_updated": "2026-10-10T00:00:00+00:00",
+            "models": [{
+                "id": "test/model", "provider": "test", "tier": "free_tier",
+                "cost_input_per_m": 0, "cost_output_per_m": 0, "context_window": 4096,
+                "supports_tools": False, "complexity_score": 1,
+            }]
+        }), encoding="utf-8")
         (directory / "config" / "agents_requirements.json").write_text(json.dumps({"agents": [{
             "name": "agent", "description": "", "min_complexity": 1,
             "max_complexity": 1, "requires_tools": False, "prefer_free": True,
@@ -122,6 +125,29 @@ class TestMain(unittest.TestCase):
             args = main.build_parser().parse_args(["--validate", "--export", str(export_target)])
             self.assertEqual(main.run(args, directory), 0)
             self.assertTrue(export_target.exists())
+
+    def test_render_results_displays_diagnostics(self) -> None:
+        """Vérifie que les avertissements/diagnostics sont bien imprimés par render_results."""
+        import io
+        from contextlib import redirect_stdout
+        from src.budget import FleetBudgetReport
+        from src.selector import SelectionResult
+        from src.service import FleetReport
+
+        report = FleetReport(
+            models=[],
+            agents=[],
+            results=[],
+            budget=FleetBudgetReport(0.0, 0, 0.0, []),
+            catalogue_updated_at=None,
+            diagnostics=["Alerte test diagnostic"],
+        )
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            main.render_results(report)
+        output = buf.getvalue()
+        self.assertIn("⚠️  Diagnostics :", output)
+        self.assertIn("Alerte test diagnostic", output)
 
 
 if __name__ == "__main__":

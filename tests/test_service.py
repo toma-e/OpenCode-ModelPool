@@ -6,7 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from src.selector import resolve_model_for_agent
 from src.service import ApplicationService, load_data, serialize_report
@@ -218,6 +218,52 @@ class TestService(unittest.TestCase):
             # Vérifier que les écritures sous verrou fonctionnent correctement
             result = service.export_config()
             self.assertTrue(result.ok)
+
+    def test_file_lock_msvcrt_on_windows(self) -> None:
+        """Simule un environnement Windows sans fcntl avec msvcrt disponible."""
+        mock_msvcrt = MagicMock()
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            write_valid_workspace(directory)
+            service = ApplicationService(directory)
+            with patch("src.service.fcntl", None), patch("src.service.msvcrt", mock_msvcrt):
+                with service._file_lock():
+                    mock_msvcrt.locking.assert_called_once()
+                self.assertEqual(mock_msvcrt.locking.call_count, 2)  # lock + unlock
+
+    def test_catalogue_freshness_warning(self) -> None:
+        """Vérifie qu'une alerte est émise dans les diagnostics si le catalogue date de plus de 14 jours."""
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            write_valid_workspace(directory)
+            # Écrire une date ancienne (ex: il y a 60 jours)
+            models_file = directory / "data" / "models.json"
+            data = json.loads(models_file.read_text(encoding="utf-8"))
+            data["last_updated"] = "2020-01-01T00:00:00+00:00"
+            models_file.write_text(json.dumps(data), encoding="utf-8")
+
+            service = ApplicationService(directory)
+            report = service.build_report()
+            matching_diag = [d for d in report.diagnostics if "Le catalogue date de plus de" in d]
+            self.assertTrue(bool(matching_diag))
+            self.assertIn("2020-01-01", matching_diag[0])
+            self.assertIn("python3 main.py --sync", matching_diag[0])
+
+    def test_catalogue_fresh_no_warning(self) -> None:
+        """Vérifie qu'aucune alerte n'est émise si le catalogue est récent."""
+        from datetime import datetime, timezone
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            write_valid_workspace(directory)
+            models_file = directory / "data" / "models.json"
+            data = json.loads(models_file.read_text(encoding="utf-8"))
+            data["last_updated"] = datetime.now(timezone.utc).isoformat()
+            models_file.write_text(json.dumps(data), encoding="utf-8")
+
+            service = ApplicationService(directory)
+            report = service.build_report()
+            matching_diag = [d for d in report.diagnostics if "Le catalogue date de plus de" in d]
+            self.assertEqual(len(matching_diag), 0)
 
 
 if __name__ == "__main__":
