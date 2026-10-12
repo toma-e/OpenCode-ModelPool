@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generated_at": "2026-10-11T17:08:55.213751+00:00",
+  "generated_at": "2026-10-12T16:30:34.399662+00:00",
   "metadata": {
     "generator": "ModelScope",
     "total_agents": 3,
@@ -8,16 +8,16 @@
     "unassigned_agents": 0
   },
   "budget_simulation": {
-    "total_estimated_monthly_cost": 0.5117,
+    "total_estimated_monthly_cost": 0.5,
     "total_estimated_tokens": 3250000,
-    "estimated_free_tier_savings": 0.8,
+    "estimated_free_tier_savings": 1.0,
     "has_warnings": true,
     "reports": [
       {
         "agent": "doc_agent",
-        "monthly_cost": 0.0117,
-        "input_cost": 0.0087,
-        "output_cost": 0.003,
+        "monthly_cost": 0.0,
+        "input_cost": 0.0,
+        "output_cost": 0.0,
         "max_budget": 2.0,
         "budget_exceeded": false,
         "quota_warning": null
@@ -51,26 +51,26 @@
       "min_context_window": 16000,
       "allowed_providers": null,
       "max_monthly_budget": 2.0,
-      "sort_strategy": "balanced",
+      "sort_strategy": "lowest_cost",
       "allow_free": true,
       "requires_vision": false,
       "requires_reasoning": false,
       "prefer_tier1": true,
-      "estimated_monthly_cost": 0.0117,
+      "estimated_monthly_cost": 0.0,
       "model": {
-        "id": "mistralai/mistral-nemo",
-        "provider": "mistralai",
-        "tier": "pay_as_you_go",
-        "context_window": 131072,
+        "id": "apodex/apodex-1.1-mini:free",
+        "provider": "apodex",
+        "tier": "free_tier",
+        "context_window": 262144,
         "supports_tools": true,
-        "cost_input_per_m": 0.029,
-        "cost_output_per_m": 0.03,
-        "total_cost_per_m": 0.059,
+        "cost_input_per_m": 0.0,
+        "cost_output_per_m": 0.0,
+        "total_cost_per_m": 0.0,
         "supports_vision": false,
-        "supports_reasoning": false
+        "supports_reasoning": true
       },
       "selection_status": "exact",
-      "selection_reason": "Correspondance exacte avec les exigences (stratégie: balanced)."
+      "selection_reason": "Correspondance exacte avec les exigences."
     },
     "coder_agent": {
       "name": "coder_agent",
@@ -80,7 +80,7 @@
       "min_context_window": 64000,
       "allowed_providers": null,
       "max_monthly_budget": 10.0,
-      "sort_strategy": "balanced",
+      "sort_strategy": "lowest_cost",
       "allow_free": true,
       "requires_vision": false,
       "requires_reasoning": true,
@@ -99,7 +99,7 @@
         "supports_reasoning": true
       },
       "selection_status": "exact",
-      "selection_reason": "Correspondance exacte avec les exigences (stratégie: balanced)."
+      "selection_reason": "Correspondance exacte avec les exigences."
     },
     "architect_agent": {
       "name": "architect_agent",
@@ -115,14 +115,14 @@
         "mistralai"
       ],
       "max_monthly_budget": 25.0,
-      "sort_strategy": "balanced",
+      "sort_strategy": "lowest_cost",
       "allow_free": true,
       "requires_vision": true,
       "requires_reasoning": true,
       "prefer_tier1": true,
       "estimated_monthly_cost": 0.5,
       "model": {
-        "id": "openai/gpt-5.6-luna-pro",
+        "id": "openai/gpt-5.6-luna",
         "provider": "openai",
         "tier": "pay_as_you_go",
         "context_window": 1050000,
@@ -134,7 +134,7 @@
         "supports_reasoning": true
       },
       "selection_status": "exact",
-      "selection_reason": "Correspondance exacte avec les exigences (stratégie: balanced)."
+      "selection_reason": "Correspondance exacte avec les exigences."
     }
   }
 }

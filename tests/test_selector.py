@@ -6,6 +6,7 @@ from src.selector import (
     AgentRequirement,
     Model,
     is_model_compatible,
+    rank_models_for_agent,
     resolve_model_for_agent,
     select_model_for_agent,
 )
@@ -522,8 +523,8 @@ class TestSelector(unittest.TestCase):
     def test_prefer_tier1_prioritization(self) -> None:
         """prefer_tier1=True classe les modèles Tier 1 avant les fournisseurs communautaires à score et coût similaires."""
         niche_model = Model(
-            id="unknown-lab/niche-model",
-            provider="unknown-lab",
+            id="a-niche-lab/niche-model",
+            provider="niche-lab",
             tier="pay_as_you_go",
             cost_input_per_m=0.10,
             cost_output_per_m=0.10,
@@ -537,8 +538,8 @@ class TestSelector(unittest.TestCase):
             id="openai/standard-model",
             provider="openai",
             tier="pay_as_you_go",
-            cost_input_per_m=0.15,
-            cost_output_per_m=0.15,
+            cost_input_per_m=0.10,
+            cost_output_per_m=0.10,
             context_window=100000,
             supports_tools=True,
             complexity_score=4,
@@ -568,7 +569,96 @@ class TestSelector(unittest.TestCase):
             prefer_tier1=False,
         )
         selected_cheap = select_model_for_agent(req_without_tier1, test_pool)
-        self.assertEqual(selected_cheap.id, "unknown-lab/niche-model")
+        self.assertEqual(selected_cheap.id, "a-niche-lab/niche-model")
+
+    def test_lowest_cost_prefers_cheaper_community_model_over_expensive_tier1(self) -> None:
+        """Sous lowest_cost, un modèle communautaire nettement moins cher prime sur le Tier 1."""
+        comm = Model(
+            id="community/cheap",
+            provider="community",
+            tier="pay_as_you_go",
+            cost_input_per_m=0.02,
+            cost_output_per_m=0.03,
+            context_window=32000,
+            supports_tools=True,
+            complexity_score=3,
+        )
+        t1 = Model(
+            id="openai/costly",
+            provider="openai",
+            tier="pay_as_you_go",
+            cost_input_per_m=2.50,
+            cost_output_per_m=10.0,
+            context_window=32000,
+            supports_tools=True,
+            complexity_score=3,
+        )
+        req = AgentRequirement(
+            name="test",
+            description="",
+            min_complexity=3,
+            max_complexity=3,
+            requires_tools=True,
+            prefer_free=False,
+            sort_strategy="lowest_cost",
+            prefer_tier1=True,
+        )
+        selected = select_model_for_agent(req, [t1, comm])
+        self.assertIsNotNone(selected)
+        assert selected is not None
+        self.assertEqual(selected.id, "community/cheap")
+
+    def test_deterministic_tie_breaker_uses_model_id(self) -> None:
+        """En cas d'égalité stricte sur tous les critères, l'ordre alphabétique de model.id départage."""
+        m_b = Model(
+            id="vendor/model-b",
+            provider="openai",
+            tier="pay_as_you_go",
+            cost_input_per_m=1.0,
+            cost_output_per_m=1.0,
+            context_window=32000,
+            supports_tools=True,
+            complexity_score=3,
+        )
+        m_a = Model(
+            id="vendor/model-a",
+            provider="openai",
+            tier="pay_as_you_go",
+            cost_input_per_m=1.0,
+            cost_output_per_m=1.0,
+            context_window=32000,
+            supports_tools=True,
+            complexity_score=3,
+        )
+        req = AgentRequirement(
+            name="test",
+            description="",
+            min_complexity=3,
+            max_complexity=3,
+            requires_tools=True,
+            prefer_free=False,
+            sort_strategy="lowest_cost",
+        )
+        # Quel que soit l'ordre de passage, model-a doit être classé premier
+        ranked_1 = rank_models_for_agent(req, [m_b, m_a])
+        ranked_2 = rank_models_for_agent(req, [m_a, m_b])
+        self.assertEqual(ranked_1[0].id, "vendor/model-a")
+        self.assertEqual(ranked_2[0].id, "vendor/model-a")
+
+    def test_model_from_dict_rejects_nan_pricing(self) -> None:
+        """Model.from_dict rejette explicitement les valeurs non finies NaN et Inf."""
+        invalid = {
+            "id": "vendor/nan-model",
+            "provider": "vendor",
+            "tier": "pay_as_you_go",
+            "cost_input_per_m": float("nan"),
+            "cost_output_per_m": 1.0,
+            "context_window": 32000,
+            "supports_tools": True,
+            "complexity_score": 3,
+        }
+        with self.assertRaisesRegex(ValueError, "nombre fini"):
+            Model.from_dict(invalid)
 
 
 if __name__ == "__main__":

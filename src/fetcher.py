@@ -10,6 +10,7 @@ Ce module permet de :
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
@@ -109,15 +110,22 @@ def parse_openrouter_model(raw: dict[str, Any]) -> Optional[Model]:
 
     pricing = raw.get("pricing")
     if not isinstance(pricing, dict):
-        pricing = {}
+        return None
+
+    prompt_val = pricing.get("prompt")
+    completion_val = pricing.get("completion")
+    if prompt_val is None or completion_val is None:
+        return None
 
     try:
-        raw_prompt = float(pricing.get("prompt", 0))
-        raw_completion = float(pricing.get("completion", 0))
+        raw_prompt = float(prompt_val)
+        raw_completion = float(completion_val)
     except (TypeError, ValueError):
-        raw_prompt, raw_completion = 0.0, 0.0
+        return None
 
-    # Filtrer les tarifs négatifs (tests / placeholders OpenRouter)
+    # Filtrer les tarifs non finis (NaN, Inf) et négatifs (tests / placeholders OpenRouter)
+    if not (math.isfinite(raw_prompt) and math.isfinite(raw_completion)):
+        return None
     if raw_prompt < 0 or raw_completion < 0:
         return None
 

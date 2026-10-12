@@ -133,6 +133,39 @@ class TestFetcher(unittest.TestCase):
         }
         self.assertIsNone(parse_openrouter_model(raw))
 
+    def test_parse_openrouter_model_null_and_nan_pricing_rejected(self) -> None:
+        """Les prix null, manquants ou non finis (NaN, Inf) ne doivent pas être ingérés."""
+        # Prix null
+        null_raw = {
+            "id": "vendor/preview-model",
+            "pricing": {"prompt": None, "completion": None},
+            "context_length": 4096,
+        }
+        self.assertIsNone(parse_openrouter_model(null_raw))
+
+        # Prix NaN
+        nan_raw = {
+            "id": "vendor/nan-model",
+            "pricing": {"prompt": "NaN", "completion": "0.000001"},
+            "context_length": 4096,
+        }
+        self.assertIsNone(parse_openrouter_model(nan_raw))
+
+        # Prix Inf
+        inf_raw = {
+            "id": "vendor/inf-model",
+            "pricing": {"prompt": "Infinity", "completion": "0.000001"},
+            "context_length": 4096,
+        }
+        self.assertIsNone(parse_openrouter_model(inf_raw))
+
+        # Champ pricing manquant ou invalide
+        no_pricing_raw = {
+            "id": "vendor/no-pricing",
+            "context_length": 4096,
+        }
+        self.assertIsNone(parse_openrouter_model(no_pricing_raw))
+
     def test_create_backup(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
@@ -190,12 +223,8 @@ class TestFetcher(unittest.TestCase):
         self.assertIsNone(parse_openrouter_model({"id": ""}))
         self.assertIsNone(parse_openrouter_model({"id": 123}))  # type: ignore[dict-item]
 
-        # Cas pricing non-dict et context_length non-int
-        model = parse_openrouter_model({"id": "vendor/fallback", "pricing": None, "context_length": "invalid"})
-        self.assertIsNotNone(model)
-        assert model is not None
-        self.assertEqual(model.cost_input_per_m, 0.0)
-        self.assertEqual(model.context_window, 4096)
+        # Cas pricing absent/non-dict rejeté
+        self.assertIsNone(parse_openrouter_model({"id": "vendor/fallback", "pricing": None, "context_length": "invalid"}))
 
     def test_estimate_complexity_score_pricing_fallbacks(self) -> None:
         # Modèles inconnus sans mots-clés ni tailles identifiables, s'appuyant sur le tarif
@@ -277,17 +306,17 @@ class TestFetcher(unittest.TestCase):
 
     def test_parse_openrouter_model_edge_conditions(self) -> None:
         # Prompt négatif
-        self.assertIsNone(parse_openrouter_model({"id": "m", "pricing": {"prompt": "-0.1"}}))
+        self.assertIsNone(parse_openrouter_model({"id": "m", "pricing": {"prompt": "-0.1", "completion": "0.1"}}))
         # Completion négatif
-        self.assertIsNone(parse_openrouter_model({"id": "m", "pricing": {"completion": "-0.1"}}))
+        self.assertIsNone(parse_openrouter_model({"id": "m", "pricing": {"prompt": "0.1", "completion": "-0.1"}}))
         # Context length <= 0
-        model = parse_openrouter_model({"id": "m", "context_length": 0})
+        model = parse_openrouter_model({"id": "m", "pricing": {"prompt": "0.0", "completion": "0.0"}, "context_length": 0})
         self.assertIsNotNone(model)
         assert model is not None
         self.assertEqual(model.context_window, 4096)
         # Exception ValueError depuis Model constructor
         with patch("src.fetcher.Model", side_effect=ValueError("bad model")):
-            self.assertIsNone(parse_openrouter_model({"id": "m"}))
+            self.assertIsNone(parse_openrouter_model({"id": "m", "pricing": {"prompt": "0.0", "completion": "0.0"}}))
 
 
 if __name__ == "__main__":

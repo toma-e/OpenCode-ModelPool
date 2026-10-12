@@ -23,7 +23,7 @@ class TestWeb(unittest.TestCase):
         write_valid_workspace(self.directory)
         self.service = ApplicationService(self.directory)
         self.httpd = create_server(self.service, port=0)
-        self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+        self.thread = threading.Thread(target=lambda: self.httpd.serve_forever(poll_interval=0.01), daemon=True)
         self.thread.start()
         host, port = self.httpd.server_address[:2]
         self.base = f"http://{host}:{port}"
@@ -106,6 +106,25 @@ class TestWeb(unittest.TestCase):
             urllib.request.urlopen(request, timeout=5)
         self.assertEqual(ctx.exception.code, 415)
         ctx.exception.close()
+
+    def test_get_rejects_untrusted_host_header(self) -> None:
+        """Les requêtes GET avec un en-tête Host suspect (DNS Rebinding) sont rejetées avec 403."""
+        request = urllib.request.Request(
+            self.base + "/api/report",
+            headers={"Host": "evil.com:8765"},
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(request, timeout=5)
+        self.assertEqual(ctx.exception.code, 403)
+        ctx.exception.close()
+
+    def test_response_includes_security_headers(self) -> None:
+        """Vérifie la présence des en-têtes défensifs de sécurité HTTP."""
+        with urllib.request.urlopen(self.base + "/", timeout=5) as response:
+            headers = dict(response.headers)
+            self.assertEqual(headers.get("X-Frame-Options"), "DENY")
+            self.assertEqual(headers.get("X-Content-Type-Options"), "nosniff")
+            self.assertIn("frame-ancestors 'none'", headers.get("Content-Security-Policy", ""))
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 from typing import Any, Optional, Sequence
@@ -39,8 +40,8 @@ def _int(value: Any, field: str, context: str, minimum: int = 0) -> int:
 
 
 def _number(value: Any, field: str, context: str, minimum: float = 0.0) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < minimum:
-        raise ValueError(f"{context}: '{field}' doit être un nombre supérieur ou égal à {minimum}.")
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < minimum:
+        raise ValueError(f"{context}: '{field}' doit être un nombre fini supérieur ou égal à {minimum}.")
     return float(value)
 
 
@@ -295,7 +296,8 @@ def rank_models_for_agent(agent_req: AgentRequirement | dict[str, Any], models: 
             # 3. Performance/complexité maximale d'abord (-complexity_score)
             # 4. Coût le plus bas
             # 5. Fenêtre de contexte la plus large
-            return (free_penalty, tier1_penalty, -model.complexity_score, model.total_cost_per_m, -model.context_window)
+            # 6. Bris d'égalité déterministe sur l'id
+            return (free_penalty, tier1_penalty, -model.complexity_score, model.total_cost_per_m, -model.context_window, model.id)
 
         if strategy == "max_context":
             # 1. Pénalité gratuit si prefer_free
@@ -303,8 +305,9 @@ def rank_models_for_agent(agent_req: AgentRequirement | dict[str, Any], models: 
             # 3. Fenêtre de contexte la plus grande d'abord
             # 4. Coût le plus bas
             # 5. Complexité la plus proche (si fallback) ou la plus haute
+            # 6. Bris d'égalité déterministe sur l'id
             comp = model.complexity_score - req.max_complexity if fallback else -model.complexity_score
-            return (free_penalty, tier1_penalty, -model.context_window, model.total_cost_per_m, comp)
+            return (free_penalty, tier1_penalty, -model.context_window, model.total_cost_per_m, comp, model.id)
 
         if strategy == "balanced":
             # Compromis valeur/coût :
@@ -315,15 +318,17 @@ def rank_models_for_agent(agent_req: AgentRequirement | dict[str, Any], models: 
             context_bonus = min(model.context_window / 100_000, 5.0)
             score = (model.complexity_score * 2.0 + context_bonus) / cost_smoothed
             comp = model.complexity_score - req.max_complexity if fallback else -model.complexity_score
-            return (free_penalty, tier1_penalty, -score, model.total_cost_per_m, comp)
+            return (free_penalty, tier1_penalty, -score, model.total_cost_per_m, comp, model.id)
 
         # Par défaut : "lowest_cost"
         # 1. Pénalité gratuit si prefer_free
-        # 2. Préférence Tier 1
-        # 3. Coût total le plus bas
+        # 2. Coût total le plus bas (garantie économique primordiale)
+        # 3. Préférence Tier 1 (en cas de coût équivalent)
         # 4. Complexité la plus proche en fallback, ou la plus haute en exact
+        # 5. Fenêtre de contexte la plus large
+        # 6. Bris d'égalité déterministe sur l'id
         complexity = model.complexity_score - req.max_complexity if fallback else -model.complexity_score
-        return (free_penalty, tier1_penalty, model.total_cost_per_m, complexity, -model.context_window)
+        return (free_penalty, model.total_cost_per_m, tier1_penalty, complexity, -model.context_window, model.id)
 
     if exact:
         return sorted(exact, key=key)

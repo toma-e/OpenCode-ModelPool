@@ -142,6 +142,10 @@ class TestService(unittest.TestCase):
             ressources_dir.mkdir()
             (ressources_dir / "opencode.jsonc").write_text("{ unclosed invalid json", encoding="utf-8")
             service = ApplicationService(directory)
+            result = service.export_config()
+            self.assertFalse(result.ok)
+            self.assertIn("invalide", result.message)
+
     def test_update_agent_requirement_success(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)

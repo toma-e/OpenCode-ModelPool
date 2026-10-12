@@ -42,7 +42,7 @@
       "models": {
         "qwen3.5:9b": {
           "name": "Qwen 3.5 9B Local",
-          "tools": true,
+          "tool_call": true,
           "reasoning": true,
           "limit": {
             "context": 32768,

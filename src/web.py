@@ -25,10 +25,14 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
 
     MAX_POST_BODY_BYTES: ClassVar[int] = 1_000_000
 
+    def _has_safe_host(self) -> bool:
+        """Vérifie que l'en-tête Host cible exclusivement l'adresse locale (protection DNS Rebinding)."""
+        host = self.headers.get("Host", "").split(":")[0].strip().lower()
+        return host in {"127.0.0.1", "localhost"}
+
     def _is_safe_origin(self) -> bool:
         """Vérifie que la requête provient bien d'une origine locale (protection CSRF/rebinding)."""
-        host = self.headers.get("Host", "").split(":")[0].strip().lower()
-        if host not in {"127.0.0.1", "localhost"}:
+        if not self._has_safe_host():
             return False
         origin = self.headers.get("Origin")
         if origin:
@@ -38,7 +42,19 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
                 return False
         return True
 
+    def _send_security_headers(self) -> None:
+        """Injecte les en-têtes HTTP de sécurité défensifs contre le Clickjacking et le sniffing MIME."""
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Content-Security-Policy", "frame-ancestors 'none'; default-src 'self' 'unsafe-inline';")
+
     def do_HEAD(self) -> None:
+        if not self._has_safe_host():
+            self.send_response(403)
+            self._send_security_headers()
+            self.end_headers()
+            return
+
         parsed = urlparse(self.path)
         if parsed.path in {"/", "/index.html"}:
             self._send_static("index.html", "text/html; charset=utf-8", head_only=True)
@@ -47,12 +63,18 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
+            self._send_security_headers()
             self.end_headers()
             return
         self.send_response(404)
+        self._send_security_headers()
         self.end_headers()
 
     def do_GET(self) -> None:
+        if not self._has_safe_host():
+            self._send_json(403, {"ok": False, "message": "Accès refusé : en-tête Host non autorisé."})
+            return
+
         parsed = urlparse(self.path)
         if parsed.path in {"/", "/index.html"}:
             self._send_static("index.html", "text/html; charset=utf-8")
@@ -139,6 +161,7 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
+            self._send_security_headers()
             self.end_headers()
             if not head_only:
                 self.wfile.write(body)
@@ -152,6 +175,7 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
+            self._send_security_headers()
             self.end_headers()
             self.wfile.write(body)
         except (BrokenPipeError, ConnectionResetError):
