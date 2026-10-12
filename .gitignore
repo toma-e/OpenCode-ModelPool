@@ -37,9 +37,12 @@ htmlcov/
 data/backups/
 config/backups/
 *.bak
+*.lock
 
-# IDE
+# IDE & local agent scratch
 .vscode/
 .idea/
 *.swp
 *.swo
+.agents/
+

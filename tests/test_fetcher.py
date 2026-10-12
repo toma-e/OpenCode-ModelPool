@@ -318,6 +318,34 @@ class TestFetcher(unittest.TestCase):
         with patch("src.fetcher.Model", side_effect=ValueError("bad model")):
             self.assertIsNone(parse_openrouter_model({"id": "m", "pricing": {"prompt": "0.0", "completion": "0.0"}}))
 
+    @patch("src.fetcher.time.sleep")
+    def test_fetch_openrouter_models_retries_on_429_and_5xx(self, mocked_sleep: MagicMock) -> None:
+        """Vérifie que les codes HTTP 429 et 5xx déclenchent un réessai avec backoff."""
+        from urllib.error import HTTPError
+
+        fake_valid_response = MagicMock()
+        fake_valid_response.__enter__.return_value = fake_valid_response
+        fake_valid_response.read.return_value = json.dumps({"data": [{"id": "retry-model"}]}).encode("utf-8")
+
+        headers_429 = {"Retry-After": "0.1"}
+        http_error_429 = HTTPError("url", 429, "Too Many Requests", hdrs=headers_429, fp=None)  # type: ignore[arg-type]
+
+        # 1er appel 429, 2e appel succès
+        with patch("src.fetcher.urllib.request.urlopen", side_effect=[http_error_429, fake_valid_response]):
+            models = fetch_openrouter_models(max_retries=2, base_backoff_seconds=0.01)
+            self.assertEqual(len(models), 1)
+            self.assertEqual(models[0]["id"], "retry-model")
+            mocked_sleep.assert_called_with(0.1)
+        http_error_429.close()
+
+        # Échec persistant 503 au-delà des max_retries
+        http_error_503 = HTTPError("url", 503, "Service Unavailable", hdrs=None, fp=None)  # type: ignore[arg-type]
+        with patch("src.fetcher.urllib.request.urlopen", side_effect=http_error_503):
+            with self.assertRaises(HTTPError) as ctx:
+                fetch_openrouter_models(max_retries=2, base_backoff_seconds=0.01)
+            ctx.exception.close()
+        http_error_503.close()
+
 
 if __name__ == "__main__":
     unittest.main()

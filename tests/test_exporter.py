@@ -158,6 +158,36 @@ class TestExporter(unittest.TestCase):
         self.assertIn("coder_agent", config["agent"])
         self.assertEqual(config["agent"]["coder_agent"]["model"], "openrouter/test/model-fast")
 
+    def test_format_opencode_model_id_preserves_custom_provider(self) -> None:
+        """Vérifie que les identifiants de modèles de fournisseurs locaux déclarés ne sont pas forcés vers openrouter."""
+        from src.exporter import format_opencode_model_id
+
+        base_config = {
+            "provider": {
+                "ollama": {"name": "Ollama Local"},
+                "bedrock": {"name": "AWS Bedrock"},
+            }
+        }
+        # Fournisseur déclaré dans base_config -> non altéré
+        self.assertEqual(
+            format_opencode_model_id("ollama/qwen3.5:9b", base_config=base_config),
+            "ollama/qwen3.5:9b",
+        )
+        self.assertEqual(
+            format_opencode_model_id("bedrock/anthropic.claude-v2", base_config=base_config),
+            "bedrock/anthropic.claude-v2",
+        )
+        # Modèle OpenRouter ou sans préfixe déclaré -> préfixe openrouter/ ajouté
+        self.assertEqual(
+            format_opencode_model_id("openai/gpt-4o", base_config=base_config),
+            "openrouter/openai/gpt-4o",
+        )
+        # Modèle déjà préfixé par openrouter -> idempotent
+        self.assertEqual(
+            format_opencode_model_id("openrouter/openai/gpt-4o", base_config=base_config),
+            "openrouter/openai/gpt-4o",
+        )
+
     def test_export_opencode_config_file_writing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             out_file = Path(tmp_dir) / "opencode_test.json"

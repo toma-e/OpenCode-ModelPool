@@ -78,6 +78,7 @@ Lorsqu'un nouvel agent prend en main ce projet, il doit :
 - ✅ **Jalon 7 (Interface web locale) :** Service applicatif partagé, serveur `127.0.0.1`, page unique de consultation.
 - ✅ **Jalon 8 (Conformité & Durcissement) :** Schéma officiel OpenCode strict (additionalProperties: false), scoring de complexité par jetons délimités, sécurité CSRF/Origin et écritures atomiques.
 - ✅ **Jalon 9 (Audit Phase 1 - Intégrité Économique & Durcissement Sécurité) :** Correction du tri `lowest_cost` avec primauté stricte du coût financier et départage déterministe (`model.id`), rejet des tarifs `null` et non finis (`NaN`/`Inf`), protection DNS Rebinding (`Host` check global) et en-têtes de sécurité HTTP (`CSP`, `X-Frame-Options`, `X-Content-Type-Options`), conformité stricte `"tool_call"` dans `Ressources/opencode.json(c)` et réactivation des assertions du test d'export corrompu.
+- ✅ **Jalon 10 (Audit Phase 2 - Résilience, Concurrence & Durcissement) :** Réessai automatique avec backoff exponentiel et respect de `Retry-After` sur l'API OpenRouter (codes 429/5xx), verrou de fichier inter-processus POSIX via `fcntl.flock` dans `ApplicationService`, préservation des préfixes multi-fournisseurs (ex: `ollama/`) dans `format_opencode_model_id`, durcissement XSS avec échappement de l'apostrophe et écouteurs d'événements DOM non interpolés dans `web/index.html`, et couverture de test étendue sur les routes web (`/api/recalculate`, `/api/agent/update`, 404).
 
 ---
 

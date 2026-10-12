@@ -126,6 +126,66 @@ class TestWeb(unittest.TestCase):
             self.assertEqual(headers.get("X-Content-Type-Options"), "nosniff")
             self.assertIn("frame-ancestors 'none'", headers.get("Content-Security-Policy", ""))
 
+    def test_post_recalculate_returns_report(self) -> None:
+        """Vérifie que POST /api/recalculate renvoie un rapport complet."""
+        request = urllib.request.Request(
+            self.base + "/api/recalculate",
+            data=json.dumps({"fallback": True}).encode("utf-8"),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(request, timeout=5) as response:
+            self.assertEqual(response.status, 200)
+            payload = json.loads(response.read().decode("utf-8"))
+            self.assertTrue(payload.get("ok"))
+            self.assertIn("report", payload)
+            self.assertIn("assignments", payload["report"])
+
+    def test_post_agent_update_valid_and_invalid(self) -> None:
+        """Vérifie le comportement de POST /api/agent/update."""
+        # 1. Mise à jour valide d'un agent existant
+        update_data = {
+            "agent_name": "agent",
+            "updates": {"prefer_tier1": True, "sort_strategy": "lowest_cost"},
+            "fallback": True,
+        }
+        request = urllib.request.Request(
+            self.base + "/api/agent/update",
+            data=json.dumps(update_data).encode("utf-8"),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(request, timeout=5) as response:
+            self.assertEqual(response.status, 200)
+            payload = json.loads(response.read().decode("utf-8"))
+            self.assertTrue(payload.get("ok"))
+            self.assertIn("mises à jour", payload.get("message", ""))
+
+        # 2. Requête invalide (agent_name manquant) -> 400
+        bad_request = urllib.request.Request(
+            self.base + "/api/agent/update",
+            data=json.dumps({"updates": {}}).encode("utf-8"),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(bad_request, timeout=5)
+        self.assertEqual(ctx.exception.code, 400)
+        ctx.exception.close()
+
+    def test_unknown_path_returns_404(self) -> None:
+        """Vérifie qu'un chemin inconnu renvoie une erreur 404."""
+        request = urllib.request.Request(
+            self.base + "/api/unknown-endpoint",
+            data=b"{}",
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(request, timeout=5)
+        self.assertEqual(ctx.exception.code, 404)
+        ctx.exception.close()
+
 
 if __name__ == "__main__":
     unittest.main()

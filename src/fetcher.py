@@ -15,6 +15,8 @@ import os
 import re
 import shutil
 import tempfile
+import time
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -261,24 +263,58 @@ def create_backup(
     return timestamped_backup, latest_bak
 
 
-def fetch_openrouter_models(timeout: int = 10, max_bytes: int = 20_000_000) -> List[dict[str, Any]]:
-    """Interroge l'API publique OpenRouter pour récupérer la liste des modèles."""
+def fetch_openrouter_models(
+    timeout: int = 10,
+    max_bytes: int = 20_000_000,
+    max_retries: int = 3,
+    base_backoff_seconds: float = 0.5,
+) -> List[dict[str, Any]]:
+    """Interroge l'API publique OpenRouter pour récupérer la liste des modèles avec réessai exponentiel."""
     request = urllib.request.Request(
         OPENROUTER_API_URL,
         headers={"User-Agent": "ModelScope/1.0", "Accept": "application/json"},
     )
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        content = response.read(max_bytes + 1)
-        if len(content) > max_bytes:
-            raise ValueError(f"Réponse OpenRouter trop volumineuse (> {max_bytes} octets).")
-        payload: object = json.loads(content.decode("utf-8"))
-    if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
-        raise ValueError("Réponse OpenRouter invalide : liste 'data' absente.")
-    models: list[dict[str, Any]] = []
-    for raw_model in payload["data"]:
-        if isinstance(raw_model, dict):
-            models.append(raw_model)
-    return models
+
+    last_error: Optional[Exception] = None
+    for attempt in range(max_retries + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                content = response.read(max_bytes + 1)
+                if len(content) > max_bytes:
+                    raise ValueError(f"Réponse OpenRouter trop volumineuse (> {max_bytes} octets).")
+                payload: object = json.loads(content.decode("utf-8"))
+            if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
+                raise ValueError("Réponse OpenRouter invalide : liste 'data' absente.")
+            models: list[dict[str, Any]] = []
+            for raw_model in payload["data"]:
+                if isinstance(raw_model, dict):
+                    models.append(raw_model)
+            return models
+        except urllib.error.HTTPError as error:
+            last_error = error
+            # Rejeu uniquement sur 429 (Too Many Requests) et erreurs serveur 5xx
+            if error.code in {429, 500, 502, 503, 504} and attempt < max_retries:
+                retry_after_header = error.headers.get("Retry-After") if error.headers else None
+                sleep_duration = base_backoff_seconds * (2 ** attempt)
+                if retry_after_header:
+                    try:
+                        sleep_duration = max(float(retry_after_header), 0.05)
+                    except ValueError:
+                        pass
+                time.sleep(sleep_duration)
+                continue
+            raise
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as error:
+            last_error = error
+            if attempt < max_retries:
+                sleep_duration = base_backoff_seconds * (2 ** attempt)
+                time.sleep(sleep_duration)
+                continue
+            raise
+
+    if last_error:
+        raise last_error
+    return []
 
 
 def sync_models_from_openrouter(

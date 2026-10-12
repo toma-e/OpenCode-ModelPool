@@ -6,11 +6,17 @@ Le CLI et l'interface web l'appellent sans dupliquer la logique métier.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import threading
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
+
+try:
+    import fcntl
+except ImportError:
+    fcntl = None  # type: ignore[assignment]
 
 from src.budget import AgentBudgetReport, FleetBudgetReport, simulate_fleet_budget
 from src.exporter import export_opencode_config, parse_json_or_jsonc
@@ -201,6 +207,28 @@ class ApplicationService:
         self.agents_path = agents_path if agents_path is not None else (base_dir / "config" / "agents_requirements.json")
         self.default_export_path = base_dir / DEFAULT_EXPORT_RELATIVE
         self._lock = threading.RLock()
+        self._lock_path = base_dir / "data" / ".modelscope.lock"
+
+    @contextlib.contextmanager
+    def _file_lock(self) -> Iterator[None]:
+        """Verrou inter-processus utilisant fcntl.flock si supporté sur la plateforme."""
+        if fcntl is None:
+            yield
+            return
+        try:
+            self._lock_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self._lock_path, "a+", encoding="utf-8") as lock_file:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+                try:
+                    yield
+                finally:
+                    try:
+                        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                    except OSError:
+                        pass
+        except OSError:
+            # Si le système de fichiers refuse le verrouillage (ex: share distant incompatible), fallback
+            yield
 
     def resolve_export_path(self, requested: str | Path | None = None) -> Path:
         """Résout le chemin d'export OpenCode relativement à la racine du projet."""
@@ -242,7 +270,7 @@ class ApplicationService:
 
     def sync_catalogue(self, allow_fallback: bool = True) -> OperationResult:
         """Synchronise OpenRouter puis recalcule le rapport, sous verrou d'écriture."""
-        with self._lock:
+        with self._lock, self._file_lock():
             try:
                 count, backup = sync_models_from_openrouter(self.models_path)
             except Exception as error:
@@ -283,7 +311,7 @@ class ApplicationService:
         base_config: dict[str, Any] | None = None,
     ) -> OperationResult:
         """Exporte la configuration OpenCode sous verrou d'écriture."""
-        with self._lock:
+        with self._lock, self._file_lock():
             try:
                 report = self._build_report_unlocked(allow_fallback)
                 effective_base = (
@@ -308,7 +336,7 @@ class ApplicationService:
         allow_fallback: bool = True,
     ) -> OperationResult:
         """Met à jour les exigences d'un agent avec validation, backup et écriture atomique."""
-        with self._lock:
+        with self._lock, self._file_lock():
             try:
                 raw_data = _load_json(self.agents_path, "Exigences des agents")
                 agents_list = raw_data.get("agents")

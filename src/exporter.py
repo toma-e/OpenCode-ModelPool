@@ -19,15 +19,31 @@ from src.fetcher import create_backup, write_json_atomic
 from src.selector import AgentRequirement, SelectionResult
 
 
-def format_opencode_model_id(model_id: str, default_prefix: str = "openrouter") -> str:
+def format_opencode_model_id(
+    model_id: str,
+    default_prefix: str = "openrouter",
+    base_config: Optional[Dict[str, Any]] = None,
+) -> str:
     """Préfixe l'identifiant de modèle par le fournisseur attendu par OpenCode si nécessaire.
+
+    Si le modèle appartient déjà à un provider déclaré dans base_config (ex: 'ollama'),
+    son identifiant est préservé sans forcer le préfixe default_prefix.
 
     Exemples:
         'openai/gpt-5-mini' -> 'openrouter/openai/gpt-5-mini'
+        'ollama/qwen3.5:9b' (avec provider.ollama déclaré) -> 'ollama/qwen3.5:9b'
         'openrouter/free' -> 'openrouter/free'
     """
     if not model_id:
         return model_id
+
+    # Si le modèle commence déjà par un provider déclaré dans base_config["provider"]
+    if base_config and isinstance(base_config.get("provider"), dict):
+        configured_providers = set(base_config["provider"].keys())
+        first_segment = model_id.split("/")[0] if "/" in model_id else ""
+        if first_segment in configured_providers:
+            return model_id
+
     if default_prefix and not model_id.startswith(f"{default_prefix}/"):
         return f"{default_prefix}/{model_id}"
     return model_id
@@ -337,7 +353,11 @@ def build_opencode_config(
         description = agent_req.description if agent_req else ""
 
         if res.model:
-            formatted_model_id = format_opencode_model_id(res.model.id, default_provider_prefix)
+            formatted_model_id = format_opencode_model_id(
+                res.model.id,
+                default_prefix=default_provider_prefix,
+                base_config=base_config,
+            )
             if first_assigned_model_id is None:
                 first_assigned_model_id = formatted_model_id
 

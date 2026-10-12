@@ -179,6 +179,19 @@ class TestService(unittest.TestCase):
             self.assertFalse(result.ok)
             self.assertIn("Validation échouée", result.message)
 
+    def test_file_lock_mechanism(self) -> None:
+        """Vérifie que le verrou inter-processus crée le fichier .modelscope.lock et s'exécute sans erreur."""
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            write_valid_workspace(directory)
+            service = ApplicationService(directory)
+            # Test direct du contextmanager _file_lock
+            with service._file_lock():
+                self.assertTrue(service._lock_path.exists())
+            # Vérifier que les écritures sous verrou fonctionnent correctement
+            result = service.export_config()
+            self.assertTrue(result.ok)
+
 
 if __name__ == "__main__":
     unittest.main()
