@@ -60,7 +60,7 @@ Lorsqu'un nouvel agent prend en main ce projet, il doit :
 | [`src/selector.py`](src/selector.py) | Filtrage, tri, sélection et surclassement | **Fonctions pures uniquement**. Aucun appel I/O, réseau ou HTTP. |
 | [`src/fetcher.py`](src/fetcher.py) | Récupération OpenRouter & scoring heuristique | Backup puis écriture atomique ; rétention des sauvegardes horodatées. |
 | [`src/budget.py`](src/budget.py) | Calcul des coûts au token & alertes de quotas | Seuil critique free-tier : `1_000_000` tokens/mois. |
-| [`src/exporter.py`](src/exporter.py) | Génération du JSON pour OpenCode | Schéma officiel OpenCode strict (`opencode.json`) + rapport d'audit séparé (`modelscope-report.json`). |
+| [`src/exporter.py`](src/exporter.py) | Génération pure du JSON pour OpenCode | **Fonctions pures uniquement**. Aucun appel I/O. Schéma officiel OpenCode strict (`opencode.json`) + rapport d'audit (`modelscope-report.json`). |
 | [`src/service.py`](src/service.py) | Chargement, orchestration, export et sync | Seule couche I/O ; verrou pour les écritures concurrentes. |
 | [`src/web.py`](src/web.py) | Interface HTTP locale | Bind `127.0.0.1` uniquement ; stdlib ; protections CSRF/Origin ; pas de logique métier. |
 | [`main.py`](main.py) | Interface CLI en ligne de commande | Supporte `--sync`, `--export [path]`, `--no-fallback`, `--serve [port]`. |
@@ -79,6 +79,7 @@ Lorsqu'un nouvel agent prend en main ce projet, il doit :
 - ✅ **Jalon 8 (Conformité & Durcissement) :** Schéma officiel OpenCode strict (additionalProperties: false), scoring de complexité par jetons délimités, sécurité CSRF/Origin et écritures atomiques.
 - ✅ **Jalon 9 (Audit Phase 1 - Intégrité Économique & Durcissement Sécurité) :** Correction du tri `lowest_cost` avec primauté stricte du coût financier et départage déterministe (`model.id`), rejet des tarifs `null` et non finis (`NaN`/`Inf`), protection DNS Rebinding (`Host` check global) et en-têtes de sécurité HTTP (`CSP`, `X-Frame-Options`, `X-Content-Type-Options`), conformité stricte `"tool_call"` dans `Ressources/opencode.json(c)` et réactivation des assertions du test d'export corrompu.
 - ✅ **Jalon 10 (Audit Phase 2 - Résilience, Concurrence & Durcissement) :** Réessai automatique avec backoff exponentiel et respect de `Retry-After` sur l'API OpenRouter (codes 429/5xx), verrou de fichier inter-processus POSIX via `fcntl.flock` dans `ApplicationService`, préservation des préfixes multi-fournisseurs (ex: `ollama/`) dans `format_opencode_model_id`, durcissement XSS avec échappement de l'apostrophe et écouteurs d'événements DOM non interpolés dans `web/index.html`, et couverture de test étendue sur les routes web (`/api/recalculate`, `/api/agent/update`, 404).
+- ✅ **Jalon 11 (Audit Phase 3 - Architecture Pure & Accélération des Tests) :** Transformation de `src/exporter.py` en module de transformation pure (sans I/O ni dépendance système), rapatriement des écritures disque et backups dans `ApplicationService.export_config()` (`src/service.py`), coordination de terminaison du thread serveur de test par `threading.Event`, et accélération drastique de la suite de tests complète de 3.7s à ~0.16s.
 
 ---
 

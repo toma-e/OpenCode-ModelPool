@@ -23,13 +23,22 @@ class TestWeb(unittest.TestCase):
         write_valid_workspace(self.directory)
         self.service = ApplicationService(self.directory)
         self.httpd = create_server(self.service, port=0)
-        self.thread = threading.Thread(target=lambda: self.httpd.serve_forever(poll_interval=0.01), daemon=True)
+        self._shutdown_event = threading.Event()
+
+        def _serve() -> None:
+            try:
+                self.httpd.serve_forever(poll_interval=0.01)
+            finally:
+                self._shutdown_event.set()
+
+        self.thread = threading.Thread(target=_serve, daemon=True)
         self.thread.start()
         host, port = self.httpd.server_address[:2]
         self.base = f"http://{host}:{port}"
 
     def tearDown(self) -> None:
         self.httpd.shutdown()
+        self._shutdown_event.wait(timeout=2.0)
         self.httpd.server_close()
         self._temporary.cleanup()
 

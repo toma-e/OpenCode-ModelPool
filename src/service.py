@@ -19,7 +19,11 @@ except ImportError:
     fcntl = None  # type: ignore[assignment]
 
 from src.budget import AgentBudgetReport, FleetBudgetReport, simulate_fleet_budget
-from src.exporter import export_opencode_config, parse_json_or_jsonc
+from src.exporter import (
+    build_modelscope_report_data,
+    build_opencode_config,
+    parse_json_or_jsonc,
+)
 from src.fetcher import create_backup, sync_models_from_openrouter, write_json_atomic
 from src.selector import AgentRequirement, Model, SelectionResult, resolve_model_for_agent
 
@@ -309,20 +313,39 @@ class ApplicationService:
         path: str | Path | None = None,
         allow_fallback: bool = True,
         base_config: dict[str, Any] | None = None,
+        default_provider_prefix: str = "openrouter",
+        create_backup_file: bool = True,
+        report_output_path: Optional[Path] = None,
     ) -> OperationResult:
-        """Exporte la configuration OpenCode sous verrou d'écriture."""
+        """Exporte la configuration OpenCode et le rapport d'audit sous verrou d'écriture."""
         with self._lock, self._file_lock():
             try:
                 report = self._build_report_unlocked(allow_fallback)
                 effective_base = (
                     base_config if base_config is not None else self.load_base_opencode_config()
                 )
-                exported = export_opencode_config(
+                target_path = self.resolve_export_path(path)
+                config_data = build_opencode_config(
                     report.results,
                     report.agents,
-                    self.resolve_export_path(path),
                     base_config=effective_base,
+                    default_provider_prefix=default_provider_prefix,
                 )
+
+                if create_backup_file and target_path.exists():
+                    create_backup(target_path)
+
+                write_json_atomic(target_path, config_data)
+
+                target_report_path = (
+                    report_output_path
+                    if report_output_path is not None
+                    else target_path.parent / "modelscope-report.json"
+                )
+                report_data = build_modelscope_report_data(report.results, report.agents)
+                write_json_atomic(target_report_path, report_data)
+
+                exported = target_path.resolve()
             except ValueError as error:
                 return OperationResult(False, str(error))
             except OSError as error:

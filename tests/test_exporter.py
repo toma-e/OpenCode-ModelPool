@@ -8,7 +8,7 @@ from pathlib import Path
 from src.exporter import (
     build_modelscope_report_data,
     build_opencode_config,
-    export_opencode_config,
+    format_opencode_model_id,
     parse_json_or_jsonc,
 )
 from src.selector import (
@@ -188,25 +188,16 @@ class TestExporter(unittest.TestCase):
             "openrouter/openai/gpt-4o",
         )
 
-    def test_export_opencode_config_file_writing(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            out_file = Path(tmp_dir) / "opencode_test.json"
-            exported_path = export_opencode_config(
-                [self.assigned_result], [self.agent_req], out_file
-            )
-            self.assertTrue(exported_path.exists())
-            with open(exported_path, "r", encoding="utf-8") as f:
-                loaded = json.load(f)
-            self.assertIn("coder_agent", loaded["agent"])
-            self.assertNotIn("agents", loaded)
-            self.assertEqual(loaded["$schema"], "https://opencode.ai/config.json")
+    def test_build_opencode_config_and_report_pure_data(self) -> None:
+        """Vérifie la génération pure des structures de données OpenCode et rapport."""
+        config = build_opencode_config([self.assigned_result], [self.agent_req])
+        self.assertIn("coder_agent", config["agent"])
+        self.assertNotIn("agents", config)
+        self.assertEqual(config["$schema"], "https://opencode.ai/config.json")
 
-            report_file = Path(tmp_dir) / "modelscope-report.json"
-            self.assertTrue(report_file.exists())
-            with open(report_file, "r", encoding="utf-8") as f:
-                loaded_report = json.load(f)
-            self.assertIn("coder_agent", loaded_report["agents"])
-            self.assertEqual(loaded_report["version"], "1.0")
+        report = build_modelscope_report_data([self.assigned_result], [self.agent_req])
+        self.assertIn("coder_agent", report["agents"])
+        self.assertEqual(report["version"], "1.0")
 
 
 if __name__ == "__main__":

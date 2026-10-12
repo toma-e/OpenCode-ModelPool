@@ -110,6 +110,11 @@ class TestService(unittest.TestCase):
             result = service.export_config()
             self.assertTrue(result.ok)
             self.assertTrue(service.default_export_path.exists())
+            report_path = service.default_export_path.parent / "modelscope-report.json"
+            self.assertTrue(report_path.exists())
+            loaded_report = json.loads(report_path.read_text(encoding="utf-8"))
+            self.assertEqual(loaded_report["version"], "1.0")
+            self.assertIn("agent", loaded_report["agents"])
 
     def test_export_config_merges_base_opencode_config_from_ressources(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

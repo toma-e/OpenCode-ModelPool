@@ -11,11 +11,9 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
 from src.budget import simulate_fleet_budget
-from src.fetcher import create_backup, write_json_atomic
 from src.selector import AgentRequirement, SelectionResult
 
 
@@ -401,49 +399,3 @@ def build_opencode_config(
 
     return final_config
 
-
-def export_opencode_config(
-    results: Sequence[SelectionResult],
-    agents: Sequence[AgentRequirement],
-    output_path: Path,
-    base_config: Optional[Dict[str, Any]] = None,
-    default_provider_prefix: str = "openrouter",
-    create_backup_file: bool = True,
-    report_output_path: Optional[Path] = None,
-) -> Path:
-    """Génère et sauvegarde de manière atomique la configuration OpenCode et le rapport ModelScope.
-
-    Args:
-        results: Résultats de la sélection des modèles.
-        agents: Exigences initiales des agents.
-        output_path: Fichier de destination OpenCode (ex: config/opencode.json).
-        base_config: Configuration OpenCode de base optionnelle à fusionner.
-        default_provider_prefix: Préfixe du fournisseur OpenCode (défaut 'openrouter').
-        create_backup_file: Crée un backup de l'ancien fichier opencode.json si présent.
-        report_output_path: Fichier de destination pour le rapport ModelScope (par défaut
-            config/modelscope-report.json au même niveau).
-
-    Returns:
-        Chemin absolu du fichier écrit.
-    """
-    config_data = build_opencode_config(
-        results,
-        agents,
-        base_config=base_config,
-        default_provider_prefix=default_provider_prefix,
-    )
-
-    if create_backup_file and output_path.exists():
-        create_backup(output_path)
-
-    write_json_atomic(output_path, config_data)
-
-    target_report_path = (
-        report_output_path
-        if report_output_path is not None
-        else output_path.parent / "modelscope-report.json"
-    )
-    report_data = build_modelscope_report_data(results, agents)
-    write_json_atomic(target_report_path, report_data)
-
-    return output_path.resolve()

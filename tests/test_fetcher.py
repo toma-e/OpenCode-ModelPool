@@ -44,7 +44,7 @@ class TestFetcher(unittest.TestCase):
     def test_fetch_openrouter_models_propagates_network_error(self, mocked_urlopen: object) -> None:
         """Une erreur réseau n'est pas transformée en catalogue vide."""
         with self.assertRaises(URLError):
-            fetch_openrouter_models(timeout=1)
+            fetch_openrouter_models(timeout=1, max_retries=0)
 
     def test_parse_openrouter_model_valid(self) -> None:
         raw = {
