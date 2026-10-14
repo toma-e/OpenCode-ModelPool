@@ -97,6 +97,53 @@
       background: #1f6feb;
       border-color: #1f6feb;
     }
+    .priority-panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 0.6rem;
+      padding: 0.85rem 1.1rem;
+      margin-bottom: 1rem;
+    }
+    .priority-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.6rem;
+    }
+    .priority-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: #131b26;
+      border: 1px solid var(--line);
+      padding: 0.25rem 0.55rem;
+      border-radius: 0.4rem;
+      font-size: 0.85rem;
+    }
+    .priority-item button {
+      padding: 0.1rem 0.3rem;
+      font-size: 0.75rem;
+      line-height: 1;
+      background: #23405f;
+    }
+    .channel-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 0.2rem 0.55rem;
+      border-radius: 0.3rem;
+      background: #19324d;
+      color: var(--accent);
+      border: 1px solid #28517c;
+      margin-left: 0.5rem;
+    }
+    .channel-badge.local {
+      background: #143528;
+      color: var(--ok);
+      border-color: #1f5e42;
+    }
   </style>
 </head>
 <body>
@@ -107,6 +154,7 @@
     </div>
     <div class="actions">
       <label><input id="fallback" type="checkbox" checked> Surclassement (fallback)</label>
+      <label><input id="filter_keys" type="checkbox"> Filtrer par clés actives</label>
       <button id="recalculate" type="button">Recalculer</button>
       <button id="export" type="button">Exporter</button>
       <button id="sync" class="primary" type="button">Synchroniser</button>
@@ -114,6 +162,17 @@
   </header>
   <div id="banner" role="status"></div>
   <main>
+    <section id="providers_bar" style="margin-bottom:0.75rem;display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;background:var(--panel);padding:0.6rem 1rem;border-radius:0.4rem;border:1px solid var(--line);font-size:0.85rem;"></section>
+    <section id="priority_section" class="priority-panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <strong style="font-size:0.95rem;">Ordre de priorité d'exécution des canaux / clés API</strong>
+          <span class="muted" style="font-size:0.82rem;margin-left:0.5rem;">(Le premier fournisseur compatible et disponible prend en charge le modèle)</span>
+        </div>
+        <button id="save_priority_btn" class="btn-sm" type="button">Sauvegarder la priorité</button>
+      </div>
+      <div id="priority_list" class="priority-list"></div>
+    </section>
     <section id="summary" class="summary"></section>
     <section id="assignments"></section>
   </main>
@@ -121,11 +180,35 @@
     const banner = document.getElementById("banner");
     const summary = document.getElementById("summary");
     const assignments = document.getElementById("assignments");
+    const providersBar = document.getElementById("providers_bar");
     const fallbackInput = document.getElementById("fallback");
+    const filterKeysInput = document.getElementById("filter_keys");
     const buttons = ["recalculate", "export", "sync"].map((id) => document.getElementById(id));
 
     function fallbackEnabled() {
       return fallbackInput.checked;
+    }
+
+    function filterKeysEnabled() {
+      return filterKeysInput.checked;
+    }
+
+    async function loadProvidersStatus() {
+      try {
+        const res = await fetch("/api/providers");
+        const data = await res.json();
+        if (data.ok && data.providers) {
+          const chips = Object.entries(data.providers).map(([p, info]) => {
+            const color = info.is_available ? "var(--ok)" : "var(--muted)";
+            const icon = info.is_available ? "●" : "○";
+            const source = info.source !== "none" ? ` (${info.source})` : "";
+            return `<span style="color:${color};margin-right:0.8rem;">${icon} <strong>${escapeHtml(p)}</strong>${escapeHtml(source)}</span>`;
+          }).join("");
+          providersBar.innerHTML = `<span class="muted" style="margin-right:0.5rem;">Fournisseurs :</span> ${chips}`;
+        }
+      } catch (e) {
+        providersBar.style.display = "none";
+      }
     }
 
     function showBanner(ok, message) {
@@ -153,8 +236,78 @@
       return "Correspondance exacte";
     }
 
+    const priorityListEl = document.getElementById("priority_list");
+    const savePriorityBtn = document.getElementById("save_priority_btn");
+    let currentPriority = [];
+
+    function renderPriorityPanel(priority) {
+      if (!Array.isArray(priority)) return;
+      currentPriority = [...priority];
+      priorityListEl.innerHTML = currentPriority.map((prov, i) => {
+        const upDisabled = i === 0 ? "disabled" : "";
+        const downDisabled = i === currentPriority.length - 1 ? "disabled" : "";
+        return `<div class="priority-item">
+          <span style="font-weight:700;color:var(--muted);">${i + 1}.</span>
+          <strong>${escapeHtml(prov)}</strong>
+          <button type="button" class="btn-up" data-idx="${i}" ${upDisabled} title="Monter d'un rang">▲</button>
+          <button type="button" class="btn-down" data-idx="${i}" ${downDisabled} title="Descendre d'un rang">▼</button>
+        </div>`;
+      }).join("");
+
+      priorityListEl.querySelectorAll(".btn-up").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const idx = parseInt(btn.dataset.idx, 10);
+          if (idx > 0) {
+            const temp = currentPriority[idx - 1];
+            currentPriority[idx - 1] = currentPriority[idx];
+            currentPriority[idx] = temp;
+            renderPriorityPanel(currentPriority);
+          }
+        });
+      });
+
+      priorityListEl.querySelectorAll(".btn-down").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const idx = parseInt(btn.dataset.idx, 10);
+          if (idx < currentPriority.length - 1) {
+            const temp = currentPriority[idx + 1];
+            currentPriority[idx + 1] = currentPriority[idx];
+            currentPriority[idx] = temp;
+            renderPriorityPanel(currentPriority);
+          }
+        });
+      });
+    }
+
+    async function savePriorityOrder() {
+      savePriorityBtn.disabled = true;
+      try {
+        const response = await fetch("/api/priority", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            priority: currentPriority,
+            fallback: fallbackEnabled(),
+            filter_keys: filterKeysEnabled(),
+          }),
+        });
+        const payload = await response.json();
+        showBanner(Boolean(payload.ok), payload.message || (payload.ok ? "Priorité enregistrée" : "Erreur"));
+        if (payload.report) render(payload.report);
+      } catch (e) {
+        showBanner(false, "Échec de l'enregistrement de la priorité : " + e);
+      } finally {
+        savePriorityBtn.disabled = false;
+      }
+    }
+
+    savePriorityBtn.addEventListener("click", savePriorityOrder);
+
     function render(report) {
       if (!report) return;
+      if (report.provider_priority) {
+        renderPriorityPanel(report.provider_priority);
+      }
       const cat = report.catalogue || {};
       const budget = report.budget || {};
       summary.innerHTML = [
@@ -199,9 +352,17 @@
             ].filter(Boolean).map((b) => `<span style="font-size:0.75rem;background:#23405f;padding:0.1rem 0.4rem;border-radius:0.2rem;margin-left:0.3rem;">${escapeHtml(b)}</span>`).join("")
           : "";
 
+        const target = agent.execution_target;
+        const channelBadge = target
+          ? `<span class="channel-badge ${target.is_local ? 'local' : ''}" title="ID export OpenCode : ${escapeHtml(target.formatted_model_id)}">Canal : ${escapeHtml(target.description_label)}</span>`
+          : "";
+
         const agentIdx = index;
         return `<article class="card">
-          <div class="status ${escapeHtml(agent.status)}">${escapeHtml(statusLabel(agent.status))} · stratégie: ${escapeHtml(strategy)}${escapeHtml(tierTag)}${escapeHtml(visionTag)}${escapeHtml(reasoningTag)}${escapeHtml(tier1Tag)}</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.4rem;">
+            <div class="status ${escapeHtml(agent.status)}">${escapeHtml(statusLabel(agent.status))} · stratégie: ${escapeHtml(strategy)}${escapeHtml(tierTag)}${escapeHtml(visionTag)}${escapeHtml(reasoningTag)}${escapeHtml(tier1Tag)}</div>
+            ${channelBadge}
+          </div>
           <h2>${escapeHtml(agent.name)}</h2>
           <p class="muted">${escapeHtml(agent.description)}</p>
           ${agent.model ? `<p><code>${escapeHtml(agent.model.id)}</code> · complexité ${escapeHtml(agent.model.complexity_score)} · ${escapeHtml(agent.model.tier)}${modelBadges}</p>` : "<p class='muted'>Aucun modèle retenu.</p>"}
@@ -304,10 +465,15 @@
       try {
         const options = { method, headers: { "Content-Type": "application/json" } };
         if (method !== "GET") {
-          options.body = JSON.stringify({ fallback: fallbackEnabled() });
+          options.body = JSON.stringify({
+            fallback: fallbackEnabled(),
+            filter_keys: filterKeysEnabled(),
+            multi_provider: true,
+            priority: currentPriority,
+          });
         }
         const url = method === "GET"
-          ? path + "?fallback=" + (fallbackEnabled() ? "1" : "0")
+          ? path + "?fallback=" + (fallbackEnabled() ? "1" : "0") + "&filter_keys=" + (filterKeysEnabled() ? "1" : "0")
           : path;
         const response = await fetch(url, options);
         const payload = await response.json();
@@ -323,6 +489,10 @@
     document.getElementById("recalculate").addEventListener("click", () => call("/api/recalculate", "POST"));
     document.getElementById("export").addEventListener("click", () => call("/api/export", "POST"));
     document.getElementById("sync").addEventListener("click", () => call("/api/sync", "POST"));
+    filterKeysInput.addEventListener("change", () => call("/api/recalculate", "POST"));
+    fallbackInput.addEventListener("change", () => call("/api/recalculate", "POST"));
+
+    loadProvidersStatus();
     call("/api/report", "GET");
   </script>
 </body>

@@ -9,7 +9,7 @@ from __future__ import annotations
 import contextlib
 import json
 import threading
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Iterator, Optional
 
@@ -34,8 +34,20 @@ from src.exporter import (
 from src.fetcher import (
     create_backup,
     fetch_openrouter_models,
+    sync_models_from_all_providers,
     sync_models_from_openrouter,
     write_json_atomic,
+)
+from src.providers.detector import (
+    ProviderCredentials,
+    detect_provider_credentials,
+    get_available_provider_names,
+)
+from src.providers.ollama import get_ollama_models
+from src.providers.router import (
+    DEFAULT_PROVIDER_PRIORITY,
+    ExecutionTarget,
+    resolve_model_execution_target,
 )
 from src.selector import AgentRequirement, Model, SelectionResult, resolve_model_for_agent
 
@@ -52,6 +64,8 @@ class FleetReport:
     budget: FleetBudgetReport
     catalogue_updated_at: Optional[str]
     diagnostics: list[str]
+    provider_priority: list[str] = field(default_factory=lambda: list(DEFAULT_PROVIDER_PRIORITY))
+    execution_targets: list[Optional[ExecutionTarget]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -81,18 +95,23 @@ def _load_json(path: Path, label: str) -> dict[str, object]:
 
 def load_data(models_path: Path, agents_path: Path) -> tuple[list[Model], list[AgentRequirement]]:
     """Charge et valide les catalogues de modèles et d'agents."""
-    models, _updated, agents = _load_catalogue_and_agents(models_path, agents_path)
+    models, _updated, agents, _priority = _load_catalogue_and_agents(models_path, agents_path)
     return models, agents
 
 
 def _load_catalogue_and_agents(
     models_path: Path,
     agents_path: Path,
-) -> tuple[list[Model], Optional[str], list[AgentRequirement]]:
+) -> tuple[list[Model], Optional[str], list[AgentRequirement], list[str]]:
     models_document = _load_json(models_path, "Catalogue de modèles")
     agents_document = _load_json(agents_path, "Configuration des agents")
     raw_models = models_document.get("models", [])
     raw_agents = agents_document.get("agents", [])
+    raw_priority = agents_document.get("provider_priority")
+    provider_priority: list[str] = list(DEFAULT_PROVIDER_PRIORITY)
+    if isinstance(raw_priority, list) and all(isinstance(x, str) and x for x in raw_priority):
+        provider_priority = [x.strip() for x in raw_priority]
+
     if not isinstance(raw_models, list):
         raise ValueError(f"Catalogue de modèles invalide ({models_path}) : 'models' doit être une liste.")
     if not isinstance(raw_agents, list):
@@ -116,7 +135,7 @@ def _load_catalogue_and_agents(
         raise ValueError(f"Configuration invalide : {error}") from error
     updated = models_document.get("last_updated")
     catalogue_updated_at = updated if isinstance(updated, str) else None
-    return models, catalogue_updated_at, agents
+    return models, catalogue_updated_at, agents, provider_priority
 
 
 def _model_payload(model: Model) -> dict[str, Any]:
@@ -155,7 +174,7 @@ def serialize_report(report: FleetReport) -> dict[str, Any]:
     """Sérialise un rapport de flotte pour l'API HTTP."""
     budget_by_agent = {item.agent_name: item for item in report.budget.agent_reports}
     assignments: list[dict[str, Any]] = []
-    for agent, result in zip(report.agents, report.results):
+    for index, (agent, result) in enumerate(zip(report.agents, report.results)):
         if result.model is None:
             status = "unassigned"
         elif agent.force_model:
@@ -165,6 +184,16 @@ def serialize_report(report: FleetReport) -> dict[str, Any]:
         else:
             status = "exact"
         agent_budget = budget_by_agent.get(agent.name)
+        target = report.execution_targets[index] if index < len(report.execution_targets) else None
+        target_payload = {
+            "channel_provider": target.channel_provider,
+            "formatted_model_id": target.formatted_model_id,
+            "is_local": target.is_local,
+            "description_label": target.description_label,
+            "cost_in": target.effective_cost_input_per_m,
+            "cost_out": target.effective_cost_output_per_m,
+        } if target else None
+
         assignments.append(
             {
                 "name": agent.name,
@@ -174,6 +203,7 @@ def serialize_report(report: FleetReport) -> dict[str, Any]:
                 "force_model": agent.force_model,
                 "reason": result.reason,
                 "model": _model_payload(result.model) if result.model else None,
+                "execution_target": target_payload,
                 "alternatives": [_model_payload(model) for model in result.candidates[1:]],
                 "budget": _budget_payload(agent_budget) if agent_budget else None,
                 "constraints": {
@@ -204,6 +234,7 @@ def serialize_report(report: FleetReport) -> dict[str, Any]:
             "free_tier_savings": report.budget.free_tier_savings,
             "has_warnings": report.budget.has_budget_warnings,
         },
+        "provider_priority": list(report.provider_priority),
         "assignments": assignments,
         "diagnostics": list(report.diagnostics),
     }
@@ -262,18 +293,94 @@ class ApplicationService:
         target = Path(requested).expanduser()
         return target if target.is_absolute() else self.base_dir / target
 
-    def build_report(self, allow_fallback: bool = True) -> FleetReport:
+    def build_report(
+        self,
+        allow_fallback: bool = True,
+        filter_by_keys: bool = False,
+        custom_priority: Optional[list[str]] = None,
+    ) -> FleetReport:
         """Charge les fichiers et calcule les attributions et le budget."""
         with self._lock:
-            return self._build_report_unlocked(allow_fallback)
+            return self._build_report_unlocked(
+                allow_fallback,
+                filter_by_keys=filter_by_keys,
+                custom_priority=custom_priority,
+            )
 
-    def _build_report_unlocked(self, allow_fallback: bool) -> FleetReport:
-        models, updated, agents = _load_catalogue_and_agents(self.models_path, self.agents_path)
+    def _build_report_unlocked(
+        self,
+        allow_fallback: bool,
+        filter_by_keys: bool = False,
+        custom_priority: Optional[list[str]] = None,
+    ) -> FleetReport:
+        models, updated, agents, default_priority = _load_catalogue_and_agents(self.models_path, self.agents_path)
+        diagnostics: list[str] = []
+        priority = list(custom_priority) if custom_priority else list(default_priority)
+
+        # Détection des credentials et modèles Ollama
+        creds = detect_provider_credentials(project_dir=self.base_dir)
+        ollama_models = get_ollama_models() if creds.get("ollama") and creds["ollama"].is_available else []
+
+        # Filtrage optionnel par clés API disponibles
+        if filter_by_keys:
+            available_providers = get_available_provider_names(creds)
+            initial_count = len(models)
+            models = [
+                m for m in models
+                if m.provider.lower() in available_providers or m.is_free
+            ]
+            excluded_count = initial_count - len(models)
+            if excluded_count > 0:
+                diagnostics.append(
+                    f"Filtrage par clés actives : {excluded_count} modèle(s) masqué(s) (fournisseurs sans clé configurée)."
+                )
+
         results = [
             resolve_model_for_agent(agent, models, allow_fallback=allow_fallback) for agent in agents
         ]
-        budget = simulate_fleet_budget(results, agents)
-        diagnostics: list[str] = []
+
+        # Résolution des canaux d'exécution selon l'ordre de priorité des clés
+        execution_targets: list[Optional[ExecutionTarget]] = []
+        adjusted_results: list[SelectionResult] = []
+
+        for res in results:
+            if res.model:
+                target = resolve_model_execution_target(
+                    reference_model=res.model,
+                    provider_priority=priority,
+                    credentials=creds,
+                    ollama_models=ollama_models,
+                )
+                execution_targets.append(target)
+                # Si le modèle est dérouté sur Ollama local, ajuster le coût à 0.0 pour le budget
+                effective_model = res.model
+                if target.is_local:
+                    effective_model = Model(
+                        id=target.formatted_model_id,
+                        provider="ollama",
+                        tier="free_tier",
+                        cost_input_per_m=0.0,
+                        cost_output_per_m=0.0,
+                        context_window=res.model.context_window,
+                        supports_tools=res.model.supports_tools,
+                        complexity_score=res.model.complexity_score,
+                        supports_vision=res.model.supports_vision,
+                        supports_reasoning=res.model.supports_reasoning,
+                    )
+                adjusted_results.append(
+                    SelectionResult(
+                        agent_name=res.agent_name,
+                        model=effective_model,
+                        is_fallback=res.is_fallback,
+                        candidates=res.candidates,
+                        reason=res.reason,
+                    )
+                )
+            else:
+                execution_targets.append(None)
+                adjusted_results.append(res)
+
+        budget = simulate_fleet_budget(adjusted_results, agents)
         if not models:
             diagnostics.append("Le catalogue de modèles est vide.")
         if not agents:
@@ -293,43 +400,130 @@ class ApplicationService:
                     )
             except (ValueError, TypeError):
                 pass
-        unassigned = [result.agent_name for result in results if result.model is None]
+        unassigned = [result.agent_name for result in adjusted_results if result.model is None]
         if unassigned:
             diagnostics.append("Agents sans modèle : " + ", ".join(unassigned) + ".")
-        return FleetReport(models, agents, results, budget, updated, diagnostics)
+        return FleetReport(
+            models=models,
+            agents=agents,
+            results=adjusted_results,
+            budget=budget,
+            catalogue_updated_at=updated,
+            diagnostics=diagnostics,
+            provider_priority=priority,
+            execution_targets=execution_targets,
+        )
 
-    def build_report_result(self, allow_fallback: bool = True) -> OperationResult:
+    def build_report_result(
+        self,
+        allow_fallback: bool = True,
+        filter_by_keys: bool = False,
+        custom_priority: Optional[list[str]] = None,
+    ) -> OperationResult:
         """Calcule un rapport en traduisant les erreurs de chargement."""
         try:
-            report = self.build_report(allow_fallback)
+            report = self.build_report(
+                allow_fallback,
+                filter_by_keys=filter_by_keys,
+                custom_priority=custom_priority,
+            )
         except ValueError as error:
             return OperationResult(False, str(error))
         return OperationResult(True, "Rapport calculé.", report)
 
-    def sync_catalogue(self, allow_fallback: bool = True) -> OperationResult:
-        """Synchronise OpenRouter puis recalcule le rapport.
+    def get_providers_status(self) -> Dict[str, ProviderCredentials]:
+        """Renvoie le statut des identifiants et clés pour chaque fournisseur."""
+        return detect_provider_credentials(project_dir=self.base_dir)
 
-        L'appel réseau est réalisé hors verrou (évite le Head-of-Line Blocking),
-        puis l'écriture atomique et le recalcul s'effectuent sous verrou exclusif.
-        """
+    def get_provider_priority(self) -> list[str]:
+        """Renvoie l'ordre de priorité des fournisseurs actuellement configuré."""
         try:
-            raw_models = fetch_openrouter_models()
-        except Exception as error:
-            return OperationResult(False, f"Échec de la synchronisation : {error}")
+            _m, _u, _a, priority = _load_catalogue_and_agents(self.models_path, self.agents_path)
+            return priority
+        except Exception:
+            return list(DEFAULT_PROVIDER_PRIORITY)
+
+    def set_provider_priority(
+        self,
+        new_priority: list[str],
+        allow_fallback: bool = True,
+        filter_by_keys: bool = False,
+    ) -> OperationResult:
+        """Met à jour l'ordre de priorité des fournisseurs dans la configuration et recalcule."""
+        if not isinstance(new_priority, list) or not all(isinstance(x, str) and x.strip() for x in new_priority):
+            return OperationResult(False, "La priorité des fournisseurs doit être une liste de chaînes non vides.")
+
+        cleaned_priority = [x.strip().lower() for x in new_priority]
 
         with self._lock, self._file_lock():
             try:
-                count, backup = sync_models_from_openrouter(
-                    self.models_path,
-                    raw_models=raw_models,
+                agents_data = _load_json(self.agents_path, "Configuration des agents")
+                agents_data["provider_priority"] = cleaned_priority
+                create_backup(self.agents_path)
+                write_json_atomic(self.agents_path, agents_data)
+
+                report = self._build_report_unlocked(
+                    allow_fallback=allow_fallback,
+                    filter_by_keys=filter_by_keys,
+                    custom_priority=cleaned_priority,
                 )
+                return OperationResult(True, "Ordre de priorité des fournisseurs mis à jour.", report)
+            except Exception as error:
+                return OperationResult(False, f"Erreur lors de la mise à jour de la priorité : {error}")
+
+    def sync_catalogue(
+        self,
+        allow_fallback: bool = True,
+        multi_provider: bool = False,
+        include_ollama: bool = True,
+        filter_by_keys: bool = False,
+    ) -> OperationResult:
+        """Synchronise le catalogue (OpenRouter seul ou multi-providers si demandé) puis recalcule le rapport.
+
+        Par défaut, conserve la synchronisation OpenRouter pour la compatibilité ascendante,
+        ou multi-providers si multi_provider=True.
+        """
+        if not multi_provider:
+            try:
+                raw_models = fetch_openrouter_models()
             except Exception as error:
                 return OperationResult(False, f"Échec de la synchronisation : {error}")
+
+            with self._lock, self._file_lock():
+                try:
+                    count, backup = sync_models_from_openrouter(
+                        self.models_path,
+                        raw_models=raw_models,
+                    )
+                except Exception as error:
+                    return OperationResult(False, f"Échec de la synchronisation : {error}")
+                try:
+                    report = self._build_report_unlocked(allow_fallback, filter_by_keys=filter_by_keys)
+                except ValueError as error:
+                    return OperationResult(False, str(error))
+                message = f"{count} modèles synchronisés avec succès dans {self.models_path}"
+                if backup:
+                    message += f" (sauvegarde : {backup})"
+                return OperationResult(True, message, report)
+
+        # Mode multi-fournisseurs complet
+        with self._lock, self._file_lock():
             try:
-                report = self._build_report_unlocked(allow_fallback)
+                count, backup, summary = sync_models_from_all_providers(
+                    self.models_path,
+                    include_ollama=include_ollama,
+                    project_dir=self.base_dir,
+                )
+                sources_str = ", ".join(f"{k}: {v}" for k, v in summary.items() if v > 0)
+                message = f"{count} modèles synchronisés avec succès ({sources_str})"
+            except Exception as error:
+                return OperationResult(False, f"Échec de la synchronisation : {error}")
+
+            try:
+                report = self._build_report_unlocked(allow_fallback, filter_by_keys=filter_by_keys)
             except ValueError as error:
                 return OperationResult(False, str(error))
-            message = f"{count} modèles synchronisés avec succès dans {self.models_path}"
+
             if backup:
                 message += f" (sauvegarde : {backup})"
             return OperationResult(True, message, report)
@@ -362,11 +556,17 @@ class ApplicationService:
         default_provider_prefix: str = "openrouter",
         create_backup_file: bool = True,
         report_output_path: Optional[Path] = None,
+        filter_by_keys: bool = False,
+        custom_priority: Optional[list[str]] = None,
     ) -> OperationResult:
         """Exporte la configuration OpenCode et le rapport d'audit sous verrou d'écriture."""
         with self._lock, self._file_lock():
             try:
-                report = self._build_report_unlocked(allow_fallback)
+                report = self._build_report_unlocked(
+                    allow_fallback,
+                    filter_by_keys=filter_by_keys,
+                    custom_priority=custom_priority,
+                )
                 effective_base = (
                     base_config if base_config is not None else self.load_base_opencode_config()
                 )

@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generated_at": "2026-10-12T17:36:15.876971+00:00",
+  "generated_at": "2026-10-14T16:57:52.217997+00:00",
   "metadata": {
     "generator": "ModelScope",
     "total_agents": 4,
@@ -8,7 +8,7 @@
     "unassigned_agents": 0
   },
   "budget_simulation": {
-    "total_estimated_monthly_cost": 0.214,
+    "total_estimated_monthly_cost": 0.27,
     "total_estimated_tokens": 4400000,
     "estimated_free_tier_savings": 1.7,
     "has_warnings": true,
@@ -24,9 +24,9 @@
       },
       {
         "agent": "plan",
-        "monthly_cost": 0.214,
-        "input_cost": 0.064,
-        "output_cost": 0.15,
+        "monthly_cost": 0.27,
+        "input_cost": 0.08,
+        "output_cost": 0.19,
         "max_budget": 10.0,
         "budget_exceeded": false,
         "quota_warning": null
@@ -64,7 +64,7 @@
       "allow_free": true,
       "requires_vision": false,
       "requires_reasoning": true,
-      "prefer_tier1": false,
+      "prefer_tier1": true,
       "estimated_monthly_cost": 0.0,
       "model": {
         "id": "nvidia/nemotron-3-ultra-550b-a55b:free",
@@ -93,17 +93,17 @@
       "allow_free": true,
       "requires_vision": true,
       "requires_reasoning": true,
-      "prefer_tier1": false,
-      "estimated_monthly_cost": 0.214,
+      "prefer_tier1": true,
+      "estimated_monthly_cost": 0.27,
       "model": {
-        "id": "qwen/qwen3.5-35b-a3b",
+        "id": "qwen/qwen3.6-35b-a3b",
         "provider": "qwen",
         "tier": "pay_as_you_go",
         "context_window": 262144,
         "supports_tools": true,
-        "cost_input_per_m": 0.08,
-        "cost_output_per_m": 0.75,
-        "total_cost_per_m": 0.83,
+        "cost_input_per_m": 0.1,
+        "cost_output_per_m": 0.95,
+        "total_cost_per_m": 1.05,
         "supports_vision": true,
         "supports_reasoning": true
       },
@@ -122,7 +122,7 @@
       "allow_free": true,
       "requires_vision": false,
       "requires_reasoning": false,
-      "prefer_tier1": false,
+      "prefer_tier1": true,
       "estimated_monthly_cost": 0.0,
       "model": {
         "id": "google/lyria-3-clip-preview",
@@ -151,18 +151,18 @@
       "allow_free": true,
       "requires_vision": false,
       "requires_reasoning": true,
-      "prefer_tier1": false,
+      "prefer_tier1": true,
       "estimated_monthly_cost": 0.0,
       "model": {
-        "id": "nvidia/nemotron-3-ultra-550b-a55b:free",
-        "provider": "nvidia",
+        "id": "google/gemma-4-26b-a4b-it:free",
+        "provider": "google",
         "tier": "free_tier",
-        "context_window": 1000000,
+        "context_window": 262144,
         "supports_tools": true,
         "cost_input_per_m": 0.0,
         "cost_output_per_m": 0.0,
         "total_cost_per_m": 0.0,
-        "supports_vision": false,
+        "supports_vision": true,
         "supports_reasoning": true
       },
       "selection_status": "exact",

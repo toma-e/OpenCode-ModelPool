@@ -209,5 +209,22 @@ class TestWeb(unittest.TestCase):
             self.assertIn("./secret_dir/file.txt", payload["message"])
 
 
+    def test_priority_get_and_post(self) -> None:
+        """Vérifie la consultation et la mise à jour de l'ordre de priorité des fournisseurs."""
+        status, data = self._get("/api/priority")
+        self.assertEqual(status, 200)
+        parsed = json.loads(data.decode("utf-8"))
+        self.assertTrue(parsed.get("ok"))
+        self.assertIsInstance(parsed.get("priority"), list)
+
+        # Mise à jour avec un nouvel ordre
+        new_order = ["mistralai", "ollama", "openrouter"]
+        post_status, post_data = self._post("/api/priority", {"priority": new_order})
+        self.assertEqual(post_status, 200)
+        self.assertTrue(post_data.get("ok"))
+        self.assertIn("priorité", post_data.get("message", "").lower())
+        self.assertEqual(self.service.get_provider_priority(), new_order)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -17,6 +17,12 @@ from src.budget import simulate_fleet_budget
 from src.selector import AgentRequirement, SelectionResult
 
 
+# Préfixes de fournisseurs reconnus directement sans nécessiter le préfixe openrouter/
+KNOWN_DIRECT_PROVIDERS = frozenset({
+    "ollama", "mistral", "groq", "google", "anthropic", "cerebras"
+})
+
+
 def format_opencode_model_id(
     model_id: str,
     default_prefix: str = "openrouter",
@@ -24,21 +30,28 @@ def format_opencode_model_id(
 ) -> str:
     """Préfixe l'identifiant de modèle par le fournisseur attendu par OpenCode si nécessaire.
 
-    Si le modèle appartient déjà à un provider déclaré dans base_config (ex: 'ollama'),
+    Si le modèle appartient déjà à un provider déclaré dans base_config ou s'il provient
+    d'un connecteur direct (ex: 'ollama', 'mistral', 'groq', 'google', 'anthropic', 'cerebras'),
     son identifiant est préservé sans forcer le préfixe default_prefix.
 
     Exemples:
         'openai/gpt-5-mini' -> 'openrouter/openai/gpt-5-mini'
-        'ollama/qwen3.5:9b' (avec provider.ollama déclaré) -> 'ollama/qwen3.5:9b'
+        'ollama/qwen3.5:9b' -> 'ollama/qwen3.5:9b'
+        'mistral/mistral-large-latest' -> 'mistral/mistral-large-latest'
         'openrouter/free' -> 'openrouter/free'
     """
     if not model_id:
         return model_id
 
+    first_segment = model_id.split("/")[0] if "/" in model_id else ""
+
+    # Si le modèle est déjà préfixé par un provider direct reconnu
+    if first_segment in KNOWN_DIRECT_PROVIDERS:
+        return model_id
+
     # Si le modèle commence déjà par un provider déclaré dans base_config["provider"]
     if base_config and isinstance(base_config.get("provider"), dict):
         configured_providers = set(base_config["provider"].keys())
-        first_segment = model_id.split("/")[0] if "/" in model_id else ""
         if first_segment in configured_providers:
             return model_id
 

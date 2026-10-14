@@ -81,7 +81,26 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/report":
             fallback = _query_fallback(parsed.query, self.allow_fallback)
-            self._send_operation(self.service.build_report_result(allow_fallback=fallback))
+            filter_keys = _query_bool(parsed.query, "filter_keys", False)
+            self._send_operation(self.service.build_report_result(allow_fallback=fallback, filter_by_keys=filter_keys))
+            return
+        if parsed.path == "/api/providers":
+            creds = self.service.get_providers_status()
+            payload = {
+                "ok": True,
+                "providers": {
+                    prov: {
+                        "is_available": c.is_available,
+                        "source": c.source,
+                        "masked_key": c.masked_key,
+                    }
+                    for prov, c in creds.items()
+                }
+            }
+            self._send_json(200, payload)
+            return
+        if parsed.path == "/api/priority":
+            self._send_json(200, {"ok": True, "priority": self.service.get_provider_priority()})
             return
         self._send_json(404, {"ok": False, "message": "Ressource introuvable."})
 
@@ -98,17 +117,39 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         body = self._read_json_body()
         fallback = self.allow_fallback
-        if isinstance(body, dict) and "fallback" in body and isinstance(body["fallback"], bool):
-            fallback = body["fallback"]
+        filter_keys = False
+        custom_priority = None
+        if isinstance(body, dict):
+            if "fallback" in body and isinstance(body["fallback"], bool):
+                fallback = body["fallback"]
+            if "filter_keys" in body and isinstance(body["filter_keys"], bool):
+                filter_keys = body["filter_keys"]
+            if "priority" in body and isinstance(body["priority"], list):
+                custom_priority = body["priority"]
 
         if parsed.path == "/api/recalculate":
-            self._send_operation(self.service.build_report_result(allow_fallback=fallback))
+            self._send_operation(self.service.build_report_result(allow_fallback=fallback, filter_by_keys=filter_keys, custom_priority=custom_priority))
+            return
+        if parsed.path == "/api/priority":
+            if not isinstance(body, dict) or "priority" not in body or not isinstance(body["priority"], list):
+                self._send_json(400, {"ok": False, "message": "Liste 'priority' attendue dans le corps JSON."})
+                return
+            self._send_operation(self.service.set_provider_priority(body["priority"], allow_fallback=fallback, filter_by_keys=filter_keys))
             return
         if parsed.path == "/api/export":
-            self._send_operation(self.service.export_config(allow_fallback=fallback))
+            self._send_operation(self.service.export_config(allow_fallback=fallback, filter_by_keys=filter_keys, custom_priority=custom_priority))
             return
         if parsed.path == "/api/sync":
-            self._send_operation(self.service.sync_catalogue(allow_fallback=fallback))
+            multi_provider = False
+            if isinstance(body, dict) and "multi_provider" in body and isinstance(body["multi_provider"], bool):
+                multi_provider = body["multi_provider"]
+            self._send_operation(
+                self.service.sync_catalogue(
+                    allow_fallback=fallback,
+                    multi_provider=multi_provider,
+                    filter_by_keys=filter_keys,
+                )
+            )
             return
         if parsed.path == "/api/agent/update":
             if not isinstance(body, dict):
@@ -192,8 +233,8 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
             pass
 
 
-def _query_fallback(query: str, default: bool) -> bool:
-    values = parse_qs(query).get("fallback", [])
+def _query_bool(query: str, key: str, default: bool) -> bool:
+    values = parse_qs(query).get(key, [])
     if not values:
         return default
     token = values[0].strip().lower()
@@ -202,6 +243,10 @@ def _query_fallback(query: str, default: bool) -> bool:
     if token in {"1", "true", "yes"}:
         return True
     return default
+
+
+def _query_fallback(query: str, default: bool) -> bool:
+    return _query_bool(query, "fallback", default)
 
 
 def make_handler(service: ApplicationService, allow_fallback: bool = True) -> type[LocalInterfaceHandler]:

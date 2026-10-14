@@ -399,13 +399,140 @@ def sync_models_from_openrouter(
     return len(parsed_models), backup_path
 
 
+def sync_models_from_all_providers(
+    output_path: Path,
+    create_backup_file: bool = True,
+    exclude_batch: bool = True,
+    min_models_threshold: int = 1,
+    include_openrouter: bool = True,
+    include_ollama: bool = True,
+    ollama_base_url: str = "http://localhost:11434",
+    project_dir: Optional[Path] = None,
+) -> Tuple[int, Optional[Path], Dict[str, int]]:
+    """Synchronise les modèles depuis tous les fournisseurs configurés et détectés.
+
+    Interroge :
+    1. OpenRouter (catalogue public étendu)
+    2. Ollama local (si joignable via ollama_base_url)
+    3. Les fournisseurs directs dont les clés d'API sont disponibles (Mistral, Groq, Google, Anthropic, Cerebras).
+
+    Returns:
+        Tuple (total_modèles_enregistrés, chemin_backup, dictionnaire_comptes_par_fournisseur).
+    """
+    from src.providers.detector import detect_provider_credentials
+    from src.providers.direct import (
+        fetch_anthropic_models,
+        fetch_cerebras_models,
+        fetch_google_models,
+        fetch_groq_models,
+        fetch_mistral_models,
+    )
+    from src.providers.ollama import get_ollama_models
+
+    credentials = detect_provider_credentials(
+        project_dir=project_dir,
+        check_ollama=include_ollama,
+        ollama_base_url=ollama_base_url,
+    )
+
+    models_by_id: Dict[str, Model] = {}
+    counts: Dict[str, int] = {}
+
+    # 1. OpenRouter
+    if include_openrouter:
+        try:
+            raw_or = fetch_openrouter_models()
+            or_count = 0
+            for raw in raw_or:
+                m = parse_openrouter_model(raw)
+                if not m:
+                    continue
+                if exclude_batch and ":batch" in m.id:
+                    continue
+                models_by_id[m.id] = m
+                or_count += 1
+            counts["openrouter"] = or_count
+        except Exception:
+            counts["openrouter"] = 0
+
+    # 2. Ollama local
+    if include_ollama and credentials.get("ollama") and credentials["ollama"].is_available:
+        try:
+            ollama_models = get_ollama_models(base_url=ollama_base_url)
+            for m in ollama_models:
+                models_by_id[m.id] = m
+            counts["ollama"] = len(ollama_models)
+        except Exception:
+            counts["ollama"] = 0
+
+    # 3. Fournisseurs directs si clés présentes
+    direct_fetchers = [
+        ("mistralai", fetch_mistral_models),
+        ("groq", fetch_groq_models),
+        ("google", fetch_google_models),
+        ("anthropic", fetch_anthropic_models),
+        ("cerebras", fetch_cerebras_models),
+    ]
+
+    for prov_name, fetcher_fn in direct_fetchers:
+        cred = credentials.get(prov_name)
+        if cred and cred.is_available:
+            try:
+                prov_models = fetcher_fn()
+                for m in prov_models:
+                    models_by_id[m.id] = m
+                counts[prov_name] = len(prov_models)
+            except Exception:
+                counts[prov_name] = 0
+
+    all_models = list(models_by_id.values())
+
+    if len(all_models) < min_models_threshold:
+        raise ValueError(
+            f"Catalogue consolidé anormalement réduit ({len(all_models)} modèles < seuil {min_models_threshold}). "
+            f"Écriture annulée pour préserver l'intégrité du catalogue local."
+        )
+
+    # Création du backup si le fichier existe
+    backup_path: Optional[Path] = None
+    if create_backup_file and output_path.exists():
+        backup_path, _ = create_backup(output_path)
+
+    output_data = {
+        "version": "1.0",
+        "last_updated": datetime.now(timezone.utc).isoformat(),
+        "source": "multi-provider (OpenRouter, Ollama, Direct APIs)",
+        "sources_summary": counts,
+        "total_models": len(all_models),
+        "models": [
+            {
+                "id": m.id,
+                "provider": m.provider,
+                "tier": m.tier,
+                "cost_input_per_m": m.cost_input_per_m,
+                "cost_output_per_m": m.cost_output_per_m,
+                "context_window": m.context_window,
+                "supports_tools": m.supports_tools,
+                "complexity_score": m.complexity_score,
+                "supports_vision": m.supports_vision,
+                "supports_reasoning": m.supports_reasoning,
+            }
+            for m in all_models
+        ],
+    }
+
+    write_json_atomic(output_path, output_data)
+
+    return len(all_models), backup_path, counts
+
+
 if __name__ == "__main__":
     base_dir = Path(__file__).resolve().parent.parent
     target = base_dir / "data" / "models.json"
-    print(f"🔄 Synchronisation des modèles depuis OpenRouter vers {target}...")
+    print(f"🔄 Synchronisation multi-fournisseurs vers {target}...")
     try:
-        count, bkp = sync_models_from_openrouter(target)
-        print(f"✅ {count} modèles synchronisés avec succès dans {target}")
+        count, bkp, counts = sync_models_from_all_providers(target, project_dir=base_dir)
+        print(f"✅ {count} modèles synchronisés avec succès dans {target} : {counts}")
         if bkp:
             print(f"💾 Sauvegarde précédente conservée : {bkp}")
     except Exception as err:

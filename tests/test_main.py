@@ -150,5 +150,15 @@ class TestMain(unittest.TestCase):
         self.assertIn("Alerte test diagnostic", output)
 
 
+    def test_provider_priority_arg(self) -> None:
+        """Vérifie que l'option --provider-priority est acceptée et transmise."""
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            self._write_valid_files(directory)
+            args = main.build_parser().parse_args(["--provider-priority", "ollama,groq,openrouter"])
+            self.assertEqual(args.provider_priority, "ollama,groq,openrouter")
+            self.assertEqual(main.run(args, directory), 0)
+
+
 if __name__ == "__main__":
     unittest.main()
