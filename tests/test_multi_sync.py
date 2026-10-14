@@ -34,11 +34,13 @@ class TestMultiSync(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             out_path = Path(temp_dir) / "models.json"
+            no_auth = Path(temp_dir) / "empty_auth.json"
             total, backup, summary = sync_models_from_all_providers(
                 out_path,
                 include_openrouter=True,
                 include_ollama=True,
                 create_backup_file=False,
+                opencode_auth_path=no_auth,
             )
 
             self.assertEqual(total, 2)

@@ -57,12 +57,22 @@ modelscope/
 
 ## ⚙️ Fonctionnalités Clés
 
-1. **Catalogue Dynamique & API OpenRouter :**
-   - Synchronisation en direct depuis l'endpoint public d'OpenRouter sans clé d'API obligatoire.
+1. **Catalogue Multi-Fournisseurs & Modèles Locaux :**
+   - Synchronisation hybride : endpoint public OpenRouter, interrogation locale d'**Ollama** (`http://localhost:11434`), et APIs directes (Google AI Studio, Mistral, Groq, Cerebras, Anthropic).
    - Déduction automatique des scores de complexité (1 à 5), support des outils et calcul des tarifs par million de tokens.
    - Système de **backup horodaté automatique** avant chaque mise à jour.
 
-2. **Moteur de Sélection Typé & Intelligent :**
+2. **Détection des Clés & Vérification d'Accès Réel :**
+   - Détection automatique sécurisée des clés configurées dans l'environnement (`os.environ`, `.env`, ou `~/.local/share/opencode/auth.json`).
+   - **Vérification dynamique des modèles accessibles** (`--refresh-access`) : interroge directement les endpoints des fournisseurs (ex: Google `v1beta/models`) pour vérifier quels modèles sont réellement exploitables avec chaque clé.
+   - Filtrage du vivier d'attribution par clés actives (`--filter-keys`).
+
+3. **Routage d'Exécution & Priorité des Canaux :**
+   - Format d'export OpenCode intelligent : modèle local direct (`ollama/<id>`), direct provider (`<provider>/<id>`), ou proxy OpenRouter (`openrouter/<id>`).
+   - Priorité configurable de routage (`--provider-priority "ollama,google,mistralai,openrouter"`), réorganisable aussi par glisser-déposer dans l'interface Web.
+   - Fallback automatique vers OpenRouter si une clé directe n'a pas accès à un modèle donné.
+
+4. **Moteur de Sélection Typé & Intelligent :**
    - Filtrage strict : niveau de complexité (`min_complexity`, `max_complexity`), support des outils (`requires_tools`), fenêtre de contexte minimale (`min_context_window`).
    - Listes blanches et noires de fournisseurs (`allowed_providers`, `excluded_providers`).
    - Forçage manuel possible (`force_model`). Il reste volontairement prioritaire sur
@@ -71,13 +81,13 @@ modelscope/
    - Priorisation absolue du niveau gratuit (`prefer_free = true`).
    - **Surclassement économique automatique (`fallback`) :** si aucun modèle n'est disponible dans la plage exacte, surclassement vers le modèle compatible le plus économique.
 
-3. **Simulation Budgétaire & Quotas :**
+5. **Simulation Budgétaire & Quotas :**
    - Calcul des coûts mensuels par agent en fonction du volume estimé de tokens d'entrée/sortie.
    - Alertes en cas de dépassement du plafond budgétaire (`max_monthly_budget`).
    - Détection des risques de limitation de débit (`rate-limit / RPM / TPM`) sur les modèles gratuits à fort volume.
    - Estimation des économies financières réalisées grâce aux modèles gratuits.
 
-4. **Export OpenCode Standardisé :**
+6. **Export OpenCode Standardisé :**
    - Génère un fichier `config/opencode.json` prêt à être injecté dans les agents OpenCode.
 
 ---
@@ -161,7 +171,12 @@ Consultez LANCEURS.md pour plus de détails.
 |---|---|
 | `--export [PATH]` | Génère le fichier de configuration OpenCode (défaut : `config/opencode.json`). |
 | `--validate` | Valide la compatibilité de tous les agents (code de sortie 1 si au moins un agent reste sans modèle). Enchaînable avec `--export`. |
-| `--sync` | Télécharge et met à jour le catalogue depuis OpenRouter avec création d'un backup. |
+| `--sync` | Télécharge et met à jour le catalogue multi-fournisseurs (OpenRouter, Ollama, APIs directes) avec backup. |
+| `--status-keys` | Affiche l'état des clés API détectées et le nombre de modèles vérifiés par fournisseur. |
+| `--refresh-access` | Interroge les APIs directes (Google, Mistral, Groq...) pour vérifier les modèles réellement accessibles par clé. |
+| `--filter-keys` | Ne retient dans le vivier d'attribution que les modèles rattachés à des clés disponibles ou locaux/gratuits. |
+| `--provider-priority LIST` | Définit l'ordre de priorité des canaux d'exécution séparés par des virgules (ex: `ollama,google,mistralai,openrouter`). |
+| `--no-ollama` | Désactive l'interrogation d'Ollama local lors de la synchronisation. |
 | `--no-fallback` | Désactive le surclassement automatique si aucun modèle exact n'est trouvé. |
 | `--models PATH` | Spécifie un chemin personnalisé vers `models.json`. |
 | `--agents PATH` | Spécifie un chemin personnalisé vers `agents_requirements.json`. |

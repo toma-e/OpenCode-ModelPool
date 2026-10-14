@@ -44,8 +44,16 @@ from src.providers.detector import (
     get_available_provider_names,
 )
 from src.providers.ollama import get_ollama_models
+from src.providers.access import (
+    ProviderAccess,
+    probe_provider_access,
+    read_provider_access,
+    resolve_verified_access,
+    write_provider_access,
+)
 from src.providers.router import (
     DEFAULT_PROVIDER_PRIORITY,
+    DIRECT_CHANNELS,
     ExecutionTarget,
     resolve_model_execution_target,
 )
@@ -66,6 +74,8 @@ class FleetReport:
     diagnostics: list[str]
     provider_priority: list[str] = field(default_factory=lambda: list(DEFAULT_PROVIDER_PRIORITY))
     execution_targets: list[Optional[ExecutionTarget]] = field(default_factory=list)
+    # {fournisseur: {"verified": bool, "model_count": int, "checked_at": str|None}}
+    access_summary: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -192,6 +202,7 @@ def serialize_report(report: FleetReport) -> dict[str, Any]:
             "description_label": target.description_label,
             "cost_in": target.effective_cost_input_per_m,
             "cost_out": target.effective_cost_output_per_m,
+            "access_verified": target.access_verified,
         } if target else None
 
         assignments.append(
@@ -235,6 +246,7 @@ def serialize_report(report: FleetReport) -> dict[str, Any]:
             "has_warnings": report.budget.has_budget_warnings,
         },
         "provider_priority": list(report.provider_priority),
+        "access_summary": report.access_summary,
         "assignments": assignments,
         "diagnostics": list(report.diagnostics),
     }
@@ -248,10 +260,12 @@ class ApplicationService:
         base_dir: Path,
         models_path: Optional[Path] = None,
         agents_path: Optional[Path] = None,
+        access_path: Optional[Path] = None,
     ) -> None:
         self.base_dir = base_dir
         self.models_path = models_path if models_path is not None else (base_dir / "data" / "models.json")
         self.agents_path = agents_path if agents_path is not None else (base_dir / "config" / "agents_requirements.json")
+        self.access_path = access_path if access_path is not None else (base_dir / "data" / "provider_access.json")
         self.default_export_path = base_dir / DEFAULT_EXPORT_RELATIVE
         self._lock = threading.RLock()
         self._lock_path = base_dir / "data" / ".modelscope.lock"
@@ -321,18 +335,33 @@ class ApplicationService:
         creds = detect_provider_credentials(project_dir=self.base_dir)
         ollama_models = get_ollama_models() if creds.get("ollama") and creds["ollama"].is_available else []
 
-        # Filtrage optionnel par clés API disponibles
+        # Modèles réellement accessibles avec chaque clé directe (cache vérifié)
+        cached_access = read_provider_access(self.access_path)
+        direct_access, access_diagnostics = resolve_verified_access(
+            cached_access, creds, list(DIRECT_CHANNELS.keys())
+        )
+        diagnostics.extend(access_diagnostics)
+        access_summary = self._build_access_summary(creds, cached_access, direct_access)
+
+        def _route(model: Model) -> ExecutionTarget:
+            return resolve_model_execution_target(
+                reference_model=model,
+                provider_priority=priority,
+                credentials=creds,
+                ollama_models=ollama_models,
+                direct_access=direct_access,
+            )
+
+        # Filtrage optionnel : ne garder que les modèles exécutables par un canal réellement disponible
         if filter_by_keys:
-            available_providers = get_available_provider_names(creds)
+            openrouter_ok = bool(creds.get("openrouter") and creds["openrouter"].is_available)
             initial_count = len(models)
-            models = [
-                m for m in models
-                if m.provider.lower() in available_providers or m.is_free
-            ]
+            models = [m for m in models if self._is_executable(_route(m), m, openrouter_ok)]
             excluded_count = initial_count - len(models)
             if excluded_count > 0:
                 diagnostics.append(
-                    f"Filtrage par clés actives : {excluded_count} modèle(s) masqué(s) (fournisseurs sans clé configurée)."
+                    f"Filtrage par clés actives : {excluded_count} modèle(s) masqué(s) "
+                    "(aucun canal disponible ne peut les exécuter avec vos clés)."
                 )
 
         results = [
@@ -345,12 +374,7 @@ class ApplicationService:
 
         for res in results:
             if res.model:
-                target = resolve_model_execution_target(
-                    reference_model=res.model,
-                    provider_priority=priority,
-                    credentials=creds,
-                    ollama_models=ollama_models,
-                )
+                target = _route(res.model)
                 execution_targets.append(target)
                 # Si le modèle est dérouté sur Ollama local, ajuster le coût à 0.0 pour le budget
                 effective_model = res.model
@@ -412,7 +436,59 @@ class ApplicationService:
             diagnostics=diagnostics,
             provider_priority=priority,
             execution_targets=execution_targets,
+            access_summary=access_summary,
         )
+
+    def _build_access_summary(
+        self,
+        creds: Mapping[str, ProviderCredentials],
+        cached_access: Mapping[str, ProviderAccess],
+        direct_access: Mapping[str, frozenset[str]],
+    ) -> dict[str, dict[str, Any]]:
+        summary: dict[str, dict[str, Any]] = {}
+        for prov in DIRECT_CHANNELS:
+            cred = creds.get(prov)
+            entry = cached_access.get(prov)
+            verified = prov in direct_access
+            count = len(direct_access[prov]) if verified else (len(entry.model_ids) if entry else 0)
+            summary[prov] = {
+                "available": bool(cred and cred.is_available),
+                "verified": verified,
+                "model_count": count,
+                "status": entry.status if entry else "not_checked",
+                "checked_at": entry.checked_at if entry else None,
+                "error": entry.error if entry else None,
+            }
+        return summary
+
+    def _is_executable(self, target: ExecutionTarget, model: Model, openrouter_available: bool) -> bool:
+        """Détermine si un modèle peut réellement être exécuté par un canal disponible."""
+        if target.is_local:
+            return True
+        if target.access_verified:
+            return True
+        if target.channel_provider == "openrouter":
+            return openrouter_available or model.is_free
+        # Canaux directs sans accès vérifié : non garantis
+        return False
+
+    def refresh_provider_access(self, allow_fallback: bool = True) -> OperationResult:
+        """Interroge les APIs directes pour mettre à jour la liste réelle des modèles accessibles par clé."""
+        with self._lock, self._file_lock():
+            try:
+                creds = detect_provider_credentials(project_dir=self.base_dir)
+                access_map = probe_provider_access(creds, project_dir=self.base_dir)
+                write_provider_access(self.access_path, access_map)
+                report = self._build_report_unlocked(allow_fallback=allow_fallback)
+                summary_parts = [
+                    f"{p}: {len(item.model_ids)} modèle(s)"
+                    for p, item in sorted(access_map.items())
+                    if item.status == "ok"
+                ]
+                msg = f"Accès vérifié pour : {', '.join(summary_parts) if summary_parts else 'aucun fournisseur'}"
+                return OperationResult(True, msg, report)
+            except Exception as error:
+                return OperationResult(False, f"Erreur lors de la vérification des accès : {error}")
 
     def build_report_result(
         self,
@@ -516,6 +592,10 @@ class ApplicationService:
                 )
                 sources_str = ", ".join(f"{k}: {v}" for k, v in summary.items() if v > 0)
                 message = f"{count} modèles synchronisés avec succès ({sources_str})"
+                # Mise à jour du cache d'accès réel des clés
+                creds = detect_provider_credentials(project_dir=self.base_dir)
+                access_map = probe_provider_access(creds, project_dir=self.base_dir)
+                write_provider_access(self.access_path, access_map)
             except Exception as error:
                 return OperationResult(False, f"Échec de la synchronisation : {error}")
 

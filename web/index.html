@@ -155,6 +155,7 @@
     <div class="actions">
       <label><input id="fallback" type="checkbox" checked> Surclassement (fallback)</label>
       <label><input id="filter_keys" type="checkbox"> Filtrer par clés actives</label>
+      <button id="refresh_access" type="button" title="Interroge les APIs directes (Google, Mistral, Groq...) pour vérifier les modèles réellement accessibles avec chaque clé">Vérifier clés</button>
       <button id="recalculate" type="button">Recalculer</button>
       <button id="export" type="button">Exporter</button>
       <button id="sync" class="primary" type="button">Synchroniser</button>
@@ -183,7 +184,7 @@
     const providersBar = document.getElementById("providers_bar");
     const fallbackInput = document.getElementById("fallback");
     const filterKeysInput = document.getElementById("filter_keys");
-    const buttons = ["recalculate", "export", "sync"].map((id) => document.getElementById(id));
+    const buttons = ["refresh_access", "recalculate", "export", "sync"].map((id) => document.getElementById(id));
 
     function fallbackEnabled() {
       return fallbackInput.checked;
@@ -193,16 +194,29 @@
       return filterKeysInput.checked;
     }
 
+    let lastAccessSummary = {};
+
     async function loadProvidersStatus() {
       try {
         const res = await fetch("/api/providers");
         const data = await res.json();
         if (data.ok && data.providers) {
           const chips = Object.entries(data.providers).map(([p, info]) => {
-            const color = info.is_available ? "var(--ok)" : "var(--muted)";
+            const acc = lastAccessSummary[p];
+            let extra = "";
+            let color = info.is_available ? "var(--ok)" : "var(--muted)";
+            if (acc && acc.verified) {
+              extra = ` [${acc.model_count} modèles vérifiés]`;
+            } else if (info.is_available && acc && acc.status === "error") {
+              extra = " [erreur clé]";
+              color = "var(--bad)";
+            } else if (info.is_available && acc && acc.status === "empty") {
+              extra = " [aucun modèle]";
+              color = "var(--warn)";
+            }
             const icon = info.is_available ? "●" : "○";
             const source = info.source !== "none" ? ` (${info.source})` : "";
-            return `<span style="color:${color};margin-right:0.8rem;">${icon} <strong>${escapeHtml(p)}</strong>${escapeHtml(source)}</span>`;
+            return `<span style="color:${color};margin-right:0.8rem;">${icon} <strong>${escapeHtml(p)}</strong>${escapeHtml(source)}${escapeHtml(extra)}</span>`;
           }).join("");
           providersBar.innerHTML = `<span class="muted" style="margin-right:0.5rem;">Fournisseurs :</span> ${chips}`;
         }
@@ -305,6 +319,10 @@
 
     function render(report) {
       if (!report) return;
+      if (report.access_summary) {
+        lastAccessSummary = report.access_summary;
+        loadProvidersStatus();
+      }
       if (report.provider_priority) {
         renderPriorityPanel(report.provider_priority);
       }
@@ -353,8 +371,9 @@
           : "";
 
         const target = agent.execution_target;
+        const verifiedTag = target && target.access_verified ? " ✓ vérifié" : "";
         const channelBadge = target
-          ? `<span class="channel-badge ${target.is_local ? 'local' : ''}" title="ID export OpenCode : ${escapeHtml(target.formatted_model_id)}">Canal : ${escapeHtml(target.description_label)}</span>`
+          ? `<span class="channel-badge ${target.is_local ? 'local' : ''}" title="ID export OpenCode : ${escapeHtml(target.formatted_model_id)}">Canal : ${escapeHtml(target.description_label)}${escapeHtml(verifiedTag)}</span>`
           : "";
 
         const agentIdx = index;
@@ -486,6 +505,7 @@
       }
     }
 
+    document.getElementById("refresh_access").addEventListener("click", () => call("/api/refresh-access", "POST"));
     document.getElementById("recalculate").addEventListener("click", () => call("/api/recalculate", "POST"));
     document.getElementById("export").addEventListener("click", () => call("/api/export", "POST"));
     document.getElementById("sync").addEventListener("click", () => call("/api/sync", "POST"));

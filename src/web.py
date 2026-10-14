@@ -151,6 +151,9 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
                 )
             )
             return
+        if parsed.path == "/api/refresh-access":
+            self._send_operation(self.service.refresh_provider_access(allow_fallback=fallback))
+            return
         if parsed.path == "/api/agent/update":
             if not isinstance(body, dict):
                 self._send_json(400, {"ok": False, "message": "Corps JSON attendu."})

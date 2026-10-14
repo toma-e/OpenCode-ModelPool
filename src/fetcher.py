@@ -408,6 +408,7 @@ def sync_models_from_all_providers(
     include_ollama: bool = True,
     ollama_base_url: str = "http://localhost:11434",
     project_dir: Optional[Path] = None,
+    opencode_auth_path: Optional[Path] = None,
 ) -> Tuple[int, Optional[Path], Dict[str, int]]:
     """Synchronise les modèles depuis tous les fournisseurs configurés et détectés.
 
@@ -420,19 +421,13 @@ def sync_models_from_all_providers(
         Tuple (total_modèles_enregistrés, chemin_backup, dictionnaire_comptes_par_fournisseur).
     """
     from src.providers.detector import detect_provider_credentials
-    from src.providers.direct import (
-        fetch_anthropic_models,
-        fetch_cerebras_models,
-        fetch_google_models,
-        fetch_groq_models,
-        fetch_mistral_models,
-    )
     from src.providers.ollama import get_ollama_models
 
     credentials = detect_provider_credentials(
         project_dir=project_dir,
         check_ollama=include_ollama,
         ollama_base_url=ollama_base_url,
+        opencode_auth_path=opencode_auth_path,
     )
 
     models_by_id: Dict[str, Model] = {}
@@ -466,21 +461,23 @@ def sync_models_from_all_providers(
             counts["ollama"] = 0
 
     # 3. Fournisseurs directs si clés présentes
-    direct_fetchers = [
-        ("mistralai", fetch_mistral_models),
-        ("groq", fetch_groq_models),
-        ("google", fetch_google_models),
-        ("anthropic", fetch_anthropic_models),
-        ("cerebras", fetch_cerebras_models),
-    ]
+    # Les entrées déjà connues du catalogue de référence (OpenRouter) ne sont pas écrasées :
+    # seules les métadonnées OpenRouter font foi pour la notation et la tarification.
+    from src.providers.detector import get_provider_api_key
+    from src.providers.direct import DIRECT_FETCHERS
 
-    for prov_name, fetcher_fn in direct_fetchers:
+    for prov_name, fetcher_fn in DIRECT_FETCHERS.items():
         cred = credentials.get(prov_name)
         if cred and cred.is_available:
             try:
-                prov_models = fetcher_fn()
+                api_key = get_provider_api_key(
+                    prov_name,
+                    project_dir=project_dir,
+                    opencode_auth_path=opencode_auth_path,
+                )
+                prov_models = fetcher_fn(api_key=api_key)
                 for m in prov_models:
-                    models_by_id[m.id] = m
+                    models_by_id.setdefault(m.id, m)
                 counts[prov_name] = len(prov_models)
             except Exception:
                 counts[prov_name] = 0

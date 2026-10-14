@@ -170,18 +170,32 @@ def fetch_google_models(api_key: Optional[str] = None) -> List[Model]:
     if not key:
         return []
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
-    data = _http_get_json(url, {"Accept": "application/json"})
-    if not data or not isinstance(data.get("models"), list):
-        return []
+    base_url = "https://generativelanguage.googleapis.com/v1beta/models"
+    items: List[dict[str, Any]] = []
+    page_token: Optional[str] = None
+    for _ in range(20):  # garde-fou contre une pagination infinie
+        url = f"{base_url}?pageSize=1000&key={key}"
+        if page_token:
+            url += f"&pageToken={page_token}"
+        data = _http_get_json(url, {"Accept": "application/json"})
+        if not data or not isinstance(data.get("models"), list):
+            break
+        items.extend(item for item in data["models"] if isinstance(item, dict))
+        page_token = data.get("nextPageToken")
+        if not page_token:
+            break
 
     models: List[Model] = []
-    for item in data["models"]:
+    for item in items:
         name = item.get("name")  # ex: "models/gemini-2.5-flash"
         if not name or not isinstance(name, str):
             continue
         raw_id = name.replace("models/", "")
         if "embedding" in raw_id.lower() or "aqa" in raw_id.lower():
+            continue
+        # Ne conserver que les modèles appelables en génération de texte (chat/agents)
+        methods = item.get("supportedGenerationMethods")
+        if isinstance(methods, list) and "generateContent" not in methods:
             continue
 
         model_id = f"google/{raw_id}"
@@ -291,3 +305,13 @@ def fetch_cerebras_models(api_key: Optional[str] = None) -> List[Model]:
             )
         )
     return models
+
+
+# Registre des connecteurs directs par identifiant de fournisseur (clé de PROVIDER_ENV_VARS)
+DIRECT_FETCHERS = {
+    "mistralai": fetch_mistral_models,
+    "groq": fetch_groq_models,
+    "google": fetch_google_models,
+    "anthropic": fetch_anthropic_models,
+    "cerebras": fetch_cerebras_models,
+}

@@ -36,6 +36,9 @@ htmlcov/
 # Local backups & runtime data
 data/backups/
 config/backups/
+data/provider_access.json
+.env
+.env.*
 *.bak
 *.lock
 

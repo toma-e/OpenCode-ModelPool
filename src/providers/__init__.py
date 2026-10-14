@@ -22,14 +22,25 @@ from src.providers.ollama import (
 
 from src.providers.router import (
     DEFAULT_PROVIDER_PRIORITY,
+    DIRECT_CHANNELS,
     ExecutionTarget,
+    match_direct_model_id,
     normalize_model_basename,
     resolve_model_execution_target,
+)
+from src.providers.access import (
+    ProviderAccess,
+    probe_provider_access,
+    read_provider_access,
+    resolve_verified_access,
+    write_provider_access,
 )
 
 __all__ = [
     "DEFAULT_PROVIDER_PRIORITY",
+    "DIRECT_CHANNELS",
     "ExecutionTarget",
+    "ProviderAccess",
     "ProviderCredentials",
     "detect_provider_credentials",
     "fetch_anthropic_models",
@@ -42,7 +53,12 @@ __all__ = [
     "get_ollama_models",
     "is_ollama_reachable",
     "mask_key",
+    "match_direct_model_id",
     "normalize_model_basename",
     "parse_ollama_model",
+    "probe_provider_access",
+    "read_provider_access",
     "resolve_model_execution_target",
+    "resolve_verified_access",
+    "write_provider_access",
 ]

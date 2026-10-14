@@ -113,6 +113,45 @@ def is_ollama_reachable(base_url: str = "http://localhost:11434", timeout: float
         return False
 
 
+def _resolve_key(
+    provider: str,
+    var_names: List[str],
+    dotenv_keys: Dict[str, str],
+    opencode_keys: Dict[str, str],
+) -> tuple[Optional[str], str]:
+    """Recherche la clé d'un fournisseur : os.environ > .env projet > auth OpenCode."""
+    for var_name in var_names:
+        env_val = os.environ.get(var_name)
+        if env_val and env_val.strip():
+            return env_val.strip(), "env"
+
+    for var_name in var_names:
+        dot_val = dotenv_keys.get(var_name)
+        if dot_val and dot_val.strip():
+            return dot_val.strip(), "dotenv"
+
+    auth_val = opencode_keys.get(provider)
+    if not auth_val and provider == "mistralai":
+        auth_val = opencode_keys.get("mistral")
+    if auth_val:
+        return auth_val, "opencode_auth"
+    return None, "none"
+
+
+def get_provider_api_key(
+    provider: str,
+    project_dir: Optional[Path] = None,
+    opencode_auth_path: Optional[Path] = None,
+) -> Optional[str]:
+    """Renvoie la clé brute d'un fournisseur (usage interne uniquement, jamais sérialisée)."""
+    var_names = PROVIDER_ENV_VARS.get(provider)
+    if var_names is None:
+        return None
+    dotenv_keys = parse_dotenv_file(project_dir / ".env") if project_dir is not None else {}
+    key, _source = _resolve_key(provider, var_names, dotenv_keys, load_opencode_auth_keys(opencode_auth_path))
+    return key
+
+
 def detect_provider_credentials(
     project_dir: Optional[Path] = None,
     check_ollama: bool = True,
@@ -130,37 +169,9 @@ def detect_provider_credentials(
     # 2. Vérification auth OpenCode
     opencode_keys = load_opencode_auth_keys(opencode_auth_path)
 
-    # 3. Évaluation pour chaque fournisseur d'API
+    # 3. Évaluation pour chaque fournisseur d'API (os.environ > .env > auth OpenCode)
     for provider, var_names in PROVIDER_ENV_VARS.items():
-        # Vérification os.environ
-        found_key: Optional[str] = None
-        source = "none"
-
-        for var_name in var_names:
-            env_val = os.environ.get(var_name)
-            if env_val and env_val.strip():
-                found_key = env_val.strip()
-                source = "env"
-                break
-
-        # Si pas dans os.environ, vérifier .env
-        if not found_key and dotenv_keys:
-            for var_name in var_names:
-                dot_val = dotenv_keys.get(var_name)
-                if dot_val and dot_val.strip():
-                    found_key = dot_val.strip()
-                    source = "dotenv"
-                    break
-
-        # Si pas dans .env, vérifier opencode_auth
-        if not found_key and opencode_keys:
-            auth_val = opencode_keys.get(provider)
-            if not auth_val and provider == "mistralai":
-                auth_val = opencode_keys.get("mistral")
-            if auth_val:
-                found_key = auth_val
-                source = "opencode_auth"
-
+        found_key, source = _resolve_key(provider, var_names, dotenv_keys, opencode_keys)
         is_avail = bool(found_key)
         results[provider] = ProviderCredentials(
             provider=provider,

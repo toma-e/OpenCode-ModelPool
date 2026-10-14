@@ -49,6 +49,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Affiche l'état des clés API et des fournisseurs détectés dans l'environnement local.",
     )
     parser.add_argument(
+        "--refresh-access",
+        action="store_true",
+        help="Interroge les APIs directes (Google, Mistral, Groq...) pour vérifier les modèles réellement accessibles avec vos clés.",
+    )
+    parser.add_argument(
         "--provider-priority",
         type=str,
         default=None,
@@ -128,14 +133,44 @@ def run(args: argparse.Namespace, base_dir: Path = BASE_DIR) -> int:
 
     if getattr(args, "status_keys", False):
         creds = service.get_providers_status()
+        from src.providers.access import read_provider_access
+        cached = read_provider_access(service.access_path)
         print("\n🔑 État des fournisseurs et clés API détectés :\n")
-        print(f"{'Fournisseur':<15} {'Disponible':<12} {'Source':<15} {'Clé masquée'}")
-        print("-" * 60)
+        print(f"{'Fournisseur':<12} {'Disponible':<12} {'Source':<15} {'Modèles vérifiés':<18} {'Clé masquée'}")
+        print("-" * 75)
         for prov, c in sorted(creds.items()):
             status_symbol = "✅ Oui" if c.is_available else "❌ Non"
             masked = c.masked_key if c.masked_key else ("(service local)" if prov == "ollama" else "(aucune)")
-            print(f"{prov:<15} {status_symbol:<12} {c.source:<15} {masked}")
-        print("-" * 60)
+            entry = cached.get(prov)
+            if prov == "ollama":
+                verified_str = "(service local)"
+            elif prov == "openrouter":
+                verified_str = "(catalogue public)"
+            elif entry and entry.masked_key == c.masked_key:
+                if entry.status == "ok":
+                    verified_str = f"✅ {len(entry.model_ids)} modèle(s)"
+                elif entry.status == "empty":
+                    verified_str = "⚠️  0 modèle"
+                else:
+                    verified_str = "❌ erreur"
+            elif c.is_available:
+                verified_str = "⚠️  non vérifié"
+            else:
+                verified_str = "-"
+            print(f"{prov:<12} {status_symbol:<12} {c.source:<15} {verified_str:<18} {masked}")
+        print("-" * 75)
+        return 0
+
+    if getattr(args, "refresh_access", False):
+        print("🔍 Vérification des modèles réellement accessibles auprès des APIs directes...")
+        refreshed = service.refresh_provider_access(allow_fallback=allow_fallback)
+        if not refreshed.ok:
+            LOGGER.error("Échec de la vérification des accès : %s", refreshed.message)
+            print(f"❌ {refreshed.message}", file=sys.stderr)
+            return 1
+        print(f"✅ {refreshed.message}")
+        if refreshed.report:
+            render_results(refreshed.report)
         return 0
 
     if args.sync or (args.serve is None and not service.models_path.exists()):
