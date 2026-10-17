@@ -232,9 +232,70 @@ class SelectionResult:
     reason: str
 
 
+def is_non_llm_model(
+    model_id: str,
+    architecture: Optional[dict[str, Any]] = None,
+    output_modalities: Optional[list[str]] = None,
+) -> bool:
+    """Détecte si un modèle n'est pas un LLM génératif de texte/code (audio, musique, embed, image, etc.)."""
+    if output_modalities:
+        norm = [str(m).lower().strip() for m in output_modalities]
+        if not any(t in norm for t in ("text", "code")):
+            return True
+
+    if isinstance(architecture, dict):
+        arch_out = architecture.get("output_modalities")
+        if isinstance(arch_out, list) and len(arch_out) > 0:
+            norm_arch = [str(m).lower().strip() for m in arch_out]
+            if not any(t in norm_arch for t in ("text", "code")):
+                return True
+        modality = str(architecture.get("modality", "")).lower().strip()
+        if "->" in modality:
+            _, _, outp = modality.partition("->")
+            outp = outp.strip()
+            if outp and not any(t in outp for t in ("text", "code")):
+                return True
+
+    m_id = model_id.lower()
+
+    # Audio / Musique / Parole / Transcription
+    if any(k in m_id for k in ("lyria", "musiclm", "whisper", "transcription", "seamless")):
+        return True
+    if re.search(r"(?:^|[-_/:])(?:suno|udio|audio|voice|tts|xtts)(?:$|[-_/:])", m_id):
+        return True
+    if re.search(r"(?:^|[-_/:])(?:chirp|speech(?:t\d*)?)(?:$|[-_/:0-9])", m_id):
+        return True
+
+    # Embeddings & Reranking
+    if re.search(r"(?:^|[-_/:])(?:embed|embedding|embeddings|bge|gte|e5|rerank|reranker|aqa|voyage|voyageai)(?:$|[-_/:])", m_id):
+        return True
+    if "minilm" in m_id or "nomic-embed" in m_id or "mistral-embed" in m_id:
+        return True
+
+    # Génération d'images / Vidéo
+    if any(k in m_id for k in ("imagen", "dall-e", "dalle", "midjourney", "stable-diffusion", "sdxl", "cogvideo", "hunyuan-video")):
+        return True
+    if re.search(r"(?:^|[-_/:])(?:flux|sora|veo|runway)(?:$|[-_/:0-9])", m_id):
+        return True
+    if re.search(r"[-_/:]image(?:$|[-_/:0-9])", m_id) and not ("image-to-text" in m_id or "image2text" in m_id):
+        return True
+
+    # Modération pure
+    if re.search(r"(?:^|[-_/:])moderation(?:$|[-_/:])", m_id):
+        return True
+
+    # Robotique / Embodied AI
+    if re.search(r"(?:^|[-_/:])(?:openvla|octo|rt-[12]|pi0)(?:$|[-_/:])", m_id):
+        return True
+
+    return False
+
+
 def common_constraint_violations(model: Model, agent_req: AgentRequirement) -> list[str]:
     """Liste les contraintes transversales non respectées par un modèle."""
     violations: list[str] = []
+    if is_non_llm_model(model.id):
+        violations.append("modèle non-génératif (non-LLM)")
     if agent_req.requires_tools and not model.supports_tools:
         violations.append("support des outils")
     if agent_req.requires_vision and not model.supports_vision:

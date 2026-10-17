@@ -353,6 +353,75 @@ class TestFetcher(unittest.TestCase):
             ctx.exception.close()
         http_error_503.close()
 
+    def test_parse_openrouter_model_rejects_non_llm_ids(self) -> None:
+        """parse_openrouter_model filtre et rejette les modèles non-LLM par leur identifiant."""
+        non_llm_ids = [
+            "google/lyria-3-clip-preview",
+            "google/lyria-3-pro-preview",
+            "openai/gpt-audio",
+            "openai/gpt-audio-mini",
+            "google/gemini-3.1-flash-image",
+            "openai/gpt-5-image",
+            "google/imagen-3",
+            "black-forest-labs/flux-1-schnell",
+            "openai/whisper-large-v3",
+            "baai/bge-m3",
+        ]
+        for mid in non_llm_ids:
+            raw = {
+                "id": mid,
+                "pricing": {"prompt": "0.0", "completion": "0.0"},
+                "context_length": 8192,
+            }
+            with self.subTest(model_id=mid):
+                self.assertIsNone(parse_openrouter_model(raw))
+
+    def test_parse_openrouter_model_rejects_non_llm_modalities(self) -> None:
+        """parse_openrouter_model rejette les modèles selon architecture.modality et output_modalities."""
+        # Sortie audio exclusive
+        raw_audio = {
+            "id": "custom/voice-generator",
+            "pricing": {"prompt": "0.001", "completion": "0.002"},
+            "output_modalities": ["audio"],
+        }
+        self.assertIsNone(parse_openrouter_model(raw_audio))
+
+        # Modality text->image
+        raw_image_gen = {
+            "id": "custom/visual-artist",
+            "pricing": {"prompt": "0.001", "completion": "0.002"},
+            "architecture": {"modality": "text->image"},
+        }
+        self.assertIsNone(parse_openrouter_model(raw_image_gen))
+
+        # Architecture output_modalities image
+        raw_arch_img = {
+            "id": "custom/painter",
+            "pricing": {"prompt": "0.001", "completion": "0.002"},
+            "architecture": {"output_modalities": ["image"]},
+        }
+        self.assertIsNone(parse_openrouter_model(raw_arch_img))
+
+    def test_parse_openrouter_model_preserves_multimodal_vision_llms(self) -> None:
+        """parse_openrouter_model préserve les modèles de vision générant du texte/code."""
+        raw_vision = {
+            "id": "qwen/qwen2.5-vl-72b-instruct",
+            "pricing": {"prompt": "0.0004", "completion": "0.0008"},
+            "context_length": 131072,
+            "architecture": {
+                "modality": "text+image->text",
+                "input_modalities": ["text", "image"],
+                "output_modalities": ["text"],
+            },
+            "supported_parameters": ["tools"],
+        }
+        model = parse_openrouter_model(raw_vision)
+        self.assertIsNotNone(model)
+        assert model is not None
+        self.assertEqual(model.id, "qwen/qwen2.5-vl-72b-instruct")
+        self.assertTrue(model.supports_vision)
+        self.assertTrue(model.supports_tools)
+
 
 if __name__ == "__main__":
     unittest.main()

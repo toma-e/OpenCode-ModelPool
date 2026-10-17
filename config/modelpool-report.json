@@ -1,8 +1,8 @@
 {
   "version": "1.0",
-  "generated_at": "2026-10-14T16:57:52.217997+00:00",
+  "generated_at": "2026-10-17T15:46:39.189576+00:00",
   "metadata": {
-    "generator": "ModelScope",
+    "generator": "OpenCode-ModelPool",
     "total_agents": 4,
     "assigned_agents": 4,
     "unassigned_agents": 0
@@ -125,16 +125,16 @@
       "prefer_tier1": true,
       "estimated_monthly_cost": 0.0,
       "model": {
-        "id": "google/lyria-3-clip-preview",
+        "id": "google/gemma-4-26b-a4b-it:free",
         "provider": "google",
         "tier": "free_tier",
-        "context_window": 1048576,
-        "supports_tools": false,
+        "context_window": 262144,
+        "supports_tools": true,
         "cost_input_per_m": 0.0,
         "cost_output_per_m": 0.0,
         "total_cost_per_m": 0.0,
         "supports_vision": true,
-        "supports_reasoning": false
+        "supports_reasoning": true
       },
       "selection_status": "exact",
       "selection_reason": "Correspondance exacte avec les exigences."

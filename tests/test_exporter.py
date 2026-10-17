@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from src.exporter import (
+    build_modelpool_report_data,
     build_modelscope_report_data,
     build_opencode_config,
     format_opencode_model_id,
@@ -71,9 +72,11 @@ class TestExporter(unittest.TestCase):
         self.assertEqual(native_coder["mode"], "primary")
         self.assertEqual(native_coder["description"], "Agent de code")
 
-    def test_build_modelscope_report_data(self) -> None:
-        report = build_modelscope_report_data([self.assigned_result], [self.agent_req])
+    def test_build_modelpool_report_data(self) -> None:
+        self.assertIs(build_modelscope_report_data, build_modelpool_report_data)
+        report = build_modelpool_report_data([self.assigned_result], [self.agent_req])
         self.assertEqual(report["version"], "1.0")
+        self.assertEqual(report["metadata"]["generator"], "OpenCode-ModelPool")
         self.assertEqual(report["metadata"]["total_agents"], 1)
         self.assertEqual(report["metadata"]["assigned_agents"], 1)
         self.assertEqual(report["metadata"]["unassigned_agents"], 0)
@@ -91,7 +94,7 @@ class TestExporter(unittest.TestCase):
         self.assertIn("unknown_agent", config["agent"])
         self.assertTrue(config["agent"]["unknown_agent"]["disable"])
 
-        report = build_modelscope_report_data([self.unassigned_result], [])
+        report = build_modelpool_report_data([self.unassigned_result], [])
         self.assertEqual(report["metadata"]["assigned_agents"], 0)
         self.assertEqual(report["metadata"]["unassigned_agents"], 1)
         agent_entry = report["agents"]["unknown_agent"]
@@ -195,7 +198,7 @@ class TestExporter(unittest.TestCase):
         self.assertNotIn("agents", config)
         self.assertEqual(config["$schema"], "https://opencode.ai/config.json")
 
-        report = build_modelscope_report_data([self.assigned_result], [self.agent_req])
+        report = build_modelpool_report_data([self.assigned_result], [self.agent_req])
         self.assertIn("coder_agent", report["agents"])
         self.assertEqual(report["version"], "1.0")
 

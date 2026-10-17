@@ -56,7 +56,7 @@
       "description": "Agent d'architecture et de cadrage : analyse et élaboration de plans sans modification directe"
     },
     "explore": {
-      "model": "google/lyria-3-clip-preview",
+      "model": "google/gemma-4-26b-a4b-it:free",
       "mode": "subagent",
       "description": "Sous-agent d'exploration rapide : recherche de fichiers et lecture du codebase en lecture seule"
     },

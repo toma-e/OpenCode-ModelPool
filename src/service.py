@@ -27,7 +27,7 @@ except ImportError:
 
 from src.budget import AgentBudgetReport, FleetBudgetReport, simulate_fleet_budget
 from src.exporter import (
-    build_modelscope_report_data,
+    build_modelpool_report_data,
     build_opencode_config,
     parse_json_or_jsonc,
 )
@@ -268,7 +268,7 @@ class ApplicationService:
         self.access_path = access_path if access_path is not None else (base_dir / "data" / "provider_access.json")
         self.default_export_path = base_dir / DEFAULT_EXPORT_RELATIVE
         self._lock = threading.RLock()
-        self._lock_path = base_dir / "data" / ".modelscope.lock"
+        self._lock_path = base_dir / "data" / ".modelpool.lock"
 
     @contextlib.contextmanager
     def _file_lock(self) -> Iterator[None]:
@@ -666,9 +666,9 @@ class ApplicationService:
                 target_report_path = (
                     report_output_path
                     if report_output_path is not None
-                    else target_path.parent / "modelscope-report.json"
+                    else target_path.parent / "modelpool-report.json"
                 )
-                report_data = build_modelscope_report_data(report.results, report.agents)
+                report_data = build_modelpool_report_data(report.results, report.agents)
                 write_json_atomic(target_report_path, report_data)
 
                 exported = target_path.resolve()

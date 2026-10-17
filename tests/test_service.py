@@ -132,10 +132,11 @@ class TestService(unittest.TestCase):
             result = service.export_config()
             self.assertTrue(result.ok)
             self.assertTrue(service.default_export_path.exists())
-            report_path = service.default_export_path.parent / "modelscope-report.json"
+            report_path = service.default_export_path.parent / "modelpool-report.json"
             self.assertTrue(report_path.exists())
             loaded_report = json.loads(report_path.read_text(encoding="utf-8"))
             self.assertEqual(loaded_report["version"], "1.0")
+            self.assertEqual(loaded_report["metadata"]["generator"], "OpenCode-ModelPool")
             self.assertIn("agent", loaded_report["agents"])
 
     def test_export_config_merges_base_opencode_config_from_ressources(self) -> None:
@@ -207,11 +208,12 @@ class TestService(unittest.TestCase):
             self.assertIn("Validation échouée", result.message)
 
     def test_file_lock_mechanism(self) -> None:
-        """Vérifie que le verrou inter-processus crée le fichier .modelscope.lock et s'exécute sans erreur."""
+        """Vérifie que le verrou inter-processus crée le fichier .modelpool.lock et s'exécute sans erreur."""
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             write_valid_workspace(directory)
             service = ApplicationService(directory)
+            self.assertEqual(service._lock_path.name, ".modelpool.lock")
             # Test direct du contextmanager _file_lock
             with service._file_lock():
                 self.assertTrue(service._lock_path.exists())

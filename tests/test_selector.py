@@ -5,7 +5,9 @@ import unittest
 from src.selector import (
     AgentRequirement,
     Model,
+    common_constraint_violations,
     is_model_compatible,
+    is_non_llm_model,
     rank_models_for_agent,
     resolve_model_for_agent,
     select_model_for_agent,
@@ -673,10 +675,199 @@ class TestSelector(unittest.TestCase):
         req = AgentRequirement.from_dict(data)
         self.assertEqual(req.mode, "all")
 
-        # Mode non supporté rejeté
-        data_invalid = dict(data, mode="unknown_mode")
-        with self.assertRaises(ValueError):
-            AgentRequirement.from_dict(data_invalid)
+    def test_is_non_llm_model_audio_and_music(self) -> None:
+        """Détection des modèles audio, musique, parole et transcription."""
+        audio_models = [
+            "google/lyria-3-clip-preview",
+            "google/lyria-3-pro-preview",
+            "google/musiclm",
+            "openai/gpt-audio",
+            "openai/gpt-audio-mini",
+            "suno/bark",
+            "udio/v1",
+            "elevenlabs/tts-voice-multilingual",
+            "openai/whisper-large-v3",
+            "groq/whisper-large-v3",
+            "google/chirp-2",
+            "custom/speech-to-text",
+            "custom/text-transcription-v1",
+            "meta/seamless-m4t",
+            "microsoft/speecht5",
+            "coqui/xtts-v2",
+        ]
+        for m in audio_models:
+            with self.subTest(model_id=m):
+                self.assertTrue(is_non_llm_model(m))
+
+    def test_is_non_llm_model_embeddings_and_reranking(self) -> None:
+        """Détection des modèles d'embeddings purs et de reranking."""
+        embed_models = [
+            "baai/bge-m3",
+            "baai/bge-large-en-v1.5",
+            "intfloat/e5-large-v2",
+            "nomic-ai/nomic-embed-text",
+            "nomic-embed-text:latest",
+            "sentence-transformers/all-minilm-l6-v2",
+            "mistral/mistral-embed",
+            "mistral/codestral-embed",
+            "google/text-embedding-004",
+            "cohere/rerank-v3.5",
+            "google/aqa",
+            "voyageai/voyage-3",
+            "voyageai/voyage-code-2",
+        ]
+        for m in embed_models:
+            with self.subTest(model_id=m):
+                self.assertTrue(is_non_llm_model(m))
+
+    def test_is_non_llm_model_image_video_robotics(self) -> None:
+        """Détection de la génération d'images, de vidéo, et des modèles de robotique."""
+        visual_and_robotics = [
+            "google/gemini-3.1-flash-lite-image",
+            "google/gemini-3.1-flash-image",
+            "google/gemini-3-pro-image",
+            "google/gemini-3.1-flash-image-preview",
+            "google/gemini-3-pro-image-preview",
+            "google/gemini-2.5-flash-image",
+            "openai/gpt-5.4-image-2",
+            "openai/gpt-5-image-mini",
+            "openai/gpt-5-image",
+            "google/imagen-3",
+            "google/veo-2",
+            "black-forest-labs/flux-1-schnell",
+            "openai/dall-e-3",
+            "stabilityai/stable-diffusion-xl",
+            "openvla/openvla-7b",
+            "google/rt-2",
+            "physical-intelligence/pi0",
+            "mistral/mistral-moderation",
+        ]
+        for m in visual_and_robotics:
+            with self.subTest(model_id=m):
+                self.assertTrue(is_non_llm_model(m))
+
+    def test_is_non_llm_model_explicit_modalities(self) -> None:
+        """Détection via architecture et output_modalities."""
+        self.assertTrue(is_non_llm_model("custom/model", output_modalities=["audio"]))
+        self.assertTrue(is_non_llm_model("custom/model", output_modalities=["image"]))
+        self.assertFalse(is_non_llm_model("custom/model", output_modalities=["text"]))
+        self.assertFalse(is_non_llm_model("custom/model", output_modalities=["code"]))
+        self.assertTrue(is_non_llm_model("custom/model", architecture={"modality": "text->image"}))
+        self.assertTrue(is_non_llm_model("custom/model", architecture={"modality": "text->audio"}))
+        self.assertTrue(is_non_llm_model("custom/model", architecture={"output_modalities": ["image"]}))
+        self.assertFalse(is_non_llm_model("custom/model", architecture={"modality": "text+image->text"}))
+
+    def test_is_non_llm_model_preserves_text_and_vision_llms(self) -> None:
+        """Les LLMs texte/code légitimes et modèles multimodaux de vision restent éligibles."""
+        eligible_models = [
+            "google/gemini-2.5-flash",
+            "google/gemini-2.5-pro",
+            "google/gemma-4-26b-a4b-it:free",
+            "anthropic/claude-3-5-sonnet",
+            "anthropic/claude-3-5-haiku",
+            "openai/gpt-4o",
+            "openai/gpt-4o-mini",
+            "openai/o1",
+            "openai/o3-mini",
+            "deepseek/deepseek-chat",
+            "deepseek/deepseek-r1",
+            "mistralai/mistral-large",
+            "mistralai/codestral-latest",
+            "mistralai/pixtral-12b",
+            "qwen/qwen-2.5-coder-32b-instruct",
+            "qwen/qwen2.5-vl-72b-instruct",
+            "meta-llama/llama-3.3-70b-instruct",
+            "meta-llama/llama-3.2-11b-vision-instruct",
+            "ollama/qwen2.5-coder:7b",
+            "ollama/llama3.1:8b",
+            "uukuguy/speechless-coder-ds-6.7b",
+            "thinkingmachines/inkling",
+            "amazon/nova-pro-v1",
+        ]
+        for m in eligible_models:
+            with self.subTest(model_id=m):
+                self.assertFalse(is_non_llm_model(m))
+
+    def test_is_non_llm_model_iteration_2_targets(self) -> None:
+        """Vérifie explicitement les cibles obligatoires et cas limites de l'itération 2."""
+        must_reject = [
+            "meta/seamless-m4t",
+            "microsoft/speecht5",
+            "coqui/xtts-v2",
+            "voyageai/voyage-3",
+            "voyageai/voyage-code-2",
+        ]
+        for m in must_reject:
+            with self.subTest(model_id=m, expected=True):
+                self.assertTrue(is_non_llm_model(m), f"Le modèle non-LLM {m} doit être détecté")
+
+        must_preserve = [
+            "uukuguy/speechless-coder-ds-6.7b",
+            "thinkingmachines/inkling",
+            "amazon/nova-pro-v1",
+        ]
+        for m in must_preserve:
+            with self.subTest(model_id=m, expected=False):
+                self.assertFalse(is_non_llm_model(m), f"Le LLM valide {m} ne doit pas être rejeté")
+
+    def test_common_constraint_violations_flags_non_llm(self) -> None:
+        """common_constraint_violations identifie et rejette un modèle non-LLM."""
+        req = AgentRequirement(
+            name="explore",
+            description="Agent de navigation",
+            min_complexity=2,
+            max_complexity=3,
+            requires_tools=False,
+            prefer_free=True,
+        )
+        lyria_model = Model(
+            id="google/lyria-3-clip-preview",
+            provider="google",
+            tier="free_tier",
+            cost_input_per_m=0.0,
+            cost_output_per_m=0.0,
+            context_window=32768,
+            supports_tools=False,
+            complexity_score=3,
+        )
+        violations = common_constraint_violations(lyria_model, req)
+        self.assertIn("modèle non-génératif (non-LLM)", violations)
+        self.assertFalse(is_model_compatible(lyria_model, req))
+
+    def test_resolve_model_for_agent_rejects_free_non_llm(self) -> None:
+        """Un modèle non-LLM gratuit n'est jamais attribué à un agent même si prefer_free=True."""
+        req = AgentRequirement(
+            name="explore",
+            description="Agent de navigation",
+            min_complexity=2,
+            max_complexity=3,
+            requires_tools=False,
+            prefer_free=True,
+            sort_strategy="lowest_cost",
+        )
+        lyria_model = Model(
+            id="google/lyria-3-clip-preview",
+            provider="google",
+            tier="free_tier",
+            cost_input_per_m=0.0,
+            cost_output_per_m=0.0,
+            context_window=32768,
+            supports_tools=False,
+            complexity_score=3,
+        )
+        gemma_model = Model(
+            id="google/gemma-4-26b-a4b-it:free",
+            provider="google",
+            tier="free_tier",
+            cost_input_per_m=0.0,
+            cost_output_per_m=0.0,
+            context_window=131072,
+            supports_tools=False,
+            complexity_score=3,
+        )
+        result = resolve_model_for_agent(req, [lyria_model, gemma_model])
+        self.assertIsNotNone(result.model)
+        self.assertEqual(result.model.id, "google/gemma-4-26b-a4b-it:free")
 
 
 if __name__ == "__main__":

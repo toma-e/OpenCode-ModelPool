@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
-from src.selector import Model
+from src.selector import Model, is_non_llm_model
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/models"
 MAX_TIMESTAMPED_BACKUPS = 20
@@ -112,6 +112,15 @@ def parse_openrouter_model(raw: dict[str, Any]) -> Optional[Model]:
 
     model_id = raw.get("id")
     if not model_id or not isinstance(model_id, str):
+        return None
+
+    architecture = raw.get("architecture")
+    output_modalities = raw.get("output_modalities")
+    if is_non_llm_model(
+        model_id,
+        architecture=architecture if isinstance(architecture, dict) else None,
+        output_modalities=output_modalities if isinstance(output_modalities, list) else None,
+    ):
         return None
 
     # Extraction du fournisseur (préfixe avant le '/')

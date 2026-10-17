@@ -13,7 +13,7 @@ import urllib.request
 from typing import Any, List, Optional
 
 from src.fetcher import estimate_complexity_score
-from src.selector import Model
+from src.selector import Model, is_non_llm_model
 
 DEFAULT_OLLAMA_URL = "http://localhost:11434"
 
@@ -47,6 +47,8 @@ def parse_ollama_model(raw: dict[str, Any]) -> Optional[Model]:
     # Normalisation du model_id au format ollama/<nom>
     clean_name = name.strip()
     model_id = f"ollama/{clean_name}" if not clean_name.startswith("ollama/") else clean_name
+    if is_non_llm_model(clean_name) or is_non_llm_model(model_id):
+        return None
     name_lower = clean_name.lower()
 
     # Détection de la taille et complexité

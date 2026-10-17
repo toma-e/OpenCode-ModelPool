@@ -205,7 +205,7 @@ push et pull request.
 
 ---
 
-## 🤝 Collaboration Multi-Agents
+## 🤝 Collaboration Multi-Agents & Écosystème Google AI Pro
 
 Ce projet est conçu pour être développé et maintenu par plusieurs agents de code en parallèle :
 - **Cursor / Windsurf :** pilotés via [`.cursorrules`](.cursorrules)
@@ -213,5 +213,12 @@ Ce projet est conçu pour être développé et maintenu par plusieurs agents de 
 - **GitHub Copilot / OpenAI Codex :** piloté via [`.github/copilot-instructions.md`](.github/copilot-instructions.md)
 - **Mistral AI / Codestral :** piloté via [`MISTRAL.md`](MISTRAL.md)
 - **OpenCode, Antigravity, Aider & autres :** pilotés via [`AGENTS.md`](AGENTS.md)
+- **Jules (Google Labs) :** agent de codage autonome en cloud VM piloté via [`.jules/instructions.md`](.jules/instructions.md) et validé automatiquement par CI/CD ([`.github/workflows/jules-validation.yml`](.github/workflows/jules-validation.yml)).
 
-Consultez [AGENTS.md](AGENTS.md) pour la documentation complète d'onboarding, les invariants et l'architecture.
+### 🚀 Délégation Avancée Google AI Pro
+Pour enrichir ses capacités d'intelligence de marché sans alourdir le runtime Python standard :
+- **Gemini Deep Research :** benchmarks tarifaires multi-fournisseurs et surveillance des quotas ([`docs/google_ai_pro/deep_research/`](docs/google_ai_pro/deep_research/)).
+- **NotebookLM :** mémoire architecturale continue sans hallucination et radar de modèles ([`docs/google_ai_pro/notebooklm/`](docs/google_ai_pro/notebooklm/)).
+- **Jules (Google Labs) :** automatisation de la relecture de PR et résolution de bogues ([`docs/google_ai_pro/jules/`](docs/google_ai_pro/jules/)).
+
+Consultez [AGENTS.md](AGENTS.md) pour la documentation complète d'onboarding, les invariants et l'architecture générale, ainsi que le dossier [`docs/google_ai_pro/`](docs/google_ai_pro/).

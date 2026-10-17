@@ -197,7 +197,7 @@ class OpenCodeModelConfig:
 
 @dataclass(frozen=True)
 class OpenCodeAgentConfig:
-    """Configuration complète d'un agent OpenCode (vue rapport ModelScope)."""
+    """Configuration complète d'un agent OpenCode (vue rapport OpenCode-ModelPool)."""
 
     name: str
     description: str
@@ -217,11 +217,11 @@ class OpenCodeAgentConfig:
     selection_reason: str
 
 
-def build_modelscope_report_data(
+def build_modelpool_report_data(
     results: Sequence[SelectionResult],
     agents: Sequence[AgentRequirement],
 ) -> Dict[str, Any]:
-    """Construit le rapport d'analyse et de simulation ModelScope."""
+    """Construit le rapport d'analyse et de simulation OpenCode-ModelPool."""
     agents_by_name = {a.name: a for a in agents}
     fleet_budget = simulate_fleet_budget(results, agents)
     budget_by_agent = {r.agent_name: r for r in fleet_budget.agent_reports}
@@ -325,7 +325,7 @@ def build_modelscope_report_data(
         "version": "1.0",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "metadata": {
-            "generator": "ModelScope",
+            "generator": "OpenCode-ModelPool",
             "total_agents": len(results),
             "assigned_agents": assigned_count,
             "unassigned_agents": unassigned_count,
@@ -333,6 +333,10 @@ def build_modelscope_report_data(
         "budget_simulation": budget_summary,
         "agents": configured_agents,
     }
+
+
+# Alias de rétrocompatibilité
+build_modelscope_report_data = build_modelpool_report_data
 
 
 def build_opencode_config(
@@ -344,7 +348,7 @@ def build_opencode_config(
     """Construit le dictionnaire de configuration strictement conforme au schéma OpenCode.
 
     Ne produit que les clés autorisées par OpenCode (https://opencode.ai/config.json).
-    Les métadonnées de simulation de ModelScope sont exportées dans un rapport séparé.
+    Les métadonnées de simulation d'OpenCode-ModelPool sont exportées dans un rapport séparé.
 
     Args:
         results: Résultats de la sélection pour chaque agent.

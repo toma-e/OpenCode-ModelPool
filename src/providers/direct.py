@@ -14,7 +14,7 @@ import urllib.request
 from typing import Any, Dict, List, Optional
 
 from src.fetcher import estimate_complexity_score
-from src.selector import Model
+from src.selector import Model, is_non_llm_model
 
 # Tables de tarification de référence par million de tokens (prompt / completion en $)
 # Utilisées car plusieurs API directes (ex: Anthropic, Groq, Google) ne fournissent pas
@@ -88,6 +88,8 @@ def fetch_mistral_models(api_key: Optional[str] = None) -> List[Model]:
         raw_id = item.get("id")
         if not raw_id or not isinstance(raw_id, str):
             continue
+        if is_non_llm_model(raw_id) or is_non_llm_model(f"mistral/{raw_id}"):
+            continue
 
         model_id = f"mistral/{raw_id}"
         pricing = KNOWN_MODEL_PRICING.get(raw_id, (0.5, 1.5))
@@ -133,8 +135,8 @@ def fetch_groq_models(api_key: Optional[str] = None) -> List[Model]:
         raw_id = item.get("id")
         if not raw_id or not isinstance(raw_id, str):
             continue
-        if "whisper" in raw_id.lower() or "tts" in raw_id.lower():
-            continue  # Ignorer les modèles audio
+        if is_non_llm_model(raw_id) or is_non_llm_model(f"groq/{raw_id}"):
+            continue
 
         model_id = f"groq/{raw_id}"
         pricing = KNOWN_MODEL_PRICING.get(raw_id, (0.2, 0.4))
@@ -191,7 +193,7 @@ def fetch_google_models(api_key: Optional[str] = None) -> List[Model]:
         if not name or not isinstance(name, str):
             continue
         raw_id = name.replace("models/", "")
-        if "embedding" in raw_id.lower() or "aqa" in raw_id.lower():
+        if is_non_llm_model(raw_id) or is_non_llm_model(f"google/{raw_id}"):
             continue
         # Ne conserver que les modèles appelables en génération de texte (chat/agents)
         methods = item.get("supportedGenerationMethods")
@@ -247,6 +249,8 @@ def fetch_anthropic_models(api_key: Optional[str] = None) -> List[Model]:
         raw_id = item.get("id")
         if not raw_id or not isinstance(raw_id, str):
             continue
+        if is_non_llm_model(raw_id) or is_non_llm_model(f"anthropic/{raw_id}"):
+            continue
 
         model_id = f"anthropic/{raw_id}"
         pricing = KNOWN_MODEL_PRICING.get(raw_id, (3.0, 15.0))
@@ -284,6 +288,8 @@ def fetch_cerebras_models(api_key: Optional[str] = None) -> List[Model]:
     for item in data["data"]:
         raw_id = item.get("id")
         if not raw_id or not isinstance(raw_id, str):
+            continue
+        if is_non_llm_model(raw_id) or is_non_llm_model(f"cerebras/{raw_id}"):
             continue
 
         model_id = f"cerebras/{raw_id}"

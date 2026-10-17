@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "OpenCodeModelPoolBenchmarkOutput",
+  "description": "Schéma de validation des résultats de benchmark Gemini Deep Research pour intégration dans OpenCode-ModelPool (conforme à src/selector.py:Model).",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "id",
+      "provider",
+      "tier",
+      "cost_input_per_m",
+      "cost_output_per_m",
+      "context_window",
+      "supports_tools",
+      "complexity_score"
+    ],
+    "properties": {
+      "id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Identifiant unique du modèle (ex: 'google/gemini-2.5-flash', 'anthropic/claude-3.5-sonnet')."
+      },
+      "provider": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Nom canonique du fournisseur (ex: 'google', 'anthropic', 'openai', 'mistralai', 'groq', 'cerebras', 'openrouter')."
+      },
+      "tier": {
+        "type": "string",
+        "enum": ["free_tier", "pay_as_you_go"],
+        "description": "Niveau de tarification : 'free_tier' pour les modèles gratuits ou 'pay_as_you_go' pour la facturation à l'usage."
+      },
+      "cost_input_per_m": {
+        "type": "number",
+        "minimum": 0.0,
+        "description": "Coût des tokens d'entrée par million de tokens en USD ($/1M tokens). Nombre fini positif ou nul."
+      },
+      "cost_output_per_m": {
+        "type": "number",
+        "minimum": 0.0,
+        "description": "Coût des tokens de sortie par million de tokens en USD ($/1M tokens). Nombre fini positif ou nul."
+      },
+      "context_window": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Taille maximale de la fenêtre de contexte en nombre total de tokens."
+      },
+      "supports_tools": {
+        "type": "boolean",
+        "description": "Indique si le modèle supporte l'appel d'outils / function calling structuré."
+      },
+      "complexity_score": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 5,
+        "description": "Score d'aptitude et de complexité technique du modèle, échelonné de 1 (modèle léger) à 5 (modèle frontière)."
+      },
+      "supports_vision": {
+        "type": "boolean",
+        "default": false,
+        "description": "Indique si le modèle accepte les entrées d'images/schémas multimodaux."
+      },
+      "supports_reasoning": {
+        "type": "boolean",
+        "default": false,
+        "description": "Indique si le modèle dispose de capacités de réflexion / chaîne de pensée avancée (thinking/reasoning)."
+      },
+      "source_url": {
+        "type": "string",
+        "format": "uri",
+        "description": "URL de la documentation officielle ou grille tarifaire source ayant servi à la vérification."
+      },
+      "notes": {
+        "type": "string",
+        "description": "Notes techniques ou conditions particulières (ex: remises de prompt caching, quotas)."
+      }
+    },
+    "additionalProperties": false
+  }
+}
