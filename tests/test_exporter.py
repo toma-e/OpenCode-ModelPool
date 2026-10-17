@@ -139,6 +139,77 @@ class TestExporter(unittest.TestCase):
         self.assertEqual(complex_parsed["regex"], "foo, bar, } baz")
         self.assertEqual(complex_parsed["tags"], ["a", "b"])
 
+    def test_parse_json_or_jsonc_edge_cases(self) -> None:
+        """Tests approfondis des cas limites et d'erreur pour parse_json_or_jsonc."""
+        # 1. Commentaires mono-ligne avec retours chariot style Windows (\r\n) et sans saut de ligne final
+        windows_comments = "{\r\n// comment 1\r\n\"a\": 1 // comment at end\r\n}"
+        parsed_win = parse_json_or_jsonc(windows_comments)
+        self.assertEqual(parsed_win, {"a": 1})
+
+        # 2. Commentaires multi-lignes imbriqués dans différentes structures
+        multiline_comments = """
+        {
+            /* comment 1 */ "key1": /* comment 2 */ "val1",
+            "key2": [1, /* comment 3 */ 2/* comment 4 */]
+        }
+        """
+        parsed_multi = parse_json_or_jsonc(multiline_comments)
+        self.assertEqual(parsed_multi, {"key1": "val1", "key2": [1, 2]})
+
+        # 3. Chaînes littérales avec caractères d'échappement (\" et \\) et faux commentaires
+        escaped_strings = r"""
+        {
+            "str_with_quotes": "Hello \"World\" // not a comment",
+            "str_with_multiline": "/* not a comment */",
+            "str_with_escaped_slash": "C:\\path\\to\\file"
+        }
+        """
+        parsed_escaped = parse_json_or_jsonc(escaped_strings)
+        self.assertEqual(parsed_escaped["str_with_quotes"], 'Hello "World" // not a comment')
+        self.assertEqual(parsed_escaped["str_with_multiline"], "/* not a comment */")
+        self.assertEqual(parsed_escaped["str_with_escaped_slash"], "C:\\path\\to\\file")
+
+        # 4. Virgules traînantes multiples avec espaces, tabulations, sauts de ligne
+        trailing_commas = """
+        {
+            "array": [
+                "item1",
+                "item2" ,
+            ]  ,
+            "nested": {
+                "a": 100 ,
+            } ,
+        }
+        """
+        parsed_trailing = parse_json_or_jsonc(trailing_commas)
+        self.assertEqual(parsed_trailing, {"array": ["item1", "item2"], "nested": {"a": 100}})
+
+        # 5. Validation de la racine : tout type non-dict (tableau, nombre, chaîne, bool, null) doit lever ValueError
+        non_dict_roots = [
+            '["a", "b"]',
+            '"just a string"',
+            '123.45',
+            'true',
+            'null',
+        ]
+        for item in non_dict_roots:
+            with self.subTest(root=item):
+                with self.assertRaises(ValueError) as ctx:
+                    parse_json_or_jsonc(item)
+                self.assertIn("Le document JSON(C) doit avoir un objet comme racine.", str(ctx.exception))
+
+        # 6. Syntaxe JSON invalide soulevant un ValueError avec message informatif
+        invalid_json_inputs = [
+            "{ key: 'no quotes' }",
+            "{ \"unclosed\": \"string }",
+            "{ \"a\": 1, }extra",
+        ]
+        for invalid in invalid_json_inputs:
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError) as ctx:
+                    parse_json_or_jsonc(invalid)
+                self.assertIn("Impossible de parser le document JSON(C)", str(ctx.exception))
+
     def test_build_opencode_config_with_base_config(self) -> None:
         base = {
             "model": "openrouter/free",
