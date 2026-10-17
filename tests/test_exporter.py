@@ -1,9 +1,7 @@
 """Tests unitaires pour le module d'export OpenCode exporter.py."""
 
 import json
-import tempfile
 import unittest
-from pathlib import Path
 
 from src.exporter import (
     build_modelpool_report_data,
@@ -120,12 +118,6 @@ class TestExporter(unittest.TestCase):
         self.assertEqual(parsed["model"], "openrouter/free")
         self.assertEqual(parsed["permission"]["read"]["*"], "allow")
 
-        with self.assertRaises(ValueError):
-            parse_json_or_jsonc("{ invalid json")
-
-        with self.assertRaises(ValueError):
-            parse_json_or_jsonc('["not", "a", "dict"]')
-
         # Cas critique : URL avec double slash et chaînes avec virgules
         complex_sample = """
         {
@@ -138,6 +130,44 @@ class TestExporter(unittest.TestCase):
         self.assertEqual(complex_parsed["url"], "https://example.com/api//v1")
         self.assertEqual(complex_parsed["regex"], "foo, bar, } baz")
         self.assertEqual(complex_parsed["tags"], ["a", "b"])
+
+    def test_parse_json_or_jsonc_syntax_error(self) -> None:
+        """Vérifie le comportement en cas d'erreur de syntaxe JSON."""
+        invalid_inputs = [
+            "{ invalid json",
+            '{"key": "value", ,}',
+            "{",
+            '{"unclosed": "string}',
+            '{"key": }',
+        ]
+        for invalid_json in invalid_inputs:
+            with self.subTest(invalid_json=invalid_json):
+                with self.assertRaises(ValueError) as ctx:
+                    parse_json_or_jsonc(invalid_json)
+                self.assertTrue(
+                    str(ctx.exception).startswith("Impossible de parser le document JSON(C) : ")
+                )
+                self.assertIsInstance(ctx.exception.__cause__, json.JSONDecodeError)
+
+    def test_parse_json_or_jsonc_non_dict_root(self) -> None:
+        """Vérifie qu'un document JSON valide dont la racine n'est pas un dictionnaire lève une ValueError."""
+        non_dict_inputs = [
+            '["not", "a", "dict"]',
+            '"just a string"',
+            "123",
+            "45.67",
+            "true",
+            "false",
+            "null",
+        ]
+        for non_dict in non_dict_inputs:
+            with self.subTest(non_dict=non_dict):
+                with self.assertRaises(ValueError) as ctx:
+                    parse_json_or_jsonc(non_dict)
+                self.assertEqual(
+                    str(ctx.exception),
+                    "Le document JSON(C) doit avoir un objet comme racine.",
+                )
 
     def test_build_opencode_config_with_base_config(self) -> None:
         base = {
@@ -163,7 +193,6 @@ class TestExporter(unittest.TestCase):
 
     def test_format_opencode_model_id_preserves_custom_provider(self) -> None:
         """Vérifie que les identifiants de modèles de fournisseurs locaux déclarés ne sont pas forcés vers openrouter."""
-        from src.exporter import format_opencode_model_id
 
         base_config = {
             "provider": {
