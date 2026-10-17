@@ -5,13 +5,20 @@ mais il ne dit pas ce qu'une clé donnée peut réellement appeler. Ce module in
 l'endpoint « liste des modèles » de chaque fournisseur direct avec la clé détectée et
 met le résultat en cache dans ``data/provider_access.json``.
 
+Pour éviter d'attribuer des modèles qui renvoient un 429 (rate limit / quota nul)
+ou 401/402/403 dès la première requête, une micro-requête de test (chat completion /
+generateContent avec 1 token) est effectuée en parallèle pour chaque modèle découvert.
+
 Le cache est lié à l'empreinte masquée de la clé : si la clé change, l'accès est
 considéré comme non vérifié jusqu'au prochain rafraîchissement.
 """
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,6 +33,8 @@ STATUS_OK = "ok"
 STATUS_EMPTY = "empty"   # requête aboutie mais aucun modèle (clé invalide, droits insuffisants...)
 STATUS_ERROR = "error"   # exception inattendue lors de l'interrogation
 
+_PROBE_USER_AGENT = "OpenCode-ModelPool/1.0"
+
 
 @dataclass(frozen=True)
 class ProviderAccess:
@@ -39,8 +48,112 @@ class ProviderAccess:
     error: Optional[str] = None
 
 
-def _strip_provider_prefix(model_id: str) -> str:
-    return model_id.split("/", 1)[1] if "/" in model_id else model_id
+def _strip_provider_prefix(model_id: str, provider: Optional[str] = None) -> str:
+    """Retire uniquement le préfixe propre au provider (ex: 'groq/openai/gpt-oss' -> 'openai/gpt-oss')."""
+    if not model_id:
+        return model_id
+    if provider:
+        p = provider.lower()
+        aliases = {"mistralai": "mistral", "google": "google", "groq": "groq", "cerebras": "cerebras", "anthropic": "anthropic"}
+        prefixes = {p, aliases.get(p, p)}
+        for prefix in prefixes:
+            if model_id.startswith(f"{prefix}/"):
+                return model_id[len(prefix) + 1:]
+    # Fallback générique si le premier segment est un nom de connecteur connu
+    known = {"groq", "mistral", "mistralai", "cerebras", "google", "anthropic", "ollama", "openrouter"}
+    if "/" in model_id:
+        first, rest = model_id.split("/", 1)
+        if first.lower() in known:
+            return rest
+    return model_id
+
+
+def test_model_live_availability(
+    provider: str,
+    raw_model_id: str,
+    api_key: str,
+    timeout: float = 3.5,
+) -> bool:
+    """Envoie une micro-requête minimale pour vérifier si le modèle répond 200 OK.
+
+    Élimine d'office les modèles soumis à un 429 (rate limit permanent / quota nul),
+    403 (palier non autorisé) ou 404/402.
+    """
+    clean_id = _strip_provider_prefix(raw_model_id, provider=provider)
+
+    # 1. Fournisseurs OpenAI-compatibles (Mistral, Groq, Cerebras)
+    if provider in {"mistralai", "mistral", "groq", "cerebras"}:
+        if provider in {"mistralai", "mistral"}:
+            url = "https://api.mistral.ai/v1/chat/completions"
+        elif provider == "groq":
+            url = "https://api.groq.com/openai/v1/chat/completions"
+        else:
+            url = "https://api.cerebras.ai/v1/chat/completions"
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": _PROBE_USER_AGENT,
+        }
+        payload = json.dumps({
+            "model": clean_id,
+            "messages": [{"role": "user", "content": "ping"}],
+            "max_tokens": 1,
+        }).encode("utf-8")
+
+        req = urllib.request.Request(url, data=payload, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return resp.status == 200
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError):
+            return False
+
+    # 2. Google AI Studio (Gemini v1beta)
+    if provider == "google":
+        url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{clean_id}:generateContent?key={api_key}"
+        )
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": _PROBE_USER_AGENT,
+        }
+        payload = json.dumps({
+            "contents": [{"parts": [{"text": "ping"}]}],
+            "generationConfig": {"maxOutputTokens": 1},
+        }).encode("utf-8")
+
+        req = urllib.request.Request(url, data=payload, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return resp.status == 200
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError):
+            return False
+
+    # 3. Anthropic
+    if provider == "anthropic":
+        url = "https://api.anthropic.com/v1/messages"
+        headers = {
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+            "User-Agent": _PROBE_USER_AGENT,
+        }
+        payload = json.dumps({
+            "model": clean_id,
+            "max_tokens": 1,
+            "messages": [{"role": "user", "content": "ping"}],
+        }).encode("utf-8")
+
+        req = urllib.request.Request(url, data=payload, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return resp.status == 200
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError):
+            return False
+
+    # Fournisseur non géré pour la micro-requête : on valide par défaut
+    return True
 
 
 def probe_provider_access(
@@ -48,8 +161,9 @@ def probe_provider_access(
     project_dir: Optional[Path] = None,
     fetchers: Optional[Mapping[str, Callable[..., List[Model]]]] = None,
     key_resolver: Callable[..., Optional[str]] = get_provider_api_key,
+    verify_live_call: bool = True,
 ) -> Dict[str, ProviderAccess]:
-    """Interroge chaque fournisseur direct disposant d'une clé et liste ses modèles accessibles."""
+    """Interroge chaque fournisseur direct et filtre les modèles opérationnels en direct."""
     if fetchers is None:
         from src.providers.direct import DIRECT_FETCHERS
 
@@ -69,7 +183,28 @@ def probe_provider_access(
         except Exception as error:  # noqa: BLE001 - un connecteur défaillant ne doit pas bloquer les autres
             results[provider] = ProviderAccess(provider, cred.masked_key, STATUS_ERROR, (), now, str(error))
             continue
-        ids = tuple(sorted({_strip_provider_prefix(m.id) for m in models}))
+
+        raw_ids = tuple(sorted({_strip_provider_prefix(m.id, provider=provider) for m in models}))
+
+        # Micro-requête de test en parallèle si demandée pour éliminer 429 / 403
+        if verify_live_call and raw_ids:
+            verified_ids: List[str] = []
+            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+                future_to_id = {
+                    executor.submit(test_model_live_availability, provider, mid, key): mid
+                    for mid in raw_ids
+                }
+                for future in concurrent.futures.as_completed(future_to_id):
+                    mid = future_to_id[future]
+                    try:
+                        if future.result():
+                            verified_ids.append(mid)
+                    except Exception:  # noqa: BLE001
+                        pass
+            ids = tuple(sorted(verified_ids))
+        else:
+            ids = raw_ids
+
         status = STATUS_OK if ids else STATUS_EMPTY
         results[provider] = ProviderAccess(provider, cred.masked_key, status, ids, now)
     return results

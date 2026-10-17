@@ -46,22 +46,22 @@
   },
   "agent": {
     "build": {
-      "model": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+      "model": "groq/openai/gpt-oss-120b",
       "mode": "primary",
       "description": "Agent de développement principal : écriture de code, refactoring et exécution de commandes"
     },
     "plan": {
-      "model": "openrouter/qwen/qwen3.5-35b-a3b",
+      "model": "groq/openai/gpt-oss-120b",
       "mode": "primary",
       "description": "Agent d'architecture et de cadrage : analyse et élaboration de plans sans modification directe"
     },
     "explore": {
-      "model": "openrouter/thinkingmachines/inkling-small:free",
+      "model": "ollama/qwen3.5:9b",
       "mode": "subagent",
       "description": "Sous-agent d'exploration rapide : recherche de fichiers et lecture du codebase en lecture seule"
     },
     "general": {
-      "model": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+      "model": "ollama/qwen3.5:9b",
       "mode": "subagent",
       "description": "Sous-agent polyvalent : exécution de tâches déléguées et recherches complexes"
     }

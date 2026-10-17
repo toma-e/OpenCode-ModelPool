@@ -51,6 +51,7 @@ class TestProviderAccess(unittest.TestCase):
             creds,
             fetchers={"google": mock_fetcher},
             key_resolver=lambda prov, project_dir=None: "fake-key",
+            verify_live_call=False,
         )
 
         self.assertIn("google", results)
@@ -70,6 +71,7 @@ class TestProviderAccess(unittest.TestCase):
             creds,
             fetchers={"google": mock_fetcher},
             key_resolver=lambda prov, project_dir=None: "fake-key",
+            verify_live_call=False,
         )
 
         self.assertIn("google", results)
@@ -149,3 +151,18 @@ class TestProviderAccess(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_live_availability_200_and_429(self) -> None:
+        from unittest.mock import patch
+        import urllib.error
+        from src.providers.access import test_model_live_availability
+
+        with patch("urllib.request.urlopen") as mock_urlopen:
+            mock_resp = MagicMock()
+            mock_resp.status = 200
+            mock_urlopen.return_value.__enter__.return_value = mock_resp
+            self.assertTrue(test_model_live_availability("mistralai", "codestral-latest", "key"))
+
+        with patch("urllib.request.urlopen") as mock_urlopen:
+            mock_urlopen.side_effect = urllib.error.HTTPError("url", 429, "Rate Limit", {}, None)
+            self.assertFalse(test_model_live_availability("mistralai", "mistral-medium-3-5", "key"))

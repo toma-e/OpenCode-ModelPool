@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generated_at": "2026-10-17T16:50:40.745748+00:00",
+  "generated_at": "2026-10-17T17:55:00.130474+00:00",
   "metadata": {
     "generator": "OpenCode-ModelPool",
     "total_agents": 4,
@@ -8,25 +8,25 @@
     "unassigned_agents": 0
   },
   "budget_simulation": {
-    "total_estimated_monthly_cost": 0.32,
+    "total_estimated_monthly_cost": 0.765,
     "total_estimated_tokens": 4400000,
-    "estimated_free_tier_savings": 1.7,
-    "has_warnings": true,
+    "estimated_free_tier_savings": 0.7,
+    "has_warnings": false,
     "reports": [
       {
         "agent": "build",
-        "monthly_cost": 0.0,
-        "input_cost": 0.0,
-        "output_cost": 0.0,
+        "monthly_cost": 0.525,
+        "input_cost": 0.225,
+        "output_cost": 0.3,
         "max_budget": 15.0,
         "budget_exceeded": false,
-        "quota_warning": "Volume estimé (2,000,000 tokens) élevé pour un free_tier. Risque d'atteinte des limites de débit (RPM/TPM)."
+        "quota_warning": null
       },
       {
         "agent": "plan",
-        "monthly_cost": 0.32,
+        "monthly_cost": 0.24,
         "input_cost": 0.12,
-        "output_cost": 0.2,
+        "output_cost": 0.12,
         "max_budget": 10.0,
         "budget_exceeded": false,
         "quota_warning": null
@@ -64,22 +64,25 @@
       "allow_free": true,
       "requires_vision": false,
       "requires_reasoning": true,
-      "prefer_tier1": false,
-      "estimated_monthly_cost": 0.0,
+      "prefer_tier1": true,
+      "estimated_monthly_cost": 0.525,
       "model": {
-        "id": "nvidia/nemotron-3-ultra-550b-a55b:free",
-        "provider": "nvidia",
-        "tier": "free_tier",
-        "context_window": 1000000,
+        "id": "groq/openai/gpt-oss-120b",
+        "provider": "openai",
+        "tier": "pay_as_you_go",
+        "context_window": 131072,
         "supports_tools": true,
-        "cost_input_per_m": 0.0,
-        "cost_output_per_m": 0.0,
-        "total_cost_per_m": 0.0,
+        "cost_input_per_m": 0.15,
+        "cost_output_per_m": 0.6,
+        "total_cost_per_m": 0.75,
         "supports_vision": false,
         "supports_reasoning": true
       },
       "selection_status": "exact",
-      "selection_reason": "Correspondance exacte avec les exigences."
+      "selection_reason": "Correspondance exacte avec les exigences.",
+      "fallback_chain": [
+        "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
+      ]
     },
     "plan": {
       "name": "plan",
@@ -91,24 +94,27 @@
       "max_monthly_budget": 10.0,
       "sort_strategy": "lowest_cost",
       "allow_free": true,
-      "requires_vision": true,
+      "requires_vision": false,
       "requires_reasoning": true,
-      "prefer_tier1": false,
-      "estimated_monthly_cost": 0.32,
+      "prefer_tier1": true,
+      "estimated_monthly_cost": 0.24,
       "model": {
-        "id": "qwen/qwen3.5-35b-a3b",
-        "provider": "qwen",
+        "id": "groq/openai/gpt-oss-120b",
+        "provider": "openai",
         "tier": "pay_as_you_go",
-        "context_window": 262144,
+        "context_window": 131072,
         "supports_tools": true,
         "cost_input_per_m": 0.15,
-        "cost_output_per_m": 1.0,
-        "total_cost_per_m": 1.15,
-        "supports_vision": true,
+        "cost_output_per_m": 0.6,
+        "total_cost_per_m": 0.75,
+        "supports_vision": false,
         "supports_reasoning": true
       },
       "selection_status": "exact",
-      "selection_reason": "Correspondance exacte avec les exigences."
+      "selection_reason": "Correspondance exacte avec les exigences.",
+      "fallback_chain": [
+        "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
+      ]
     },
     "explore": {
       "name": "explore",
@@ -122,13 +128,13 @@
       "allow_free": true,
       "requires_vision": false,
       "requires_reasoning": false,
-      "prefer_tier1": false,
+      "prefer_tier1": true,
       "estimated_monthly_cost": 0.0,
       "model": {
-        "id": "thinkingmachines/inkling-small:free",
-        "provider": "thinkingmachines",
+        "id": "ollama/qwen3.5:9b",
+        "provider": "ollama",
         "tier": "free_tier",
-        "context_window": 1048576,
+        "context_window": 262144,
         "supports_tools": true,
         "cost_input_per_m": 0.0,
         "cost_output_per_m": 0.0,
@@ -137,7 +143,12 @@
         "supports_reasoning": true
       },
       "selection_status": "exact",
-      "selection_reason": "Correspondance exacte avec les exigences."
+      "selection_reason": "Correspondance exacte avec les exigences.",
+      "fallback_chain": [
+        "groq/openai/gpt-oss-20b",
+        "mistral/ministral-3b-latest",
+        "google/gemma-4-26b-a4b-it"
+      ]
     },
     "general": {
       "name": "general",
@@ -151,22 +162,27 @@
       "allow_free": true,
       "requires_vision": false,
       "requires_reasoning": true,
-      "prefer_tier1": false,
+      "prefer_tier1": true,
       "estimated_monthly_cost": 0.0,
       "model": {
-        "id": "nvidia/nemotron-3-ultra-550b-a55b:free",
-        "provider": "nvidia",
+        "id": "ollama/qwen3.5:9b",
+        "provider": "ollama",
         "tier": "free_tier",
-        "context_window": 1000000,
+        "context_window": 262144,
         "supports_tools": true,
         "cost_input_per_m": 0.0,
         "cost_output_per_m": 0.0,
         "total_cost_per_m": 0.0,
-        "supports_vision": false,
+        "supports_vision": true,
         "supports_reasoning": true
       },
       "selection_status": "exact",
-      "selection_reason": "Correspondance exacte avec les exigences."
+      "selection_reason": "Correspondance exacte avec les exigences.",
+      "fallback_chain": [
+        "groq/openai/gpt-oss-20b",
+        "google/gemma-4-26b-a4b-it",
+        "openrouter/google/gemma-4-31b-it:free"
+      ]
     }
   }
 }
