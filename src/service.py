@@ -9,9 +9,9 @@ from __future__ import annotations
 import contextlib
 import json
 import threading
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any, Dict, Iterator, Mapping, Optional
 
 from datetime import datetime, timezone
 
@@ -41,7 +41,6 @@ from src.fetcher import (
 from src.providers.detector import (
     ProviderCredentials,
     detect_provider_credentials,
-    get_available_provider_names,
 )
 from src.providers.ollama import get_ollama_models
 from src.providers.access import (
@@ -433,11 +432,12 @@ class ApplicationService:
 
         # Chaîne de repli par agent (limites de débit / quotas) : modèles suivants sur des canaux distincts
         fallback_chains: dict[str, list[str]] = {}
-        for res, target in zip(results, execution_targets):
-            if res.model is None or target is None:
+        for res, target_opt in zip(results, execution_targets):
+            if res.model is None or target_opt is None:
                 continue
-            seen_channels = {target.channel_provider}
-            seen_ids = {target.formatted_model_id}
+            target_val: ExecutionTarget = target_opt
+            seen_channels = {target_val.channel_provider}
+            seen_ids = {target_val.formatted_model_id}
             chain: list[str] = []
             for candidate in res.candidates[1:]:
                 cand_target = _route(candidate)
@@ -699,15 +699,14 @@ class ApplicationService:
                 )
                 target_path = self.resolve_export_path(path)
                 # L'identifiant exporté est celui du canal retenu (ex: mistral/..., google/...)
-                export_results = [
-                    replace(res, model=replace(res.model, id=target.formatted_model_id))
-                    if res.model is not None and target is not None
-                    else res
-                    for res, target in zip(
-                        report.results,
-                        list(report.execution_targets) + [None] * len(report.results),
-                    )
-                ]
+                targets: list[Optional[ExecutionTarget]] = list(report.execution_targets) + [None] * len(report.results)
+                export_results: list[SelectionResult] = []
+                for res, target in zip(report.results, targets):
+                    if res.model is not None and target is not None:
+                        updated_model = replace(res.model, id=target.formatted_model_id)
+                        export_results.append(replace(res, model=updated_model))
+                    else:
+                        export_results.append(res)
                 config_data = build_opencode_config(
                     export_results,
                     report.agents,
