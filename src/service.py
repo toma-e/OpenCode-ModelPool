@@ -400,13 +400,13 @@ class ApplicationService:
 
         for res in results:
             if res.model:
-                target = _route(res.model)
-                execution_targets.append(target)
+                route_target = _route(res.model)
+                execution_targets.append(route_target)
                 # Si le modèle est dérouté sur Ollama local, ajuster le coût à 0.0 pour le budget
                 effective_model = res.model
-                if target.is_local:
+                if route_target.is_local:
                     effective_model = Model(
-                        id=target.formatted_model_id,
+                        id=route_target.formatted_model_id,
                         provider="ollama",
                         tier="free_tier",
                         cost_input_per_m=0.0,
@@ -440,6 +440,8 @@ class ApplicationService:
             chain: list[str] = []
             for candidate in res.candidates[1:]:
                 cand_target = _route(candidate)
+                if cand_target is None:
+                    continue
                 if cand_target.channel_provider in seen_channels or cand_target.formatted_model_id in seen_ids:
                     continue
                 seen_channels.add(cand_target.channel_provider)
