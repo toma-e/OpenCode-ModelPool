@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass
-from typing import Any, Optional, Sequence
+from typing import Any, Mapping, Optional, Sequence
 
 
 # Fournisseurs de référence (Tier 1) mondialement reconnus pour la qualité de code et d'ingénierie
@@ -345,12 +345,22 @@ def _parse_models(models: Sequence[Model | dict[str, Any]]) -> list[Model]:
     return [model if isinstance(model, Model) else Model.from_dict(model) for model in models]
 
 
-def rank_models_for_agent(agent_req: AgentRequirement | dict[str, Any], models: Sequence[Model | dict[str, Any]], allow_fallback: bool = False) -> list[Model]:
-    """Classe les modèles compatibles, puis les surclassements si demandé selon sort_strategy."""
+def rank_models_for_agent(agent_req: AgentRequirement | dict[str, Any], models: Sequence[Model | dict[str, Any]], allow_fallback: bool = False, channel_rank: Optional[Mapping[str, int]] = None) -> list[Model]:
+    """Classe les modèles compatibles, puis les surclassements si demandé selon sort_strategy.
+
+    ``channel_rank`` (optionnel, fonction pure) associe un id de modèle au rang de son canal
+    d'exécution dans la priorité des fournisseurs (0 = le plus prioritaire). Il prime sur tout
+    autre critère de tri : les canaux prioritaires (ex: crédits gratuits Mistral/Google) sont
+    épuisés avant les canaux suivants.
+    """
     req, parsed_models = _parse_requirement(agent_req), _parse_models(models)
     exact = [model for model in parsed_models if is_model_compatible(model, req)]
 
     def key(model: Model, fallback: bool = False) -> tuple[Any, ...]:
+        rank = channel_rank.get(model.id, 10**6) if channel_rank else 0
+        return (rank,) + base_key(model, fallback)
+
+    def base_key(model: Model, fallback: bool = False) -> tuple[Any, ...]:
         free_penalty = 0 if req.prefer_free and model.is_free else int(req.prefer_free)
         # Priorité aux fournisseurs reconnus de référence (Tier 1) pour éviter les modèles de niche instables
         is_tier1 = model.provider.lower() in TIER1_PROVIDERS or model.provider.lower().lstrip("~") in TIER1_PROVIDERS
@@ -405,7 +415,7 @@ def rank_models_for_agent(agent_req: AgentRequirement | dict[str, Any], models: 
     return sorted(fallback, key=lambda model: key(model, fallback=True))
 
 
-def resolve_model_for_agent(agent_req: AgentRequirement | dict[str, Any], models: Sequence[Model | dict[str, Any]], allow_fallback: bool = True) -> SelectionResult:
+def resolve_model_for_agent(agent_req: AgentRequirement | dict[str, Any], models: Sequence[Model | dict[str, Any]], allow_fallback: bool = True, channel_rank: Optional[Mapping[str, int]] = None) -> SelectionResult:
     """Attribue le meilleur modèle, avec override manuel documenté."""
     req, parsed_models = _parse_requirement(agent_req), _parse_models(models)
     if req.force_model:
@@ -417,12 +427,12 @@ def resolve_model_for_agent(agent_req: AgentRequirement | dict[str, Any], models
             warning = f" Contraintes contournées : {', '.join(violations)}." if violations else ""
             return SelectionResult(req.name, matching, False, [matching], f"Modèle imposé manuellement ({req.force_model}).{warning}")
         return SelectionResult(req.name, None, False, [], f"Modèle imposé '{req.force_model}' introuvable dans le catalogue.")
-    exact = rank_models_for_agent(req, parsed_models)
+    exact = rank_models_for_agent(req, parsed_models, channel_rank=channel_rank)
     strategy_suffix = f" (stratégie: {req.sort_strategy})" if req.sort_strategy != "lowest_cost" else ""
     if exact:
         return SelectionResult(req.name, exact[0], False, exact, f"Correspondance exacte avec les exigences{strategy_suffix}.")
     if allow_fallback:
-        fallback = rank_models_for_agent(req, parsed_models, allow_fallback=True)
+        fallback = rank_models_for_agent(req, parsed_models, allow_fallback=True, channel_rank=channel_rank)
         if fallback:
             chosen = fallback[0]
             return SelectionResult(req.name, chosen, True, fallback, f"Surclassement automatique (fallback) : aucun modèle dans la plage [{req.min_complexity}-{req.max_complexity}], modèle de complexité {chosen.complexity_score} sélectionné{strategy_suffix}.")

@@ -220,6 +220,7 @@ class OpenCodeAgentConfig:
 def build_modelpool_report_data(
     results: Sequence[SelectionResult],
     agents: Sequence[AgentRequirement],
+    fallback_chains: Optional[Dict[str, List[str]]] = None,
 ) -> Dict[str, Any]:
     """Construit le rapport d'analyse et de simulation OpenCode-ModelPool."""
     agents_by_name = {a.name: a for a in agents}
@@ -300,7 +301,10 @@ def build_modelpool_report_data(
                 selection_reason=res.reason,
             )
 
-        configured_agents[res.agent_name] = asdict(agent_conf)
+        agent_dict = asdict(agent_conf)
+        # Chaîne de repli ordonnée (limites de débit / quotas) pour les plugins OpenCode de bascule
+        agent_dict["fallback_chain"] = list((fallback_chains or {}).get(res.agent_name, []))
+        configured_agents[res.agent_name] = agent_dict
 
     budget_summary = {
         "total_estimated_monthly_cost": fleet_budget.total_monthly_cost,

@@ -62,6 +62,8 @@ def _http_get_json(
     timeout: float = 5.0,
 ) -> Optional[dict[str, Any]]:
     """Exécute une requête HTTP GET sécurisée avec la bibliothèque standard."""
+    # Cloudflare (Groq, Cerebras) rejette le User-Agent par défaut de urllib (erreur 1010 -> 403)
+    headers = {"User-Agent": "OpenCode-ModelPool/1.0", **headers}
     req = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:

@@ -9,7 +9,7 @@ from __future__ import annotations
 import contextlib
 import json
 import threading
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any, Iterator, Optional
 
@@ -54,6 +54,7 @@ from src.providers.access import (
 from src.providers.router import (
     DEFAULT_PROVIDER_PRIORITY,
     DIRECT_CHANNELS,
+    PROVIDER_ALIASES,
     ExecutionTarget,
     resolve_model_execution_target,
 )
@@ -80,6 +81,7 @@ class FleetReport:
     diagnostics: list[str]
     provider_priority: list[str] = field(default_factory=lambda: list(DEFAULT_PROVIDER_PRIORITY))
     execution_targets: list[Optional[ExecutionTarget]] = field(default_factory=list)
+    fallback_chains: dict[str, list[str]] = field(default_factory=dict)
     # {fournisseur: {"verified": bool, "model_count": int, "checked_at": str|None}}
     access_summary: dict[str, dict[str, Any]] = field(default_factory=dict)
 
@@ -252,6 +254,7 @@ def serialize_report(report: FleetReport) -> dict[str, Any]:
             "has_warnings": report.budget.has_budget_warnings,
         },
         "provider_priority": list(report.provider_priority),
+        "fallback_chains": report.fallback_chains,
         "access_summary": report.access_summary,
         "assignments": assignments,
         "diagnostics": list(report.diagnostics),
@@ -349,14 +352,26 @@ class ApplicationService:
         diagnostics.extend(access_diagnostics)
         access_summary = self._build_access_summary(creds, cached_access, direct_access)
 
+        route_cache: dict[str, ExecutionTarget] = {}
+
         def _route(model: Model) -> ExecutionTarget:
-            return resolve_model_execution_target(
-                reference_model=model,
-                provider_priority=priority,
-                credentials=creds,
-                ollama_models=ollama_models,
-                direct_access=direct_access,
-            )
+            cached = route_cache.get(model.id)
+            if cached is None:
+                cached = resolve_model_execution_target(
+                    reference_model=model,
+                    provider_priority=priority,
+                    credentials=creds,
+                    ollama_models=ollama_models,
+                    direct_access=direct_access,
+                )
+                route_cache[model.id] = cached
+            return cached
+
+        normalized_priority = [PROVIDER_ALIASES.get(p.lower(), p.lower()) for p in priority]
+
+        def _channel_index(target: ExecutionTarget) -> int:
+            channel = PROVIDER_ALIASES.get(target.channel_provider.lower(), target.channel_provider.lower())
+            return normalized_priority.index(channel) if channel in normalized_priority else len(normalized_priority)
 
         # Filtrage optionnel : ne garder que les modèles exécutables par un canal réellement disponible
         if filter_by_keys:
@@ -370,8 +385,14 @@ class ApplicationService:
                     "(aucun canal disponible ne peut les exécuter avec vos clés)."
                 )
 
+        # Priorité des canaux : un modèle exécutable via un canal prioritaire (ex: crédits gratuits
+        # Mistral/Google) est préféré à tout modèle d'un canal suivant.
+        channel_rank = {m.id: _channel_index(_route(m)) for m in models}
         results = [
-            resolve_model_for_agent(agent, models, allow_fallback=allow_fallback) for agent in agents
+            resolve_model_for_agent(
+                agent, models, allow_fallback=allow_fallback, channel_rank=channel_rank
+            )
+            for agent in agents
         ]
 
         # Résolution des canaux d'exécution selon l'ordre de priorité des clés
@@ -410,6 +431,25 @@ class ApplicationService:
                 execution_targets.append(None)
                 adjusted_results.append(res)
 
+        # Chaîne de repli par agent (limites de débit / quotas) : modèles suivants sur des canaux distincts
+        fallback_chains: dict[str, list[str]] = {}
+        for res, target in zip(results, execution_targets):
+            if res.model is None or target is None:
+                continue
+            seen_channels = {target.channel_provider}
+            seen_ids = {target.formatted_model_id}
+            chain: list[str] = []
+            for candidate in res.candidates[1:]:
+                cand_target = _route(candidate)
+                if cand_target.channel_provider in seen_channels or cand_target.formatted_model_id in seen_ids:
+                    continue
+                seen_channels.add(cand_target.channel_provider)
+                seen_ids.add(cand_target.formatted_model_id)
+                chain.append(cand_target.formatted_model_id)
+                if len(chain) >= 3:
+                    break
+            fallback_chains[res.agent_name] = chain
+
         budget = simulate_fleet_budget(adjusted_results, agents)
         if not models:
             diagnostics.append("Le catalogue de modèles est vide.")
@@ -442,6 +482,7 @@ class ApplicationService:
             diagnostics=diagnostics,
             provider_priority=priority,
             execution_targets=execution_targets,
+            fallback_chains=fallback_chains,
             access_summary=access_summary,
         )
 
@@ -657,8 +698,18 @@ class ApplicationService:
                     base_config if base_config is not None else self.load_base_opencode_config()
                 )
                 target_path = self.resolve_export_path(path)
+                # L'identifiant exporté est celui du canal retenu (ex: mistral/..., google/...)
+                export_results = [
+                    replace(res, model=replace(res.model, id=target.formatted_model_id))
+                    if res.model is not None and target is not None
+                    else res
+                    for res, target in zip(
+                        report.results,
+                        list(report.execution_targets) + [None] * len(report.results),
+                    )
+                ]
                 config_data = build_opencode_config(
-                    report.results,
+                    export_results,
                     report.agents,
                     base_config=effective_base,
                     default_provider_prefix=default_provider_prefix,
@@ -674,7 +725,9 @@ class ApplicationService:
                     if report_output_path is not None
                     else target_path.parent / "modelpool-report.json"
                 )
-                report_data = build_modelpool_report_data(report.results, report.agents)
+                report_data = build_modelpool_report_data(
+                    export_results, report.agents, fallback_chains=report.fallback_chains
+                )
                 write_json_atomic(target_report_path, report_data)
 
                 exported = target_path.resolve()
