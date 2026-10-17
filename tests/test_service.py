@@ -275,7 +275,75 @@ class TestService(unittest.TestCase):
         self.assertNotIn("~", str(resolved))
         self.assertTrue(str(resolved).endswith(".config/opencode/opencode.json"))
 
+    def test_import_models_from_json_success(self) -> None:
+        """Vérifie l'importation atomique et la validation de modèles depuis un fichier JSON."""
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            write_valid_workspace(directory)
+            service = ApplicationService(directory)
+
+            candidate_payload = [
+                {
+                    "id": "google/gemini-2.5-flash",
+                    "provider": "google",
+                    "tier": "pay_as_you_go",
+                    "cost_input_per_m": 0.075,
+                    "cost_output_per_m": 0.3,
+                    "context_window": 1048576,
+                    "supports_tools": True,
+                    "complexity_score": 3,
+                    "supports_vision": True,
+                    "supports_reasoning": True,
+                },
+                # Modèle non-LLM qui doit être ignoré
+                {
+                    "id": "google/lyria-3-pro-preview",
+                    "provider": "google",
+                    "tier": "free_tier",
+                    "cost_input_per_m": 0.0,
+                    "cost_output_per_m": 0.0,
+                    "context_window": 100000,
+                    "supports_tools": True,
+                    "complexity_score": 3,
+                },
+            ]
+            cand_file = directory / "deep_research_output.json"
+            cand_file.write_text(json.dumps(candidate_payload), encoding="utf-8")
+
+            res = service.import_models_from_json(cand_file)
+            self.assertTrue(res.ok)
+            self.assertIn("1 ajouté", res.message)
+            self.assertIn("1 modèle(s) non-LLM ignoré(s)", res.message)
+
+            # Vérifier que le modèle est bien dans models.json
+            with open(service.models_path, "r", encoding="utf-8") as f:
+                cat = json.load(f)
+            model_ids = [m["id"] for m in cat["models"]]
+            self.assertIn("google/gemini-2.5-flash", model_ids)
+            self.assertNotIn("google/lyria-3-pro-preview", model_ids)
+
+    def test_import_models_from_json_invalid_format(self) -> None:
+        """Vérifie le rejet propre si le fichier est invalide ou corrompu."""
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            write_valid_workspace(directory)
+            service = ApplicationService(directory)
+
+            cand_file = directory / "corrupt.json"
+            cand_file.write_text("invalid json content", encoding="utf-8")
+            res = service.import_models_from_json(cand_file)
+            self.assertFalse(res.ok)
+            self.assertIn("Lecture impossible", res.message)
+
+            # Fichier vide
+            empty_file = directory / "empty.json"
+            empty_file.write_text(json.dumps([]), encoding="utf-8")
+            res_empty = service.import_models_from_json(empty_file)
+            self.assertFalse(res_empty.ok)
+            self.assertIn("Aucun modèle", res_empty.message)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

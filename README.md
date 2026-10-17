@@ -142,6 +142,14 @@ python3 main.py --sync
 python3 -m src.fetcher
 ```
 
+### Intégration Rapide de Benchmarks Gemini Deep Research
+Pour intégrer de nouveaux tarifs ou modèles sourcés via Deep Research de manière interactive :
+```bash
+python3 import-deep-research.py
+# Ou directement en ligne de commande :
+python3 main.py --import-models chemin/vers/resultats.json
+```
+
 ### Interface Web Locale
 Pour consulter les affectations dans le navigateur (écoute uniquement sur `127.0.0.1`) :
 ```bash

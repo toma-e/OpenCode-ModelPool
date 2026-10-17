@@ -11,15 +11,31 @@ Ce document décrit le protocole rigoureux et reproductible permettant d'ingére
 
 ---
 
-## 📋 Étape par Étape
+## ⚡ Méthode Recommandée : Script Automatisé
 
-### Étape 1 : Réception et Contrôle Préliminaire du Payload JSON
-1. Récupérez le bloc JSON produit par Gemini Deep Research (suite à l'exécution de `prompts/pricing_benchmark.md`).
-2. Enregistrez temporairement le contenu dans un fichier de transit (ex: `/tmp/deep_research_candidates.json`).
-3. Vérifiez la syntaxe JSON via la commande :
-   ```bash
-   python3 -m json.tool /tmp/deep_research_candidates.json > /dev/null
-   ```
+Un assistant interactif dédié prend en charge l'ensemble de la procédure en une seule commande :
+
+```bash
+# Mode interactif (détection et sélection du fichier) :
+python3 import-deep-research.py
+
+# Ou en passant directement le fichier en argument :
+python3 import-deep-research.py mon_fichier_deep_research.json
+# ou via la CLI principale :
+python3 main.py --import-models mon_fichier_deep_research.json
+```
+
+Ce script effectue automatiquement :
+1. La détection et validation syntaxique du JSON.
+2. Le filtrage pur contre tous les modèles non-LLM (`is_non_llm_model`).
+3. La validation stricte du contrat `Model.from_dict`.
+4. La création d'une sauvegarde horodatée dans `data/backups/`.
+5. La fusion atomique sous verrou inter-processus (`.modelpool.lock`) dans `data/models.json`.
+6. Le recalcul immédiat des attributions d'agents et du budget prévisionnel.
+
+---
+
+## 📋 Méthode Manuelle Étape par Étape
 
 ### Étape 2 : Filtrage Automatique des Faux Positifs Non-LLM
 Assurez-vous qu'aucun modèle audio, image ou embedding n'a été inclus par erreur. Vous pouvez exécuter cette commande de contrôle rapide en Python stdlib :
