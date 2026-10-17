@@ -206,7 +206,7 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
 
     def _send_static(self, filename: str, content_type: str, head_only: bool = False) -> None:
         target = (WEB_DIR / filename).resolve()
-        if not str(target).startswith(str(WEB_DIR.resolve())) or not target.is_file():
+        if not target.is_relative_to(WEB_DIR.resolve()) or not target.is_file():
             self._send_json(404, {"ok": False, "message": "Page introuvable."})
             return
         body = target.read_bytes()

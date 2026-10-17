@@ -195,6 +195,23 @@ class TestWeb(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 404)
         ctx.exception.close()
 
+    def test_static_path_traversal_prevention(self) -> None:
+        """Vérifie que la traversée de répertoire dans le service de fichiers statiques est bloquée (404)."""
+        handler_cls = self.httpd.RequestHandlerClass
+        handler = handler_cls.__new__(handler_cls)
+
+        responses: list[tuple[int, dict[str, object]]] = []
+        def mock_send_json(status: int, payload: dict[str, object]) -> None:
+            responses.append((status, payload))
+
+        handler._send_json = mock_send_json  # type: ignore[assignment]
+
+        # Test path traversal attempting to escape WEB_DIR
+        handler._send_static("../README.md", "text/plain")
+        self.assertEqual(len(responses), 1)
+        self.assertEqual(responses[0][0], 404)
+        self.assertFalse(responses[0][1]["ok"])
+
     def test_error_message_sanitizes_absolute_paths(self) -> None:
         """Les chemins internes absolus du serveur sont masqués dans les réponses d'erreur."""
         from src.service import OperationResult
