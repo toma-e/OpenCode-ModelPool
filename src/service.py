@@ -355,16 +355,17 @@ class ApplicationService:
 
         def _route(model: Model) -> ExecutionTarget:
             cached = route_cache.get(model.id)
-            if cached is None:
-                cached = resolve_model_execution_target(
-                    reference_model=model,
-                    provider_priority=priority,
-                    credentials=creds,
-                    ollama_models=ollama_models,
-                    direct_access=direct_access,
-                )
-                route_cache[model.id] = cached
-            return cached
+            if cached is not None:
+                return cached
+            target = resolve_model_execution_target(
+                reference_model=model,
+                provider_priority=priority,
+                credentials=creds,
+                ollama_models=ollama_models,
+                direct_access=direct_access,
+            )
+            route_cache[model.id] = target
+            return target
 
         normalized_priority = [PROVIDER_ALIASES.get(p.lower(), p.lower()) for p in priority]
 
@@ -432,11 +433,11 @@ class ApplicationService:
 
         # Chaîne de repli par agent (limites de débit / quotas) : modèles suivants sur des canaux distincts
         fallback_chains: dict[str, list[str]] = {}
-        for res, target in zip(results, execution_targets):
-            if res.model is None or target is None:
+        for res, exec_target in zip(results, execution_targets):
+            if res.model is None or exec_target is None:
                 continue
-            seen_channels = {target.channel_provider}
-            seen_ids = {target.formatted_model_id}
+            seen_channels = {exec_target.channel_provider}
+            seen_ids = {exec_target.formatted_model_id}
             chain: list[str] = []
             for candidate in res.candidates[1:]:
                 cand_target = _route(candidate)

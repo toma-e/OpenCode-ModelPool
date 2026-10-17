@@ -104,7 +104,7 @@ def test_model_live_availability(
         req = urllib.request.Request(url, data=payload, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
-                return resp.status == 200
+                return int(resp.status) == 200
         except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError):
             return False
 
@@ -126,7 +126,7 @@ def test_model_live_availability(
         req = urllib.request.Request(url, data=payload, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
-                return resp.status == 200
+                return int(resp.status) == 200
         except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError):
             return False
 
@@ -148,7 +148,7 @@ def test_model_live_availability(
         req = urllib.request.Request(url, data=payload, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
-                return resp.status == 200
+                return int(resp.status) == 200
         except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError):
             return False
 
