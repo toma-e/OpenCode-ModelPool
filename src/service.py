@@ -9,9 +9,9 @@ from __future__ import annotations
 import contextlib
 import json
 import threading
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any, Dict, Iterator, Mapping, Optional
 
 from datetime import datetime, timezone
 
@@ -41,7 +41,6 @@ from src.fetcher import (
 from src.providers.detector import (
     ProviderCredentials,
     detect_provider_credentials,
-    get_available_provider_names,
 )
 from src.providers.ollama import get_ollama_models
 from src.providers.access import (
@@ -401,13 +400,13 @@ class ApplicationService:
 
         for res in results:
             if res.model:
-                target = _route(res.model)
-                execution_targets.append(target)
+                target_exec: Optional[ExecutionTarget] = _route(res.model)
+                execution_targets.append(target_exec)
                 # Si le modèle est dérouté sur Ollama local, ajuster le coût à 0.0 pour le budget
                 effective_model = res.model
-                if target.is_local:
+                if target_exec and target_exec.is_local:
                     effective_model = Model(
-                        id=target.formatted_model_id,
+                        id=target_exec.formatted_model_id,
                         provider="ollama",
                         tier="free_tier",
                         cost_input_per_m=0.0,

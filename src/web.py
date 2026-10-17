@@ -181,12 +181,6 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
         except (UnicodeDecodeError, json.JSONDecodeError):
             return None
 
-    def _read_fallback_from_body(self, default: bool) -> bool:
-        body = self._read_json_body()
-        if isinstance(body, dict) and "fallback" in body and isinstance(body["fallback"], bool):
-            return body["fallback"]
-        return default
-
     def _sanitize_message(self, message: str) -> str:
         """Supprime les chemins absolus internes du serveur dans les messages d'erreur HTTP."""
         if not message:
