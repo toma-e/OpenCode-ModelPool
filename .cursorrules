@@ -1,11 +1,11 @@
-# Directives du Projet : ModelScope
+# Directives du Projet : OpenCode-ModelPool
 
 Ce fichier définit les règles, conventions et invariants indispensables pour que tout agent de code (Cursor, Windsurf, OpenCode, Claude Code, Antigravity) puisse intervenir sur le projet sans casser la cohérence architecturale.
 
 ---
 
 ## 1. Description & Objectif du Projet
-**ModelScope** est un outil de routage et d'attribution automatique de modèles LLM pour les agents **OpenCode**.
+**OpenCode-ModelPool** est un outil de routage et d'attribution automatique de modèles LLM pour les agents **OpenCode**.
 Il sélectionne le modèle le plus rentable et performant pour chaque agent en fonction de ses contraintes techniques (support d'outils, fenêtre de contexte, complexité) et budgétaires (plafond mensuel, préférence pour le gratuit).
 
 ---

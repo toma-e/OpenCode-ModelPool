@@ -105,7 +105,7 @@ def load_opencode_auth_keys(auth_path: Optional[Path] = None) -> Dict[str, str]:
 def is_ollama_reachable(base_url: str = "http://localhost:11434", timeout: float = 1.0) -> bool:
     """Vérifie rapidement si le service Ollama local est actif."""
     url = f"{base_url.rstrip('/')}/api/tags"
-    req = urllib.request.Request(url, headers={"User-Agent": "ModelScope/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "OpenCode-ModelPool/1.0"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.status == 200

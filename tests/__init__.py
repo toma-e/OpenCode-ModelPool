@@ -1,1 +1,1 @@
-"""Suite de tests ModelScope."""
+"""Suite de tests OpenCode-ModelPool."""

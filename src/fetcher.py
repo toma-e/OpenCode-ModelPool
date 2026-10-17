@@ -284,7 +284,7 @@ def fetch_openrouter_models(
     """Interroge l'API publique OpenRouter pour récupérer la liste des modèles avec réessai exponentiel."""
     request = urllib.request.Request(
         OPENROUTER_API_URL,
-        headers={"User-Agent": "ModelScope/1.0", "Accept": "application/json"},
+        headers={"User-Agent": "OpenCode-ModelPool/1.0", "Accept": "application/json"},
     )
 
     last_error: Optional[Exception] = None

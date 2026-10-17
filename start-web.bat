@@ -3,7 +3,7 @@ setlocal
 chcp 65001 >nul
 
 echo ========================================
-echo ModelScope - Interface Web Locale
+echo OpenCode-ModelPool - Interface Web Locale
 echo ========================================
 echo.
 
@@ -47,7 +47,7 @@ echo.
 echo [1/2] Preparation de l'ouverture du navigateur...
 start "" powershell -WindowStyle Hidden -NoProfile -Command "for ($i=0; $i -lt 15; $i++) { try { $r = (Invoke-WebRequest -Uri 'http://127.0.0.1:8765/' -UseBasicParsing -TimeoutSec 1).StatusCode; if ($r -eq 200) { Start-Process 'http://127.0.0.1:8765/'; break } } catch { Start-Sleep -Seconds 1 } }"
 
-echo [2/2] Demarrage du serveur ModelScope dans WSL...
+echo [2/2] Demarrage du serveur OpenCode-ModelPool dans WSL...
 echo.
 echo ========================================
 echo Serveur actif sur http://127.0.0.1:8765/

@@ -2,10 +2,10 @@
 setlocal
 chcp 65001 >nul
 
-REM Arrete le serveur ModelScope en cours d'execution dans WSL
+REM Arrete le serveur OpenCode-ModelPool en cours d'execution dans WSL
 
 echo ========================================
-echo Arret du serveur ModelScope
+echo Arret du serveur OpenCode-ModelPool
 echo ========================================
 echo.
 

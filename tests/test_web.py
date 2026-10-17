@@ -68,7 +68,7 @@ class TestWeb(unittest.TestCase):
     def test_get_index_and_report(self) -> None:
         status, html = self._get("/")
         self.assertEqual(status, 200)
-        self.assertIn(b"ModelScope", html)
+        self.assertIn(b"OpenCode-ModelPool", html)
         status, raw = self._get("/api/report")
         self.assertEqual(status, 200)
         payload = json.loads(raw.decode("utf-8"))

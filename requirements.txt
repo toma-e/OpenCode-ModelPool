@@ -1,3 +1,3 @@
 # Dépendances de production :
-# ModelScope est conçu pour fonctionner exclusivement avec la bibliothèque standard Python (>=3.11).
+# OpenCode-ModelPool est conçu pour fonctionner exclusivement avec la bibliothèque standard Python (>=3.11).
 # Aucune dépendance externe obligatoire n'est requise.

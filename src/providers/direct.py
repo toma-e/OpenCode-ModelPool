@@ -1,7 +1,7 @@
 """Connecteurs vers les catalogues d'API directes (Mistral, Groq, Google, Anthropic, Cerebras).
 
 Permet de requêter les endpoints de modèles officiels avec leurs clés API respectives
-et de normaliser les capacités et tarifications au format standardisé ModelScope.
+et de normaliser les capacités et tarifications au format standardisé OpenCode-ModelPool.
 """
 
 from __future__ import annotations

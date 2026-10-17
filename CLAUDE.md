@@ -1,4 +1,4 @@
-# Directives de Développement : ModelScope 🤖
+# Directives de Développement : OpenCode-ModelPool 🤖
 
 Ce dépôt est piloté par l'agent **Antigravity**. Pour toute information détaillée sur l'architecture, la suite de tests, la conformité OpenCode et la feuille de route, veuillez vous référer au document canonique :
 

@@ -1,1 +1,1 @@
-"""Package src pour ModelScope."""
+"""Package src pour OpenCode-ModelPool."""

@@ -1,6 +1,6 @@
 # Lanceurs pour l'Interface Web Locale
 
-Ce dossier contient des scripts pour démarrer et arrêter facilement l'interface web locale de ModelScope.
+Ce dossier contient des scripts pour démarrer et arrêter facilement l'interface web locale de OpenCode-ModelPool.
 
 ## Windows (via WSL)
 

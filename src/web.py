@@ -1,4 +1,4 @@
-"""Serveur HTTP local (127.0.0.1) pour consulter et piloter ModelScope."""
+"""Serveur HTTP local (127.0.0.1) pour consulter et piloter OpenCode-ModelPool."""
 
 from __future__ import annotations
 
@@ -262,7 +262,7 @@ def make_handler(service: ApplicationService, allow_fallback: bool = True) -> ty
     )
 
 
-class ModelScopeServer(ThreadingHTTPServer):
+class ModelPoolServer(ThreadingHTTPServer):
     """Serveur HTTP multithread filtrant les déconnexions client inoffensives."""
 
     def handle_error(self, request: Any, client_address: Any) -> None:
@@ -280,7 +280,7 @@ def create_server(
 ) -> ThreadingHTTPServer:
     """Instancie le serveur lié exclusivement à 127.0.0.1."""
     handler = make_handler(service, allow_fallback=allow_fallback)
-    return ModelScopeServer((LISTEN_HOST, port), handler)
+    return ModelPoolServer((LISTEN_HOST, port), handler)
 
 
 def serve_local_interface(

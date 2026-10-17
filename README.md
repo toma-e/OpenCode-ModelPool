@@ -1,12 +1,12 @@
-# ModelScope 🎯
+# OpenCode-ModelPool 🎯
 
 > **Attribution automatique et optimisation de modèles LLM pour les agents OpenCode.**
 
-ModelScope analyse dynamiquement un catalogue de modèles LLM (tarifs, fenêtres de contexte, quotas gratuits, support des outils) et sélectionne la configuration optimale pour chaque agent de votre parc, selon son niveau d'exigence et son budget.
+OpenCode-ModelPool analyse dynamiquement un catalogue de modèles LLM (tarifs, fenêtres de contexte, quotas gratuits, support des outils) et sélectionne la configuration optimale pour chaque agent de votre parc, selon son niveau d'exigence et son budget.
 
 ---
 
-## 💡 Pourquoi ModelScope ?
+## 💡 Pourquoi OpenCode-ModelPool ?
 
 Dans un écosystème multi-agents (comme **OpenCode**), affecter systématiquement un modèle coûteux (ex: Claude 3.5 Sonnet, GPT-5) à tous les agents est inefficace :
 - **`build`** (agent principal de codage) requiert un support d'outils complet (`tools`), un fort raisonnement et une génération de code précise.
@@ -14,7 +14,7 @@ Dans un écosystème multi-agents (comme **OpenCode**), affecter systématiqueme
 - **`explore`** (sous-agent de recherche rapide) n'a besoin que d'un modèle simple, très rapide, en lecture seule et si possible gratuit.
 - **`general`** (sous-agent polyvalent) traite les tâches déléguées avec un compromis équilibré coût/performance.
 
-ModelScope automatise ce routage intelligent, simule votre budget prévisionnel et génère directement le fichier de configuration exploitable par OpenCode.
+OpenCode-ModelPool automatise ce routage intelligent, simule votre budget prévisionnel et génère directement le fichier de configuration exploitable par OpenCode.
 
 ---
 
@@ -23,7 +23,7 @@ ModelScope automatise ce routage intelligent, simule votre budget prévisionnel 
 Le projet est conçu en Python 3.11+ avec la bibliothèque standard (zéro dépendance externe pour l'exécution principale) :
 
 ```text
-modelscope/
+opencode-modelpool/
 ├── config/
 │   ├── agents_requirements.json   # Définition des besoins des agents (complexité, outils, budget...)
 │   └── opencode.json              # Configuration cible générée pour OpenCode
@@ -115,7 +115,7 @@ OpenCode recherche sa configuration à deux emplacements standards :
 1. **Au niveau utilisateur (global) :** `~/.config/opencode/opencode.json`
 2. **Au niveau d'un projet spécifique :** `.opencode/opencode.json` ou `opencode.json` à la racine de votre projet.
 
-Vous pouvez lier ModelScope à OpenCode de trois manières :
+Vous pouvez lier OpenCode-ModelPool à OpenCode de trois manières :
 
 - **Option 1 : Export direct dans la configuration globale d'OpenCode**
   ```bash
@@ -126,7 +126,7 @@ Vous pouvez lier ModelScope à OpenCode de trois manières :
   python3 main.py --export /chemin/vers/mon-projet/.opencode/opencode.json
   ```
 - **Option 3 : Liaison automatique via lien symbolique (Symlink)**
-  Conservez l'export dans `config/opencode.json` de ModelScope et créez un lien symbolique :
+  Conservez l'export dans `config/opencode.json` de OpenCode-ModelPool et créez un lien symbolique :
   ```bash
   mkdir -p ~/.config/opencode
   ln -sf "$(pwd)/config/opencode.json" ~/.config/opencode/opencode.json

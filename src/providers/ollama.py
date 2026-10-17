@@ -26,7 +26,7 @@ def fetch_ollama_tags(
     endpoint = f"{base_url.rstrip('/')}/api/tags"
     req = urllib.request.Request(
         endpoint,
-        headers={"User-Agent": "ModelScope/1.0", "Accept": "application/json"},
+        headers={"User-Agent": "OpenCode-ModelPool/1.0", "Accept": "application/json"},
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:

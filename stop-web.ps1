@@ -1,6 +1,6 @@
-# Arret du serveur ModelScope en cours d'execution dans WSL
+# Arret du serveur OpenCode-ModelPool en cours d'execution dans WSL
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Arret du serveur ModelScope" -ForegroundColor Cyan
+Write-Host "Arret du serveur OpenCode-ModelPool" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 

@@ -1,6 +1,6 @@
-# Lanceur PowerShell pour l'interface web ModelScope
+# Lanceur PowerShell pour l'interface web OpenCode-ModelPool
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "ModelScope - Interface Web Locale" -ForegroundColor Cyan
+Write-Host "OpenCode-ModelPool - Interface Web Locale" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 

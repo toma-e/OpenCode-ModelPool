@@ -1,4 +1,4 @@
-# Guide de Développement : ModelScope 🤖
+# Guide de Développement : OpenCode-ModelPool 🤖
 
 Ce document est le **point d'entrée de référence pour l'agent Antigravity** opérant sur le dépôt. Il garantit la continuité opérationnelle, la cohérence des choix techniques et le respect des conventions établies.
 
@@ -6,7 +6,7 @@ Ce document est le **point d'entrée de référence pour l'agent Antigravity** o
 
 ## 1. Vue d'Ensemble & Objectif
 
-**ModelScope** attribue automatiquement le modèle LLM optimal à chaque agent d'un parc **OpenCode** en fonction :
+**OpenCode-ModelPool** attribue automatiquement le modèle LLM optimal à chaque agent d'un parc **OpenCode** en fonction :
 1. De contraintes techniques d'aptitude (complexité 1-5, support d'outils, taille de contexte minimale, compatibilité des fournisseurs).
 2. De contraintes économiques (gratuité préférée, plafond budgétaire mensuel, détection des risques de quota).
 3. D'un mécanisme de **surclassement économique (`fallback`)** en l'absence de correspondance stricte.
@@ -83,7 +83,7 @@ Lorsqu'un nouvel agent prend en main ce projet, il doit :
 - ✅ **Jalon 12 (Audit Phase 4 - Élimination Head-of-Line Blocking, Chaînage CLI & Unification Coût) :** Téléchargement réseau OpenRouter hors verrou (`MOD-04`), chaînage séquentiel de `--validate` et `--export` dans `main.py` (`MOD-06`), mise à jour documentaire de l'interface interactive dans `README.md` (`MOD-08`), et unification arithmétique canonique du calcul de coût dans `Model.calculate_cost` (`MOD-09`).
 - ✅ **Jalon 13 (Audit Phase 5 - Finitions & Hygiène) :** Rétablissement des permissions de lecture standard `0o644` lors de l'écriture atomique (`MIN-01`), support du mode `"all"` dans `AgentRequirement.from_dict` (`MIN-03`), validation stricte de la plage de port `1-65535` sur `--serve` (`MIN-05`), arrêt propre sans traceback sur `KeyboardInterrupt` (`MIN-06`), et masquage des chemins absolus locaux dans les retours d'erreurs HTTP de l'API web (`MIN-07`).
 - ✅ **Jalon 14 (Audit Phase 6 - Portabilité Windows, Scoring MoE & Fraîcheur Catalogue) :** Support du verrouillage inter-processus sous Windows natif via `msvcrt.locking` en complément de `fcntl.flock` POSIX (`src/service.py`), extraction et prise en compte de la masse de paramètres totale cumulée ($N \times M$) pour les architectures MoE (`NxMb`) dans `estimate_complexity_score` (`src/fetcher.py`), détection et avertissement de fraîcheur du catalogue (> 14 jours) intégrés dans `diagnostics` et relayés par le CLI (`main.py`) et l'interface Web (`web/index.html`).
-- ✅ **Jalon 15 (Alignement Natif OpenCode & Liaison Directe) :** Alignement de `config/agents_requirements.json` sur le quatuor natif OpenCode (`build`, `plan`, `explore`, `general`), attribution automatique des modes primaires (`build`, `plan`) et sous-agents (`explore`, `general`) dans `src/exporter.py`, support de la résolution du tilde (`~`) dans `ApplicationService.resolve_export_path` pour cibler directement `~/.config/opencode/opencode.json`, et enrichissement documentaire de la liaison ModelScope-OpenCode dans `README.md`.
+- ✅ **Jalon 15 (Alignement Natif OpenCode & Liaison Directe) :** Alignement de `config/agents_requirements.json` sur le quatuor natif OpenCode (`build`, `plan`, `explore`, `general`), attribution automatique des modes primaires (`build`, `plan`) et sous-agents (`explore`, `general`) dans `src/exporter.py`, support de la résolution du tilde (`~`) dans `ApplicationService.resolve_export_path` pour cibler directement `~/.config/opencode/opencode.json`, et enrichissement documentaire de la liaison OpenCode-ModelPool-OpenCode dans `README.md`.
 
 ---
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 echo "========================================"
-echo "Arret du serveur ModelScope"
+echo "Arret du serveur OpenCode-ModelPool"
 echo "========================================"
 echo ""
 echo "Recherche des processus Python en cours..."

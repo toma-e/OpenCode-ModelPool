@@ -29,7 +29,7 @@ def _valid_port(value: str) -> int:
 def build_parser() -> argparse.ArgumentParser:
     """Construit le parseur d'arguments de la ligne de commande."""
     parser = argparse.ArgumentParser(
-        description="ModelScope - Attribution automatique de modèles LLM pour agents OpenCode."
+        description="OpenCode-ModelPool - Attribution automatique de modèles LLM pour agents OpenCode."
     )
     parser.add_argument("--sync", action="store_true", help="Synchronise le catalogue multi-fournisseurs (OpenRouter, Ollama, direct APIs) avec backup.")
     parser.add_argument("--no-fallback", action="store_true", help="Désactive le surclassement automatique.")
