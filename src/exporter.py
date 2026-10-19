@@ -221,10 +221,11 @@ def build_modelpool_report_data(
     results: Sequence[SelectionResult],
     agents: Sequence[AgentRequirement],
     fallback_chains: Optional[Dict[str, List[str]]] = None,
+    execution_targets: Optional[Sequence[Optional[Any]]] = None,
 ) -> Dict[str, Any]:
     """Construit le rapport d'analyse et de simulation OpenCode-ModelPool."""
     agents_by_name = {a.name: a for a in agents}
-    fleet_budget = simulate_fleet_budget(results, agents)
+    fleet_budget = simulate_fleet_budget(results, agents, execution_targets=execution_targets)
     budget_by_agent = {r.agent_name: r for r in fleet_budget.agent_reports}
 
     configured_agents: Dict[str, Dict[str, Any]] = {}
@@ -311,15 +312,22 @@ def build_modelpool_report_data(
         "total_estimated_tokens": fleet_budget.total_tokens,
         "estimated_free_tier_savings": fleet_budget.free_tier_savings,
         "has_warnings": fleet_budget.has_budget_warnings,
+        "is_total_estimable": fleet_budget.is_total_estimable,
         "reports": [
             {
                 "agent": r.agent_name,
-                "monthly_cost": r.monthly_total_cost,
-                "input_cost": r.monthly_input_cost,
-                "output_cost": r.monthly_output_cost,
+                "monthly_cost": r.monthly_total_cost if r.is_estimable else None,
+                "monthly_cost_formatted": f"${r.monthly_total_cost:.4f}" if r.is_estimable else "Non estimable",
+                "is_estimable": r.is_estimable,
+                "input_cost": r.monthly_input_cost if r.is_estimable else None,
+                "output_cost": r.monthly_output_cost if r.is_estimable else None,
                 "max_budget": r.max_budget,
                 "budget_exceeded": r.budget_exceeded,
                 "quota_warning": r.quota_warning,
+                "channel_provider": r.channel_provider,
+                "pricing_source": r.pricing_source,
+                "is_local": r.is_local,
+                "disclaimer": r.disclaimer,
             }
             for r in fleet_budget.agent_reports
         ],
@@ -394,6 +402,11 @@ def build_opencode_config(
             }
             if description:
                 native_agent["description"] = description
+            # MP-205 : Permissions différenciées selon le rôle d'agent OpenCode
+            if res.agent_name in {"plan", "explore"}:
+                native_agent["permission"] = {"edit": "deny"}
+            elif res.agent_name == "build":
+                native_agent["permission"] = {"edit": "allow"}
             opencode_agent_configs[res.agent_name] = native_agent
         else:
             native_unassigned: Dict[str, Any] = {
@@ -409,8 +422,11 @@ def build_opencode_config(
     # Schéma officiel OpenCode
     final_config["$schema"] = "https://opencode.ai/config.json"
 
-    # Modèle par défaut OpenCode (conservé si déjà défini, sinon premier modèle assigné)
-    if "model" not in final_config and first_assigned_model_id:
+    # Modèle par défaut OpenCode (MP-206 : éviter qu'un défaut inaccessible comme openrouter/free reste actif)
+    if "model" not in final_config:
+        if first_assigned_model_id:
+            final_config["model"] = first_assigned_model_id
+    elif final_config.get("model") in {"openrouter/free", "openrouter/:free"} and first_assigned_model_id:
         final_config["model"] = first_assigned_model_id
 
     # Fusion des agents natifs dans la clé "agent" attendue par OpenCode
@@ -419,4 +435,42 @@ def build_opencode_config(
     final_config["agent"] = existing_native_agents
 
     return final_config
+
+
+def validate_opencode_config(config: Dict[str, Any]) -> Tuple[bool, List[str]]:
+    """Valide la structure d'une configuration générée par rapport au schéma OpenCode officiel.
+
+    Returns:
+        Tuple (est_valide, liste_erreurs).
+    """
+    errors: List[str] = []
+    if not isinstance(config, dict):
+        return False, ["La configuration doit être un dictionnaire JSON."]
+
+    schema = config.get("$schema")
+    if not schema or not isinstance(schema, str) or not schema.startswith("https://opencode.ai/"):
+        errors.append("Clé '$schema' manquante ou invalide (doit pointer vers https://opencode.ai/config.json).")
+
+    model = config.get("model")
+    if not model or not isinstance(model, str):
+        errors.append("Clé 'model' par défaut manquante ou non textuelle.")
+
+    agents = config.get("agent")
+    if not isinstance(agents, dict) or not agents:
+        errors.append("Section 'agent' manquante ou vide.")
+    else:
+        for name, conf in agents.items():
+            if not isinstance(conf, dict):
+                errors.append(f"Agent '{name}' : configuration invalide (doit être un objet).")
+                continue
+            if conf.get("disable") is True:
+                continue
+            agent_model = conf.get("model")
+            if not agent_model or not isinstance(agent_model, str):
+                errors.append(f"Agent '{name}' : 'model' manquant ou invalide.")
+            agent_mode = conf.get("mode")
+            if agent_mode not in {"primary", "subagent", "all"}:
+                errors.append(f"Agent '{name}' : 'mode' invalide ('{agent_mode}' non reconnu).")
+
+    return len(errors) == 0, errors
 

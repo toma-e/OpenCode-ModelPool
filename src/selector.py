@@ -187,7 +187,7 @@ class AgentRequirement:
         if max_budget is not None:
             max_budget = _number(max_budget, "max_monthly_budget", context)
         sort_strategy = data.get("sort_strategy", "lowest_cost")
-        valid_strategies = {"lowest_cost", "max_performance", "max_context", "balanced"}
+        valid_strategies = {"lowest_cost", "max_performance", "max_context", "balanced", "prefer_provider"}
         if not isinstance(sort_strategy, str) or sort_strategy not in valid_strategies:
             valid_list = ", ".join(sorted(valid_strategies))
             raise ValueError(f"{context}: 'sort_strategy' doit être l'un de : {valid_list}.")
@@ -345,67 +345,65 @@ def _parse_models(models: Sequence[Model | dict[str, Any]]) -> list[Model]:
     return [model if isinstance(model, Model) else Model.from_dict(model) for model in models]
 
 
-def rank_models_for_agent(agent_req: AgentRequirement | dict[str, Any], models: Sequence[Model | dict[str, Any]], allow_fallback: bool = False, channel_rank: Optional[Mapping[str, int]] = None) -> list[Model]:
+def rank_models_for_agent(
+    agent_req: AgentRequirement | dict[str, Any],
+    models: Sequence[Model | dict[str, Any]],
+    allow_fallback: bool = False,
+    channel_rank: Optional[Mapping[str, int]] = None,
+    channel_costs: Optional[Mapping[str, float]] = None,
+) -> list[Model]:
     """Classe les modèles compatibles, puis les surclassements si demandé selon sort_strategy.
 
-    ``channel_rank`` (optionnel, fonction pure) associe un id de modèle au rang de son canal
-    d'exécution dans la priorité des fournisseurs (0 = le plus prioritaire). Il prime sur tout
-    autre critère de tri : les canaux prioritaires (ex: crédits gratuits Mistral/Google) sont
-    épuisés avant les canaux suivants.
+    Stratégies :
+    - 'lowest_cost' : coût total prévu le plus bas d'abord (garantie économique primordiale),
+      puis départage par rang de canal, Tier 1, complexité, contexte et id.
+    - 'prefer_provider' : priorité stricte au rang de canal (ex: crédits gratuits ou API directe
+      souhaitée), puis coût et aptitude.
+    - 'max_performance' : niveau de complexité/performance d'abord, puis Tier 1, rang de canal et coût.
+    - 'balanced' : ratio qualité estimée / coût, puis rang de canal et coût.
+    - 'max_context' : fenêtre de contexte maximale, puis rang de canal et coût.
     """
     req, parsed_models = _parse_requirement(agent_req), _parse_models(models)
     exact = [model for model in parsed_models if is_model_compatible(model, req)]
 
     def key(model: Model, fallback: bool = False) -> tuple[Any, ...]:
         rank = channel_rank.get(model.id, 10**6) if channel_rank else 0
-        return (rank,) + base_key(model, fallback)
-
-    def base_key(model: Model, fallback: bool = False) -> tuple[Any, ...]:
-        free_penalty = 0 if req.prefer_free and model.is_free else int(req.prefer_free)
+        effective_cost = channel_costs.get(model.id, model.total_cost_per_m) if channel_costs else model.total_cost_per_m
+        free_penalty = 0 if req.prefer_free and (model.is_free or effective_cost == 0.0) else int(req.prefer_free)
         # Priorité aux fournisseurs reconnus de référence (Tier 1) pour éviter les modèles de niche instables
         is_tier1 = model.provider.lower() in TIER1_PROVIDERS or model.provider.lower().lstrip("~") in TIER1_PROVIDERS
         tier1_penalty = 0 if (not req.prefer_tier1 or is_tier1) else 1
         strategy = req.sort_strategy
 
+        if strategy == "prefer_provider":
+            # Priorité stricte au canal d'exécution retenu
+            comp = model.complexity_score - req.max_complexity if fallback else -model.complexity_score
+            return (rank, free_penalty, effective_cost, tier1_penalty, comp, -model.context_window, model.id)
+
         if strategy == "max_performance":
-            # 1. Pénalité gratuit si prefer_free
-            # 2. Préférence Tier 1
-            # 3. Performance/complexité maximale d'abord (-complexity_score)
-            # 4. Coût le plus bas
-            # 5. Fenêtre de contexte la plus large
-            # 6. Bris d'égalité déterministe sur l'id
-            return (free_penalty, tier1_penalty, -model.complexity_score, model.total_cost_per_m, -model.context_window, model.id)
+            return (free_penalty, tier1_penalty, -model.complexity_score, rank, effective_cost, -model.context_window, model.id)
 
         if strategy == "max_context":
-            # 1. Pénalité gratuit si prefer_free
-            # 2. Préférence Tier 1
-            # 3. Fenêtre de contexte la plus grande d'abord
-            # 4. Coût le plus bas
-            # 5. Complexité la plus proche (si fallback) ou la plus haute
-            # 6. Bris d'égalité déterministe sur l'id
             comp = model.complexity_score - req.max_complexity if fallback else -model.complexity_score
-            return (free_penalty, tier1_penalty, -model.context_window, model.total_cost_per_m, comp, model.id)
+            return (free_penalty, tier1_penalty, -model.context_window, rank, effective_cost, comp, model.id)
 
         if strategy == "balanced":
-            # Compromis valeur/coût :
-            # Ratio utilité/coût. Plus le score est élevé, plus le ratio est bon -> donc trier par négatif du score.
-            # Coût total lissé avec epsilon (0.05) pour éviter la division par 0 pour les modèles gratuits
-            cost_smoothed = model.total_cost_per_m + 0.05
-            # Score brut pondéré : complexité + bonus contexte (100k = +1pt)
+            cost_smoothed = effective_cost + 0.05
             context_bonus = min(model.context_window / 100_000, 5.0)
             score = (model.complexity_score * 2.0 + context_bonus) / cost_smoothed
             comp = model.complexity_score - req.max_complexity if fallback else -model.complexity_score
-            return (free_penalty, tier1_penalty, -score, model.total_cost_per_m, comp, model.id)
+            return (free_penalty, tier1_penalty, -score, rank, effective_cost, comp, model.id)
 
         # Par défaut : "lowest_cost"
         # 1. Pénalité gratuit si prefer_free
-        # 2. Coût total le plus bas (garantie économique primordiale)
-        # 3. Préférence Tier 1 (en cas de coût équivalent)
-        # 4. Complexité la plus proche en fallback, ou la plus haute en exact
-        # 5. Fenêtre de contexte la plus large
-        # 6. Bris d'égalité déterministe sur l'id
+        # 2. Coût total effectif le plus bas (garantie économique primordiale)
+        # 3. Rang de canal (départage à coût égal : ex: Ollama local vs OpenRouter gratuit)
+        # 4. Préférence Tier 1 (en cas de coût équivalent)
+        # 5. Complexité la plus proche en fallback, ou la plus haute en exact
+        # 6. Fenêtre de contexte la plus large
+        # 7. Bris d'égalité déterministe sur l'id
         complexity = model.complexity_score - req.max_complexity if fallback else -model.complexity_score
-        return (free_penalty, model.total_cost_per_m, tier1_penalty, complexity, -model.context_window, model.id)
+        return (free_penalty, effective_cost, rank, tier1_penalty, complexity, -model.context_window, model.id)
 
     if exact:
         return sorted(exact, key=key)
@@ -415,7 +413,13 @@ def rank_models_for_agent(agent_req: AgentRequirement | dict[str, Any], models: 
     return sorted(fallback, key=lambda model: key(model, fallback=True))
 
 
-def resolve_model_for_agent(agent_req: AgentRequirement | dict[str, Any], models: Sequence[Model | dict[str, Any]], allow_fallback: bool = True, channel_rank: Optional[Mapping[str, int]] = None) -> SelectionResult:
+def resolve_model_for_agent(
+    agent_req: AgentRequirement | dict[str, Any],
+    models: Sequence[Model | dict[str, Any]],
+    allow_fallback: bool = True,
+    channel_rank: Optional[Mapping[str, int]] = None,
+    channel_costs: Optional[Mapping[str, float]] = None,
+) -> SelectionResult:
     """Attribue le meilleur modèle, avec override manuel documenté."""
     req, parsed_models = _parse_requirement(agent_req), _parse_models(models)
     if req.force_model:
@@ -427,12 +431,12 @@ def resolve_model_for_agent(agent_req: AgentRequirement | dict[str, Any], models
             warning = f" Contraintes contournées : {', '.join(violations)}." if violations else ""
             return SelectionResult(req.name, matching, False, [matching], f"Modèle imposé manuellement ({req.force_model}).{warning}")
         return SelectionResult(req.name, None, False, [], f"Modèle imposé '{req.force_model}' introuvable dans le catalogue.")
-    exact = rank_models_for_agent(req, parsed_models, channel_rank=channel_rank)
+    exact = rank_models_for_agent(req, parsed_models, channel_rank=channel_rank, channel_costs=channel_costs)
     strategy_suffix = f" (stratégie: {req.sort_strategy})" if req.sort_strategy != "lowest_cost" else ""
     if exact:
         return SelectionResult(req.name, exact[0], False, exact, f"Correspondance exacte avec les exigences{strategy_suffix}.")
     if allow_fallback:
-        fallback = rank_models_for_agent(req, parsed_models, allow_fallback=True, channel_rank=channel_rank)
+        fallback = rank_models_for_agent(req, parsed_models, allow_fallback=True, channel_rank=channel_rank, channel_costs=channel_costs)
         if fallback:
             chosen = fallback[0]
             return SelectionResult(req.name, chosen, True, fallback, f"Surclassement automatique (fallback) : aucun modèle dans la plage [{req.min_complexity}-{req.max_complexity}], modèle de complexité {chosen.complexity_score} sélectionné{strategy_suffix}.")

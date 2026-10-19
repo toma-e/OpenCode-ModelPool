@@ -1,6 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "openrouter/free",
+  "model": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
   "permission": {
     "read": {
       "*": "allow",
@@ -46,19 +46,28 @@
   },
   "agent": {
     "build": {
-      "model": "groq/openai/gpt-oss-120b",
+      "model": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
       "mode": "primary",
-      "description": "Agent de développement principal : écriture de code, refactoring et exécution de commandes"
+      "description": "Agent de développement principal : écriture de code, refactoring et exécution de commandes",
+      "permission": {
+        "edit": "allow"
+      }
     },
     "plan": {
-      "model": "groq/openai/gpt-oss-120b",
+      "model": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
       "mode": "primary",
-      "description": "Agent d'architecture et de cadrage : analyse et élaboration de plans sans modification directe"
+      "description": "Agent d'architecture et de cadrage : analyse et élaboration de plans sans modification directe",
+      "permission": {
+        "edit": "deny"
+      }
     },
     "explore": {
       "model": "ollama/qwen3.5:9b",
       "mode": "subagent",
-      "description": "Sous-agent d'exploration rapide : recherche de fichiers et lecture du codebase en lecture seule"
+      "description": "Sous-agent d'exploration rapide : recherche de fichiers et lecture du codebase en lecture seule",
+      "permission": {
+        "edit": "deny"
+      }
     },
     "general": {
       "model": "ollama/qwen3.5:9b",

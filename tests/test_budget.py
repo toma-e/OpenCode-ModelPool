@@ -117,10 +117,47 @@ class TestBudget(unittest.TestCase):
         self.assertEqual(fleet.free_tier_savings, 0.30)
         self.assertEqual(len(fleet.agent_reports), 2)
 
-    def test_fleet_budget_has_warning(self) -> None:
-        req = AgentRequirement("heavy", "", 1, 2, False, True, estimated_tokens_input=1_000_001)
-        result = SelectionResult("heavy", self.free_model, False, [self.free_model], "ok")
-        self.assertTrue(simulate_fleet_budget([result], [req]).has_budget_warnings)
+    def test_simulate_budget_local_execution_target(self) -> None:
+        """Les cibles locales (Ollama) ont un coût API nul et un disclaimer matériel."""
+        from src.providers.router import ExecutionTarget
+        target = ExecutionTarget(
+            channel_provider="ollama",
+            formatted_model_id="ollama/qwen2.5-coder:7b",
+            effective_cost_input_per_m=0.0,
+            effective_cost_output_per_m=0.0,
+            is_local=True,
+            description_label="Ollama Local",
+            access_verified=True,
+            pricing_source="local_free",
+        )
+        req = AgentRequirement("coder", "", 2, 3, True, False, estimated_tokens_input=1_000_000, estimated_tokens_output=500_000)
+        report = simulate_agent_budget(req, self.paid_model, execution_target=target)
+        self.assertEqual(report.monthly_total_cost, 0.0)
+        self.assertTrue(report.is_local)
+        self.assertTrue(report.is_estimable)
+        self.assertIn("0$ API", report.disclaimer)
+
+    def test_simulate_budget_unknown_pricing(self) -> None:
+        """Un modèle sans tarif répertorié est marqué non estimable."""
+        from src.providers.router import ExecutionTarget
+        target = ExecutionTarget(
+            channel_provider="mistral",
+            formatted_model_id="mistral/unknown-model",
+            effective_cost_input_per_m=0.0,
+            effective_cost_output_per_m=0.0,
+            is_local=False,
+            description_label="Mistral AI",
+            access_verified=True,
+            pricing_source="unknown",
+        )
+        req = AgentRequirement("special", "", 2, 3, True, False, estimated_tokens_input=100_000, estimated_tokens_output=50_000)
+        report = simulate_agent_budget(req, self.paid_model, execution_target=target)
+        self.assertFalse(report.is_estimable)
+
+        # La flotte globale hérite du statut non estimable
+        res = SelectionResult("special", self.paid_model, False, [self.paid_model], "ok")
+        fleet = simulate_fleet_budget([res], [req], execution_targets=[target])
+        self.assertFalse(fleet.is_total_estimable)
 
 
 if __name__ == "__main__":

@@ -104,6 +104,54 @@ class TestWeb(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 403)
         ctx.exception.close()
 
+    def test_post_rejects_untrusted_origin_scheme_and_port(self) -> None:
+        """L'origine doit être HTTP et correspondre au port d'écoute."""
+        # 1. Scheme HTTPS sur localhost
+        req_https = urllib.request.Request(
+            self.base + "/api/recalculate",
+            data=b"{}",
+            method="POST",
+            headers={"Content-Type": "application/json", "Origin": "https://127.0.0.1"},
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(req_https, timeout=5)
+        self.assertEqual(ctx.exception.code, 403)
+        ctx.exception.close()
+
+        # 2. Port différent du port serveur
+        req_port = urllib.request.Request(
+            self.base + "/api/recalculate",
+            data=b"{}",
+            method="POST",
+            headers={"Content-Type": "application/json", "Origin": "http://127.0.0.1:12345"},
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(req_port, timeout=5)
+        self.assertEqual(ctx.exception.code, 403)
+        ctx.exception.close()
+
+    def test_post_export_path_security(self) -> None:
+        """Vérifie le rejet de la traversée de répertoire et des chemins hors projet."""
+        # Traversée interdite (..)
+        status, payload = self._post("/api/export", {"path": "../escaped.json"})
+        self.assertEqual(status, 400)
+        self.assertFalse(payload["ok"])
+        self.assertIn("traversée", payload["message"].lower())
+
+        # Chemin externe absolu interdit
+        status, payload = self._post("/api/export", {"path": "/var/log/forbidden.json"})
+        self.assertEqual(status, 403)
+        self.assertFalse(payload["ok"])
+        self.assertIn("interdit", payload["message"].lower())
+
+    def test_post_diff_endpoint(self) -> None:
+        """Vérifie que POST /api/diff génère la prévisualisation et valide le schéma."""
+        status, payload = self._post("/api/diff")
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["ok"])
+        self.assertTrue(payload["is_valid"])
+        self.assertIn("diff", payload)
+
     def test_post_rejects_missing_json_content_type(self) -> None:
         request = urllib.request.Request(
             self.base + "/api/export",

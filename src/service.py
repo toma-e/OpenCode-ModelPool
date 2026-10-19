@@ -30,6 +30,7 @@ from src.exporter import (
     build_modelpool_report_data,
     build_opencode_config,
     parse_json_or_jsonc,
+    validate_opencode_config,
 )
 from src.fetcher import (
     create_backup,
@@ -185,6 +186,11 @@ def _budget_payload(report: AgentBudgetReport) -> dict[str, Any]:
         "max_budget": report.max_budget,
         "budget_exceeded": report.budget_exceeded,
         "quota_warning": report.quota_warning,
+        "channel_provider": report.channel_provider,
+        "pricing_source": report.pricing_source,
+        "is_local": report.is_local,
+        "is_estimable": report.is_estimable,
+        "disclaimer": report.disclaimer,
     }
 
 
@@ -252,6 +258,7 @@ def serialize_report(report: FleetReport) -> dict[str, Any]:
             "total_tokens": report.budget.total_tokens,
             "free_tier_savings": report.budget.free_tier_savings,
             "has_warnings": report.budget.has_budget_warnings,
+            "is_total_estimable": report.budget.is_total_estimable,
         },
         "provider_priority": list(report.provider_priority),
         "fallback_chains": report.fallback_chains,
@@ -388,9 +395,17 @@ class ApplicationService:
         # Priorité des canaux : un modèle exécutable via un canal prioritaire (ex: crédits gratuits
         # Mistral/Google) est préféré à tout modèle d'un canal suivant.
         channel_rank = {m.id: _channel_index(_route(m)) for m in models}
+        channel_costs = {
+            m.id: _route(m).effective_cost_input_per_m + _route(m).effective_cost_output_per_m
+            for m in models
+        }
         results = [
             resolve_model_for_agent(
-                agent, models, allow_fallback=allow_fallback, channel_rank=channel_rank
+                agent,
+                models,
+                allow_fallback=allow_fallback,
+                channel_rank=channel_rank,
+                channel_costs=channel_costs,
             )
             for agent in agents
         ]
@@ -450,7 +465,7 @@ class ApplicationService:
                     break
             fallback_chains[res.agent_name] = chain
 
-        budget = simulate_fleet_budget(adjusted_results, agents)
+        budget = simulate_fleet_budget(adjusted_results, agents, execution_targets=execution_targets)
         if not models:
             diagnostics.append("Le catalogue de modèles est vide.")
         if not agents:
@@ -515,7 +530,8 @@ class ApplicationService:
         if target.access_verified:
             return True
         if target.channel_provider == "openrouter":
-            return openrouter_available or model.is_free
+            # MP-203 : En exécution réelle, un accès OpenRouter valide est requis même pour les modèles gratuits
+            return openrouter_available
         # Canaux directs sans accès vérifié : non garantis
         return False
 
@@ -553,6 +569,44 @@ class ApplicationService:
         except ValueError as error:
             return OperationResult(False, str(error))
         return OperationResult(True, "Rapport calculé.", report)
+
+    def check_fleet_readiness(self, report: FleetReport, strict_freshness: bool = True) -> tuple[bool, list[str]]:
+        """Contrôle strict d'exécutabilité (MP-207/MP-212) : vérifie si chaque agent dispose d'une cible prête.
+
+        Returns:
+            Tuple (is_ready, list_of_error_reasons).
+        """
+        errors: list[str] = []
+        creds = detect_provider_credentials(project_dir=self.base_dir)
+        openrouter_ok = bool(creds.get("openrouter") and creds["openrouter"].is_available)
+
+        cached_access = read_provider_access(self.access_path)
+        strict_direct, _ = resolve_verified_access(
+            cached_access, creds, list(DIRECT_CHANNELS.keys()), strict_freshness=strict_freshness
+        )
+
+        for index, (agent, result) in enumerate(zip(report.agents, report.results)):
+            if result.model is None:
+                errors.append(f"Agent '{agent.name}' : aucun modèle attribué.")
+                continue
+            target = report.execution_targets[index] if index < len(report.execution_targets) else None
+            if target is None:
+                errors.append(f"Agent '{agent.name}' : aucune cible d'exécution résolue pour '{result.model.id}'.")
+                continue
+            if not self._is_executable(target, result.model, openrouter_ok):
+                errors.append(
+                    f"Agent '{agent.name}' : cible '{target.formatted_model_id}' via canal '{target.channel_provider}' "
+                    "non exécutable (clé non vérifiée ou service local absent)."
+                )
+                continue
+            if target.channel_provider in DIRECT_CHANNELS and strict_freshness:
+                if target.channel_provider not in strict_direct or (
+                    target.native_model_id and target.native_model_id not in strict_direct[target.channel_provider]
+                ):
+                    errors.append(
+                        f"Agent '{agent.name}' : canal direct '{target.channel_provider}' non confirmé en mode strict (cache expiré ou modèle non vérifié)."
+                    )
+        return (len(errors) == 0, errors)
 
     def get_providers_status(self) -> Dict[str, ProviderCredentials]:
         """Renvoie le statut des identifiants et clés pour chaque fournisseur."""
@@ -601,11 +655,7 @@ class ApplicationService:
         include_ollama: bool = True,
         filter_by_keys: bool = False,
     ) -> OperationResult:
-        """Synchronise le catalogue (OpenRouter seul ou multi-providers si demandé) puis recalcule le rapport.
-
-        Par défaut, conserve la synchronisation OpenRouter pour la compatibilité ascendante,
-        ou multi-providers si multi_provider=True.
-        """
+        """Synchronise le catalogue (OpenRouter seul par défaut, ou multi-fournisseurs si multi_provider=True)."""
         if not multi_provider:
             try:
                 raw_models = fetch_openrouter_models()
@@ -715,6 +765,12 @@ class ApplicationService:
                     default_provider_prefix=default_provider_prefix,
                 )
 
+                # Validation stricte du schéma avant toute écriture disque (MP-206)
+                is_valid, validation_errors = validate_opencode_config(config_data)
+                if not is_valid:
+                    errors_str = "; ".join(validation_errors)
+                    raise ValueError(f"Configuration OpenCode invalide : {errors_str}")
+
                 if create_backup_file and target_path.exists():
                     create_backup(target_path)
 
@@ -726,7 +782,10 @@ class ApplicationService:
                     else target_path.parent / "modelpool-report.json"
                 )
                 report_data = build_modelpool_report_data(
-                    export_results, report.agents, fallback_chains=report.fallback_chains
+                    export_results,
+                    report.agents,
+                    fallback_chains=report.fallback_chains,
+                    execution_targets=report.execution_targets,
                 )
                 write_json_atomic(target_report_path, report_data)
 
@@ -736,6 +795,102 @@ class ApplicationService:
             except OSError as error:
                 return OperationResult(False, f"Écriture de l'export impossible : {error}")
             return OperationResult(True, f"Configuration OpenCode exportée : {exported}", report)
+
+    def preview_export(
+        self,
+        path: str | Path | None = None,
+        allow_fallback: bool = True,
+        base_config: dict[str, Any] | None = None,
+        default_provider_prefix: str = "openrouter",
+        filter_by_keys: bool = False,
+        custom_priority: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        """Génère la prévisualisation (diff unifié) de l'export sans modifier le disque (MP-206)."""
+        import difflib
+
+        with self._lock:
+            report = self._build_report_unlocked(
+                allow_fallback,
+                filter_by_keys=filter_by_keys,
+                custom_priority=custom_priority,
+            )
+            effective_base = (
+                base_config if base_config is not None else self.load_base_opencode_config()
+            )
+            target_path = self.resolve_export_path(path)
+            export_results = [
+                replace(res, model=replace(res.model, id=target.formatted_model_id))
+                if res.model is not None and target is not None
+                else res
+                for res, target in zip(
+                    report.results,
+                    list(report.execution_targets) + [None] * len(report.results),
+                )
+            ]
+            config_data = build_opencode_config(
+                export_results,
+                report.agents,
+                base_config=effective_base,
+                default_provider_prefix=default_provider_prefix,
+            )
+            is_valid, validation_errors = validate_opencode_config(config_data)
+
+            new_content = json.dumps(config_data, indent=2, ensure_ascii=False)
+            if target_path.exists():
+                old_content = target_path.read_text(encoding="utf-8")
+                old_lines = old_content.splitlines(keepends=True)
+                new_lines = new_content.splitlines(keepends=True)
+                diff = "".join(
+                    difflib.unified_diff(
+                        old_lines,
+                        new_lines,
+                        fromfile=str(target_path),
+                        tofile=f"{target_path} (nouveau)",
+                    )
+                )
+            else:
+                diff = "".join(f"+{line}" for line in new_content.splitlines(keepends=True))
+
+            return {
+                "target_path": str(target_path),
+                "diff": diff,
+                "config_data": config_data,
+                "is_valid": is_valid,
+                "validation_errors": validation_errors,
+            }
+
+    def rollback_export(self, path: str | Path | None = None) -> OperationResult:
+        """Restaure la configuration OpenCode depuis la sauvegarde la plus récente (MP-206)."""
+        import shutil
+
+        with self._lock, self._file_lock():
+            target_path = self.resolve_export_path(path)
+            bak_file = target_path.with_suffix(target_path.suffix + ".bak")
+            backup_candidates: list[Path] = []
+            if bak_file.exists():
+                backup_candidates.append(bak_file)
+
+            backup_dir = target_path.parent / "backups"
+            if backup_dir.exists():
+                pattern = f"{target_path.stem}_*{target_path.suffix}"
+                found = sorted(backup_dir.glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True)
+                backup_candidates.extend(found)
+
+            if not backup_candidates:
+                return OperationResult(
+                    False,
+                    f"Aucune sauvegarde disponible pour {target_path} (ni .bak ni dans {backup_dir}).",
+                )
+
+            chosen_backup = backup_candidates[0]
+            try:
+                shutil.copy2(chosen_backup, target_path)
+                return OperationResult(
+                    True,
+                    f"Restauration réussie : {target_path} restauré depuis {chosen_backup}.",
+                )
+            except OSError as error:
+                return OperationResult(False, f"Échec de la restauration : {error}")
 
     def update_agent_requirement(
         self,
@@ -801,9 +956,10 @@ class ApplicationService:
                 index = agents_list.index(target_dict)
                 agents_list[index] = new_dict
 
-                # Backup puis écriture atomique
+                # Backup puis écriture atomique en préservant l'intégralité du document racine (MP-201)
                 create_backup(self.agents_path)
-                write_json_atomic(self.agents_path, {"agents": agents_list})
+                raw_data["agents"] = agents_list
+                write_json_atomic(self.agents_path, raw_data)
 
                 # Recalcul du rapport
                 report = self._build_report_unlocked(allow_fallback)

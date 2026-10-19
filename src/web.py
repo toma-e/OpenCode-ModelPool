@@ -37,8 +37,14 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
         origin = self.headers.get("Origin")
         if origin:
             parsed_origin = urlparse(origin)
+            origin_scheme = (parsed_origin.scheme or "").lower()
+            if origin_scheme not in {"http"}:
+                return False
             origin_host = (parsed_origin.hostname or "").lower()
             if origin_host not in {"127.0.0.1", "localhost"}:
+                return False
+            server_port = getattr(self.server, "server_port", None)
+            if server_port is not None and parsed_origin.port is not None and parsed_origin.port != server_port:
                 return False
         return True
 
@@ -136,8 +142,49 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
                 return
             self._send_operation(self.service.set_provider_priority(body["priority"], allow_fallback=fallback, filter_by_keys=filter_keys))
             return
+        if parsed.path == "/api/diff":
+            try:
+                diff_res = self.service.preview_export(
+                    allow_fallback=fallback,
+                    filter_by_keys=filter_keys,
+                    custom_priority=custom_priority,
+                )
+                self._send_json(200, {
+                    "ok": True,
+                    "diff": diff_res["diff"],
+                    "is_valid": diff_res["is_valid"],
+                    "validation_errors": diff_res["validation_errors"],
+                })
+            except Exception as e:
+                self._send_json(400, {"ok": False, "message": str(e)})
+            return
         if parsed.path == "/api/export":
-            self._send_operation(self.service.export_config(allow_fallback=fallback, filter_by_keys=filter_keys, custom_priority=custom_priority))
+            export_path = None
+            if isinstance(body, dict) and "path" in body and isinstance(body["path"], str):
+                requested = body["path"].strip()
+                if ".." in requested:
+                    self._send_json(400, {"ok": False, "message": "Chemin d'export non autorisé (traversée interdite)."})
+                    return
+                resolved = self.service.resolve_export_path(requested)
+                project_root = self.service.base_dir.resolve()
+                opencode_dir = (Path.home() / ".config" / "opencode").resolve()
+                try:
+                    resolved.resolve().relative_to(project_root)
+                except ValueError:
+                    try:
+                        resolved.resolve().relative_to(opencode_dir)
+                    except ValueError:
+                        self._send_json(403, {"ok": False, "message": "Export interdit en dehors du projet ou de ~/.config/opencode/."})
+                        return
+                export_path = requested
+            self._send_operation(
+                self.service.export_config(
+                    path=export_path,
+                    allow_fallback=fallback,
+                    filter_by_keys=filter_keys,
+                    custom_priority=custom_priority,
+                )
+            )
             return
         if parsed.path == "/api/sync":
             multi_provider = False

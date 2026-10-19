@@ -342,6 +342,126 @@ class TestService(unittest.TestCase):
             self.assertFalse(res_empty.ok)
             self.assertIn("Aucun modèle", res_empty.message)
 
+    def test_update_agent_preserves_root_keys(self) -> None:
+        """MP-201 : Vérifie que la mise à jour d'un agent préserve provider_priority et champs racines."""
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            write_valid_workspace(directory)
+            agents_file = directory / "config" / "agents_requirements.json"
+            initial_data = {
+                "custom_metadata": {"version": 2, "author": "audit"},
+                "provider_priority": ["groq", "mistralai", "openrouter"],
+                "agents": [
+                    {
+                        "name": "agent",
+                        "description": "Agent de test",
+                        "min_complexity": 1,
+                        "max_complexity": 2,
+                        "requires_tools": False,
+                        "prefer_free": True,
+                    }
+                ],
+            }
+            agents_file.write_text(json.dumps(initial_data), encoding="utf-8")
+            service = ApplicationService(directory)
+            res = service.update_agent_requirement("agent", {"description": "Agent mis à jour"})
+            self.assertTrue(res.ok)
+
+            saved = json.loads(agents_file.read_text(encoding="utf-8"))
+            self.assertEqual(saved["custom_metadata"], {"version": 2, "author": "audit"})
+            self.assertEqual(saved["provider_priority"], ["groq", "mistralai", "openrouter"])
+            self.assertEqual(saved["agents"][0]["description"], "Agent mis à jour")
+
+    def test_check_fleet_readiness(self) -> None:
+        """MP-203 / MP-207 : Contrôle strict d'exécutabilité selon l'état des clés et canaux."""
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            write_valid_workspace(directory)
+            service = ApplicationService(directory)
+            report_res = service.build_report_result()
+            self.assertTrue(report_res.ok)
+            report = report_res.report
+
+            # Sans clé OpenRouter ni accès direct : échec de readiness
+            with patch("src.service.detect_provider_credentials", return_value={}):
+                is_ready, reasons = service.check_fleet_readiness(report)
+                self.assertFalse(is_ready)
+                self.assertTrue(len(reasons) > 0)
+                self.assertIn("non exécutable", reasons[0])
+
+            # Avec clé OpenRouter simulée : succès de readiness
+            from src.providers.detector import ProviderCredentials
+            mock_creds = {
+                "openrouter": ProviderCredentials("openrouter", True, "env", "sk-or...fake")
+            }
+            with patch("src.service.detect_provider_credentials", return_value=mock_creds):
+                is_ready, reasons = service.check_fleet_readiness(report)
+                self.assertTrue(is_ready)
+                self.assertEqual(reasons, [])
+
+    def test_preview_export_diff(self) -> None:
+        """MP-206 : Vérifie la prévisualisation (diff unifié) de l'export sans écriture disque."""
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            write_valid_workspace(directory)
+            service = ApplicationService(directory)
+
+            # 1. Prévisualisation sur fichier inexistant
+            preview = service.preview_export()
+            self.assertTrue(preview["is_valid"])
+            self.assertEqual(preview["validation_errors"], [])
+            self.assertIn("+", preview["diff"])
+            self.assertFalse(service.default_export_path.exists())
+
+            # 2. Après export, prévisualisation sans changement -> diff vide
+            service.export_config()
+            self.assertTrue(service.default_export_path.exists())
+            preview2 = service.preview_export()
+            self.assertEqual(preview2["diff"], "")
+
+    def test_rollback_export_restores_previous_state(self) -> None:
+        """MP-206 : Vérifie la restauration (rollback) de la configuration OpenCode depuis un backup."""
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            write_valid_workspace(directory)
+            service = ApplicationService(directory)
+
+            # Export initial
+            res1 = service.export_config()
+            self.assertTrue(res1.ok)
+            initial_content = service.default_export_path.read_text(encoding="utf-8")
+
+            # Deuxième export après modification (crée le backup)
+            service.update_agent_requirement("agent", {"description": "Nouvelle description"})
+            res2 = service.export_config()
+            self.assertTrue(res2.ok)
+            modified_content = service.default_export_path.read_text(encoding="utf-8")
+            self.assertNotEqual(initial_content, modified_content)
+
+            # Rollback
+            rollback_res = service.rollback_export()
+            self.assertTrue(rollback_res.ok)
+            self.assertIn("Restauration réussie", rollback_res.message)
+            restored_content = service.default_export_path.read_text(encoding="utf-8")
+            self.assertEqual(restored_content, initial_content)
+
+    def test_export_config_fails_and_preserves_file_when_schema_invalid(self) -> None:
+        """MP-206 : Un échec de validation du schéma n'altère pas le fichier de configuration actif."""
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            write_valid_workspace(directory)
+            service = ApplicationService(directory)
+            service.export_config()
+            before_content = service.default_export_path.read_text(encoding="utf-8")
+
+            with patch("src.service.validate_opencode_config", return_value=(False, ["Champ requis manquant"])):
+                res = service.export_config()
+                self.assertFalse(res.ok)
+                self.assertIn("Champ requis manquant", res.message)
+
+            after_content = service.default_export_path.read_text(encoding="utf-8")
+            self.assertEqual(before_content, after_content)
+
 
 if __name__ == "__main__":
     unittest.main()

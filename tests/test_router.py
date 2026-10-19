@@ -108,6 +108,47 @@ class TestRouter(unittest.TestCase):
         self.assertEqual(target.formatted_model_id, "openrouter/mistralai/mistral-large-2411")
         self.assertFalse(target.is_local)
 
+    def test_execution_target_explicit_offer_metadata(self) -> None:
+        """MP-204 : Vérifie que l'ExecutionTarget explicite la provenance des tarifs et le statut."""
+        creds = {
+            "ollama": ProviderCredentials(provider="ollama", is_available=True, source="ollama"),
+            "groq": ProviderCredentials(provider="groq", is_available=True, source="env", masked_key="gsk-***"),
+            "openrouter": ProviderCredentials(provider="openrouter", is_available=True, source="env", masked_key="sk-***"),
+        }
+
+        # 1. Ollama local
+        target_ollama = resolve_model_execution_target(
+            reference_model=self.ref_qwen,
+            provider_priority=["ollama"],
+            credentials=creds,
+            ollama_models=[self.ollama_model],
+        )
+        self.assertEqual(target_ollama.pricing_source, "local_free")
+        self.assertEqual(target_ollama.native_model_id, "ollama/qwen2.5-coder:7b")
+        self.assertFalse(target_ollama.is_heuristic_match)
+        self.assertEqual(target_ollama.verification_status, "verified")
+
+        # 2. API directe avec correspondance vérifiée
+        direct_access = {"groq": {"llama-3.3-70b-versatile"}}
+        ref_llama = Model(
+            id="meta-llama/llama-3.3-70b-instruct", provider="meta-llama", tier="flagship",
+            cost_input_per_m=2.0, cost_output_per_m=4.0, context_window=128000,
+            supports_tools=True, complexity_score=5,
+        )
+        target_direct = resolve_model_execution_target(
+            reference_model=ref_llama,
+            provider_priority=["groq"],
+            credentials=creds,
+            direct_access=direct_access,
+        )
+        self.assertEqual(target_direct.channel_provider, "groq")
+        self.assertEqual(target_direct.native_model_id, "llama-3.3-70b-versatile")
+        self.assertEqual(target_direct.pricing_source, "direct_api_pricing")
+        self.assertEqual(target_direct.effective_cost_input_per_m, 0.59)
+        self.assertEqual(target_direct.effective_cost_output_per_m, 0.79)
+        self.assertFalse(target_direct.is_heuristic_match)
+        self.assertEqual(target_direct.verification_status, "verified")
+
 
 if __name__ == "__main__":
     unittest.main()

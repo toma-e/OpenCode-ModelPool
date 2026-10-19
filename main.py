@@ -31,7 +31,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="OpenCode-ModelPool - Attribution automatique de modèles LLM pour agents OpenCode."
     )
-    parser.add_argument("--sync", action="store_true", help="Synchronise le catalogue multi-fournisseurs (OpenRouter, Ollama, direct APIs) avec backup.")
+    parser.add_argument(
+        "--sync",
+        action="store_true",
+        help="Synchronise le catalogue OpenRouter (par défaut ; utilisez --sync-all pour tous les fournisseurs).",
+    )
+    parser.add_argument(
+        "--sync-openrouter",
+        action="store_true",
+        help="Synchronise uniquement le catalogue public OpenRouter.",
+    )
+    parser.add_argument(
+        "--sync-all",
+        action="store_true",
+        help="Synchronise l'ensemble des fournisseurs configurés (OpenRouter, Ollama local, APIs directes).",
+    )
     parser.add_argument("--no-fallback", action="store_true", help="Désactive le surclassement automatique.")
     parser.add_argument(
         "--filter-keys",
@@ -84,10 +98,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Validation sans export : renvoie un code de sortie 1 si au moins un agent reste non attribué.",
     )
     parser.add_argument(
+        "--check-ready",
+        action="store_true",
+        help="Contrôle strict d'exécutabilité : renvoie un code de sortie 1 si un agent n'a pas de cible prête (clé vérifiée ou service local actif).",
+    )
+    parser.add_argument(
         "--export",
         nargs="?",
         const="config/opencode.json",
         help="Exporte la configuration OpenCode (défaut : config/opencode.json, ex: ~/.config/opencode/opencode.json ou .opencode/opencode.json).",
+    )
+    parser.add_argument(
+        "--diff",
+        "--preview",
+        nargs="?",
+        const="config/opencode.json",
+        metavar="PATH",
+        dest="diff",
+        help="Prévisualise le diff unifié de la configuration OpenCode sans écrire sur le disque (MP-206).",
+    )
+    parser.add_argument(
+        "--rollback",
+        nargs="?",
+        const="config/opencode.json",
+        metavar="PATH",
+        help="Restaure la configuration OpenCode depuis la dernière sauvegarde horodatée ou .bak (MP-206).",
     )
     parser.add_argument(
         "--serve",
@@ -103,20 +138,36 @@ def build_parser() -> argparse.ArgumentParser:
 def render_results(report: FleetReport) -> None:
     """Affiche les attributions et la simulation budgétaire d'un rapport."""
     print(f"\n🤖 Configuration des agents ({len(report.agents)}) :\n")
+    budget_by_agent = {r.agent_name: r for r in report.budget.agent_reports}
     for index, (agent, result) in enumerate(zip(report.agents, report.results)):
         print("-" * 75)
         print(f"Agent : {agent.name} — {agent.description}")
         target = report.execution_targets[index] if index < len(report.execution_targets) else None
+        agent_budget = budget_by_agent.get(agent.name)
         if result.model:
             status = "FALLBACK / SURCLASSEMENT" if result.is_fallback else "EXACT"
             print(f"  Statut            : [{status}] {result.reason}")
             print(f"  Modèle retenu     : {result.model.id}")
             if target:
                 print(f"  Canal d'exécution : {target.description_label} (ID OpenCode: {target.formatted_model_id})")
+                if target.pricing_source:
+                    print(f"  Source tarifaire  : {target.pricing_source}")
+            if agent_budget:
+                if not agent_budget.is_estimable:
+                    print("  Coût estimé       : Non estimable (tarifs non répertoriés)")
+                elif agent_budget.is_local:
+                    print("  Coût estimé       : $0.0000 (0$ API, hors infrastructure)")
+                else:
+                    print(f"  Coût estimé       : ${agent_budget.monthly_total_cost:.4f}")
+                if agent_budget.quota_warning:
+                    print(f"  Alerte quota      : {agent_budget.quota_warning}")
         else:
             print(f"  Aucun modèle compatible : {result.reason}")
     print("-" * 75)
-    print(f"💰 Coût mensuel total estimé : ${report.budget.total_monthly_cost:.4f}")
+    if report.budget.is_total_estimable:
+        print(f"💰 Coût mensuel total estimé : ${report.budget.total_monthly_cost:.4f}")
+    else:
+        print(f"💰 Coût mensuel total estimé : Non estimable (au moins un modèle a des tarifs non répertoriés)")
     print(f"📊 Volume total estimé : {report.budget.total_tokens:,} tokens/mois")
     if report.diagnostics:
         print("\n⚠️  Diagnostics :")
@@ -192,15 +243,69 @@ def run(args: argparse.Namespace, base_dir: Path = BASE_DIR) -> int:
             render_results(res.report)
         return 0
 
-    if args.sync or (args.serve is None and not service.models_path.exists()):
-        print("🔄 Synchronisation du catalogue multi-fournisseurs...")
+    if getattr(args, "rollback", None):
+        res = service.rollback_export(args.rollback)
+        if not res.ok:
+            LOGGER.error("Échec de la restauration : %s", res.message)
+            print(f"❌ {res.message}", file=sys.stderr)
+            return 1
+        print(f"✅ {res.message}")
+        return 0
+
+    if getattr(args, "diff", None):
+        preview = service.preview_export(
+            args.diff,
+            allow_fallback=allow_fallback,
+            filter_by_keys=filter_by_keys,
+            custom_priority=custom_priority,
+        )
+        if not preview["is_valid"]:
+            print("❌ Erreur de validation de la configuration :", file=sys.stderr)
+            for err in preview["validation_errors"]:
+                print(f"  • {err}", file=sys.stderr)
+            return 1
+        print(f"📄 Prévisualisation du diff pour {preview['target_path']} :\n")
+        print(preview["diff"] if preview["diff"] else "(Aucune différence avec le fichier existant)")
+        return 0
+
+    if getattr(args, "sync_all", False):
+        print("🔄 Synchronisation du catalogue multi-fournisseurs (OpenRouter, Ollama, APIs directes)...")
         synced = service.sync_catalogue(
             allow_fallback=allow_fallback,
+            multi_provider=True,
             include_ollama=include_ollama,
             filter_by_keys=filter_by_keys,
         )
         if not synced.ok:
-            LOGGER.error("Échec de synchronisation : %s", synced.message)
+            LOGGER.error("Échec de synchronisation multi-fournisseurs : %s", synced.message)
+            print(f"❌ {synced.message}", file=sys.stderr)
+            return 1
+        print(f"✅ {synced.message}")
+
+    elif getattr(args, "sync_openrouter", False) or args.sync:
+        print("🔄 Synchronisation du catalogue OpenRouter...")
+        synced = service.sync_catalogue(
+            allow_fallback=allow_fallback,
+            multi_provider=False,
+            include_ollama=False,
+            filter_by_keys=filter_by_keys,
+        )
+        if not synced.ok:
+            LOGGER.error("Échec de synchronisation OpenRouter : %s", synced.message)
+            print(f"❌ {synced.message}", file=sys.stderr)
+            return 1
+        print(f"✅ {synced.message}")
+
+    elif args.serve is None and not service.models_path.exists():
+        print("🔄 Catalogue de modèles absent : initialisation via OpenRouter...")
+        synced = service.sync_catalogue(
+            allow_fallback=allow_fallback,
+            multi_provider=False,
+            include_ollama=False,
+            filter_by_keys=filter_by_keys,
+        )
+        if not synced.ok:
+            LOGGER.error("Échec d'initialisation du catalogue : %s", synced.message)
             print(f"❌ {synced.message}", file=sys.stderr)
             return 1
         print(f"✅ {synced.message}")
@@ -223,6 +328,17 @@ def run(args: argparse.Namespace, base_dir: Path = BASE_DIR) -> int:
         return 2
 
     render_results(built.report)
+
+    if getattr(args, "check_ready", False):
+        is_ready, reasons = service.check_fleet_readiness(built.report)
+        if not is_ready:
+            print("\n❌ Contrôle strict d'exécutabilité échoué :", file=sys.stderr)
+            for reason in reasons:
+                print(f"  • {reason}", file=sys.stderr)
+            return 1
+        print("\n✅ Contrôle strict d'exécutabilité réussi : tous les agents disposent d'un canal d'exécution prêt.")
+        if not args.validate and not args.export:
+            return 0
 
     if getattr(args, "validate", False):
         unassigned = [r.agent_name for r in built.report.results if r.model is None]

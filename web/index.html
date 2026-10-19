@@ -156,13 +156,23 @@
       <label><input id="fallback" type="checkbox" checked> Surclassement (fallback)</label>
       <label><input id="filter_keys" type="checkbox"> Filtrer par clés actives</label>
       <button id="refresh_access" type="button" title="Interroge les APIs directes (Google, Mistral, Groq...) pour vérifier les modèles réellement accessibles avec chaque clé">Vérifier clés</button>
-      <button id="recalculate" type="button">Recalculer</button>
-      <button id="export" type="button">Exporter</button>
-      <button id="sync" class="primary" type="button">Synchroniser</button>
+      <button id="recalculate" type="button" title="Recalcule les attributions des agents selon les contraintes">Recalculer</button>
+      <button id="sync_or" type="button" title="Télécharge le catalogue public OpenRouter">Sync OpenRouter</button>
+      <button id="sync_all" class="primary" type="button" title="Synchronise OpenRouter, Ollama et APIs directes">Sync Tous</button>
+      <button id="preview_diff" type="button" title="Prévisualise le diff unifié OpenCode avant écriture">Prévisualiser</button>
+      <button id="export" type="button" title="Exporte vers config/opencode.json">Exporter</button>
     </div>
   </header>
   <div id="banner" role="status"></div>
   <main>
+    <section id="diff_section" class="card" style="display:none;margin-bottom:1rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+        <h2 style="margin:0;">Prévisualisation des modifications OpenCode (Diff unifié)</h2>
+        <button id="close_diff_btn" class="btn-sm" type="button">Fermer</button>
+      </div>
+      <div id="diff_status" style="margin-bottom:0.5rem;font-size:0.85rem;"></div>
+      <pre id="diff_content" style="background:#0d1117;padding:0.75rem;border-radius:0.4rem;overflow-x:auto;font-family:monospace;font-size:0.82rem;white-space:pre-wrap;border:1px solid var(--line);max-height:400px;overflow-y:auto;"></pre>
+    </section>
     <section id="providers_bar" style="margin-bottom:0.75rem;display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;background:var(--panel);padding:0.6rem 1rem;border-radius:0.4rem;border:1px solid var(--line);font-size:0.85rem;"></section>
     <section id="priority_section" class="priority-panel">
       <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -184,7 +194,7 @@
     const providersBar = document.getElementById("providers_bar");
     const fallbackInput = document.getElementById("fallback");
     const filterKeysInput = document.getElementById("filter_keys");
-    const buttons = ["refresh_access", "recalculate", "export", "sync"].map((id) => document.getElementById(id));
+    const buttons = ["refresh_access", "recalculate", "sync_or", "sync_all", "preview_diff", "export"].map((id) => document.getElementById(id));
 
     function fallbackEnabled() {
       return fallbackInput.checked;
@@ -328,10 +338,11 @@
       }
       const cat = report.catalogue || {};
       const budget = report.budget || {};
+      const monthlyCostLabel = budget.is_total_estimable === false ? "Non estimable" : money(budget.total_monthly_cost);
       summary.innerHTML = [
         ["Catalogue", (cat.total_models ?? 0) + " modèles"],
         ["Mise à jour", cat.last_updated || "inconnue"],
-        ["Coût mensuel", money(budget.total_monthly_cost)],
+        ["Coût mensuel", monthlyCostLabel],
         ["Tokens / mois", Number(budget.total_tokens || 0).toLocaleString("fr-FR")],
         ["Économies free-tier", money(budget.free_tier_savings)],
         ["Alertes budget", budget.has_warnings ? "oui" : "non"],
@@ -346,8 +357,19 @@
           .slice(0, 5)
           .map((item) => `<li><code>${escapeHtml(item.id)}</code> (${money(item.total_cost_per_m)} / MTok)</li>`)
           .join("");
+        let costDisplay = "";
+        if (agent.budget) {
+          if (!agent.budget.is_estimable) {
+            costDisplay = "Non estimable (tarifs non répertoriés)";
+          } else if (agent.budget.is_local) {
+            costDisplay = "$0.0000 (0$ API, local)";
+          } else {
+            costDisplay = money(agent.budget.monthly_total_cost);
+          }
+        }
+        const pricingSourceTag = agent.budget && agent.budget.pricing_source ? ` · source: ${escapeHtml(agent.budget.pricing_source)}` : "";
         const budgetLine = agent.budget
-          ? `<p>Coût estimé ${money(agent.budget.monthly_total_cost)}${agent.budget.budget_exceeded ? " · plafond dépassé" : ""}${agent.budget.quota_warning ? " · " + escapeHtml(agent.budget.quota_warning) : ""}</p>`
+          ? `<p>Coût estimé : ${costDisplay}${pricingSourceTag}${agent.budget.budget_exceeded ? " · plafond dépassé" : ""}${agent.budget.quota_warning ? " · " + escapeHtml(agent.budget.quota_warning) : ""}</p>`
           : "";
         const c = agent.constraints || {};
         const strategy = c.sort_strategy || "lowest_cost";
@@ -479,16 +501,16 @@
       }
     }
 
-    async function call(path, method) {
-      buttons.forEach((button) => { button.disabled = true; });
+    async function call(path, method, extraBody = {}) {
+      buttons.forEach((button) => { if (button) button.disabled = true; });
       try {
         const options = { method, headers: { "Content-Type": "application/json" } };
         if (method !== "GET") {
           options.body = JSON.stringify({
             fallback: fallbackEnabled(),
             filter_keys: filterKeysEnabled(),
-            multi_provider: true,
             priority: currentPriority,
+            ...extraBody,
           });
         }
         const url = method === "GET"
@@ -501,14 +523,50 @@
       } catch (error) {
         showBanner(false, "Impossible de joindre le serveur local : " + error);
       } finally {
-        buttons.forEach((button) => { button.disabled = false; });
+        buttons.forEach((button) => { if (button) button.disabled = false; });
       }
     }
 
+    async function showDiff() {
+      try {
+        const res = await fetch("/api/diff", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fallback: fallbackEnabled(),
+            filter_keys: filterKeysEnabled(),
+            priority: currentPriority,
+          }),
+        });
+        const data = await res.json();
+        const diffSec = document.getElementById("diff_section");
+        const diffStatus = document.getElementById("diff_status");
+        const diffContent = document.getElementById("diff_content");
+        diffSec.style.display = "block";
+        if (data.ok) {
+          diffStatus.innerHTML = data.is_valid
+            ? "<span style='color:var(--ok);'>✓ Configuration valide selon le schéma OpenCode</span>"
+            : "<span style='color:var(--bad);'>✗ Configuration invalide : " + escapeHtml((data.validation_errors || []).join("; ")) + "</span>";
+          diffContent.textContent = data.diff || "(Aucune modification par rapport à la configuration actuelle)";
+        } else {
+          diffStatus.innerHTML = "<span style='color:var(--bad);'>Erreur : " + escapeHtml(data.message) + "</span>";
+          diffContent.textContent = "";
+        }
+      } catch (e) {
+        showBanner(false, "Impossible de générer le diff : " + e);
+      }
+    }
+
+    document.getElementById("close_diff_btn").addEventListener("click", () => {
+      document.getElementById("diff_section").style.display = "none";
+    });
+
     document.getElementById("refresh_access").addEventListener("click", () => call("/api/refresh-access", "POST"));
     document.getElementById("recalculate").addEventListener("click", () => call("/api/recalculate", "POST"));
+    document.getElementById("sync_or").addEventListener("click", () => call("/api/sync", "POST", { multi_provider: false }));
+    document.getElementById("sync_all").addEventListener("click", () => call("/api/sync", "POST", { multi_provider: true }));
+    document.getElementById("preview_diff").addEventListener("click", showDiff);
     document.getElementById("export").addEventListener("click", () => call("/api/export", "POST"));
-    document.getElementById("sync").addEventListener("click", () => call("/api/sync", "POST"));
     filterKeysInput.addEventListener("change", () => call("/api/recalculate", "POST"));
     fallbackInput.addEventListener("change", () => call("/api/recalculate", "POST"));
 

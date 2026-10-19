@@ -30,8 +30,12 @@ from src.selector import Model
 ACCESS_CACHE_VERSION = 1
 
 STATUS_OK = "ok"
-STATUS_EMPTY = "empty"   # requête aboutie mais aucun modèle (clé invalide, droits insuffisants...)
+STATUS_EMPTY = "empty"   # requête aboutie mais aucun modèle (droits insuffisants...)
 STATUS_ERROR = "error"   # exception inattendue lors de l'interrogation
+STATUS_AUTH_ERROR = "auth_error"  # clé invalide ou non autorisée (401/403)
+STATUS_RATE_LIMIT = "rate_limit"  # débit limité ou quota temporaire (429)
+
+MAX_CACHE_AGE_DAYS = 14
 
 _PROBE_USER_AGENT = "OpenCode-ModelPool/1.0"
 
@@ -112,9 +116,10 @@ def test_model_live_availability(
     if provider == "google":
         url = (
             f"https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{clean_id}:generateContent?key={api_key}"
+            f"{clean_id}:generateContent"
         )
         headers = {
+            "x-goog-api-key": api_key,
             "Content-Type": "application/json",
             "User-Agent": _PROBE_USER_AGENT,
         }
@@ -180,6 +185,30 @@ def probe_provider_access(
             continue
         try:
             models = fetcher(api_key=key)
+        except urllib.error.HTTPError as error:
+            if error.code in (401, 403):
+                err_status = STATUS_AUTH_ERROR
+                err_msg = f"Authentification refusée (HTTP {error.code})"
+            elif error.code == 429:
+                err_status = STATUS_RATE_LIMIT
+                err_msg = "Limite de débit / quota temporairement atteint (HTTP 429)"
+            elif error.code == 404:
+                err_status = STATUS_ERROR
+                err_msg = "Endpoint ou ressource introuvable (HTTP 404)"
+            elif error.code >= 500:
+                err_status = STATUS_ERROR
+                err_msg = f"Service fournisseur indisponible (HTTP {error.code})"
+            else:
+                err_status = STATUS_ERROR
+                err_msg = f"Erreur HTTP {error.code}"
+            results[provider] = ProviderAccess(provider, cred.masked_key, err_status, (), now, err_msg)
+            continue
+        except urllib.error.URLError as error:
+            results[provider] = ProviderAccess(provider, cred.masked_key, STATUS_ERROR, (), now, f"Erreur réseau : {error.reason}")
+            continue
+        except TimeoutError:
+            results[provider] = ProviderAccess(provider, cred.masked_key, STATUS_ERROR, (), now, "Délai d'attente dépassé (timeout)")
+            continue
         except Exception as error:  # noqa: BLE001 - un connecteur défaillant ne doit pas bloquer les autres
             results[provider] = ProviderAccess(provider, cred.masked_key, STATUS_ERROR, (), now, str(error))
             continue
@@ -189,7 +218,7 @@ def probe_provider_access(
         # Micro-requête de test en parallèle si demandée pour éliminer 429 / 403
         if verify_live_call and raw_ids:
             verified_ids: List[str] = []
-            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
                 future_to_id = {
                     executor.submit(test_model_live_availability, provider, mid, key): mid
                     for mid in raw_ids
@@ -264,6 +293,8 @@ def resolve_verified_access(
     cached: Mapping[str, ProviderAccess],
     credentials: Mapping[str, ProviderCredentials],
     direct_providers: Sequence[str],
+    max_cache_age_days: int = MAX_CACHE_AGE_DAYS,
+    strict_freshness: bool = False,
 ) -> Tuple[Dict[str, frozenset[str]], List[str]]:
     """Croise le cache avec les clés actuelles.
 
@@ -274,6 +305,7 @@ def resolve_verified_access(
     """
     verified: Dict[str, frozenset[str]] = {}
     diagnostics: List[str] = []
+    now_dt = datetime.now(timezone.utc)
     for provider in direct_providers:
         cred = credentials.get(provider)
         if cred is None or not cred.is_available:
@@ -297,5 +329,21 @@ def resolve_verified_access(
                 f"Aucun modèle accessible avec la clé {provider}{detail} : canal direct désactivé."
             )
             continue
+
+        # Vérification de la fraîcheur du cache (MP-212)
+        if entry.checked_at:
+            try:
+                checked_dt = datetime.fromisoformat(entry.checked_at.replace("Z", "+00:00"))
+                age_days = (now_dt - checked_dt).days
+                if age_days > max_cache_age_days:
+                    diagnostics.append(
+                        f"Vérification d'accès pour {provider} périmée ({age_days} jours > {max_cache_age_days}j) : "
+                        "lancez 'python3 main.py --refresh-access'."
+                    )
+                    if strict_freshness:
+                        continue
+            except (ValueError, TypeError):
+                pass
+
         verified[provider] = frozenset(entry.model_ids)
     return verified, diagnostics

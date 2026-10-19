@@ -148,10 +148,6 @@ class TestProviderAccess(unittest.TestCase):
         self.assertEqual(target_lyria.formatted_model_id, "openrouter/google/lyria-3-clip-preview")
         self.assertFalse(target_lyria.access_verified)
 
-
-if __name__ == "__main__":
-    unittest.main()
-
     def test_live_availability_200_and_429(self) -> None:
         from unittest.mock import patch
         import urllib.error
@@ -166,3 +162,79 @@ if __name__ == "__main__":
         with patch("urllib.request.urlopen") as mock_urlopen:
             mock_urlopen.side_effect = urllib.error.HTTPError("url", 429, "Rate Limit", {}, None)
             self.assertFalse(test_model_live_availability("mistralai", "mistral-medium-3-5", "key"))
+
+    def test_google_probe_uses_header_auth(self) -> None:
+        """Vérifie que la clé Google est transmise via l'en-tête x-goog-api-key et non dans l'URL."""
+        from unittest.mock import patch
+        from src.providers.access import test_model_live_availability
+
+        with patch("urllib.request.urlopen") as mock_urlopen:
+            mock_resp = MagicMock()
+            mock_resp.status = 200
+            mock_urlopen.return_value.__enter__.return_value = mock_resp
+            res = test_model_live_availability("google", "gemini-2.5-flash", "secret-test-key")
+            self.assertTrue(res)
+            # Vérifier l'appel urllib
+            called_req = mock_urlopen.call_args[0][0]
+            self.assertNotIn("secret-test-key", called_req.full_url)
+            self.assertEqual(called_req.headers.get("X-goog-api-key"), "secret-test-key")
+
+    def test_resolve_verified_access_cache_freshness(self) -> None:
+        """Vérifie le diagnostic d'expiration de cache et le rejet en mode strict."""
+        from datetime import datetime, timezone, timedelta
+        creds = {
+            "google": ProviderCredentials(provider="google", is_available=True, source="env", masked_key="key123"),
+        }
+        # Cache datant de 20 jours (> 14j)
+        stale_date = (datetime.now(timezone.utc) - timedelta(days=20)).isoformat()
+        cached = {
+            "google": ProviderAccess(
+                provider="google",
+                masked_key="key123",
+                status="ok",
+                model_ids=("gemini-2.5-flash",),
+                checked_at=stale_date,
+            )
+        }
+
+        # 1. Mode normal : avertissement dans diagnostics mais accès retenu
+        verified, diags = resolve_verified_access(cached, creds, ["google"], max_cache_age_days=14, strict_freshness=False)
+        self.assertIn("google", verified)
+        self.assertTrue(any("périmée" in d for d in diags))
+
+        # 2. Mode strict : cache périmé non considéré comme vérifié
+        verified_strict, diags_strict = resolve_verified_access(cached, creds, ["google"], max_cache_age_days=14, strict_freshness=True)
+        self.assertNotIn("google", verified_strict)
+        self.assertTrue(any("périmée" in d for d in diags_strict))
+
+    def test_probe_provider_access_error_categorization(self) -> None:
+        """Différencie les erreurs HTTP 401/403, 429 et pannes réseau."""
+        import urllib.error
+        from src.providers.access import STATUS_AUTH_ERROR, STATUS_RATE_LIMIT
+
+        creds = {
+            "mistralai": ProviderCredentials(provider="mistralai", is_available=True, source="env", masked_key="m123"),
+            "groq": ProviderCredentials(provider="groq", is_available=True, source="env", masked_key="g123"),
+        }
+
+        mock_fetchers = {
+            "mistralai": MagicMock(side_effect=urllib.error.HTTPError("url", 401, "Unauthorized", {}, None)),
+            "groq": MagicMock(side_effect=urllib.error.HTTPError("url", 429, "Too Many Requests", {}, None)),
+        }
+
+        results = probe_provider_access(
+            creds,
+            fetchers=mock_fetchers,
+            key_resolver=lambda prov, project_dir=None: "k",
+            verify_live_call=False,
+        )
+
+        self.assertEqual(results["mistralai"].status, STATUS_AUTH_ERROR)
+        self.assertIn("Authentification refusée", results["mistralai"].error)
+
+        self.assertEqual(results["groq"].status, STATUS_RATE_LIMIT)
+        self.assertIn("429", results["groq"].error)
+
+
+if __name__ == "__main__":
+    unittest.main()

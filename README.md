@@ -133,6 +133,23 @@ Vous pouvez lier OpenCode-ModelPool à OpenCode de trois manières :
   ```
   *(Chaque ré-export ou mise à jour via l'interface web sera immédiatement pris en compte par OpenCode).*
 
+#### 🛡️ Prévisualisation & Sécurité d'Export
+Avant d'écrire sur votre configuration active, vous pouvez inspecter le diff unifié et valider le schéma :
+```bash
+python3 main.py --diff ~/.config/opencode/opencode.json
+```
+En cas d'erreur ou d'export non souhaité, restaurez instantanément la version précédente :
+```bash
+python3 main.py --rollback ~/.config/opencode/opencode.json
+```
+
+### Contrôle Strict d'Exécutabilité (`--check-ready`)
+Pour vérifier de manière déterministe en CI ou avant lancement qu'aucun agent n'est associé à une cible inaccessible (clé absente ou service local éteint) :
+```bash
+python3 main.py --check-ready
+```
+Renvoie le code d'erreur `1` avec diagnostics précis si une clé d'API requise n'a pas été validée.
+
 
 ### Forcer la Synchronisation depuis OpenRouter
 Pour télécharger les derniers modèles disponibles tout en archivant l'ancienne version :
@@ -178,8 +195,13 @@ Consultez LANCEURS.md pour plus de détails.
 | Option | Description |
 |---|---|
 | `--export [PATH]` | Génère le fichier de configuration OpenCode (défaut : `config/opencode.json`). |
-| `--validate` | Valide la compatibilité de tous les agents (code de sortie 1 si au moins un agent reste sans modèle). Enchaînable avec `--export`. |
-| `--sync` | Télécharge et met à jour le catalogue multi-fournisseurs (OpenRouter, Ollama, APIs directes) avec backup. |
+| `--diff [PATH]`, `--preview` | Prévisualise le diff unifié de la configuration OpenCode sans modifier le disque. |
+| `--rollback [PATH]` | Restaure la configuration OpenCode depuis la dernière sauvegarde horodatée ou `.bak`. |
+| `--validate` | Valide la compatibilité de tous les agents (code 1 si un agent reste sans modèle). Enchaînable avec `--export`. |
+| `--check-ready` | Contrôle strict d'exécutabilité : renvoie le code 1 si un modèle attribué n'a pas de canal prouvé (clé active/vérifiée ou service local actif). |
+| `--sync` | Télécharge et met à jour le catalogue OpenRouter par défaut (compatible scripts existants). |
+| `--sync-openrouter` | Télécharge exclusivement le catalogue public OpenRouter. |
+| `--sync-all` | Synchronise le catalogue multi-fournisseurs (OpenRouter, Ollama local, APIs directes). |
 | `--status-keys` | Affiche l'état des clés API détectées et le nombre de modèles vérifiés par fournisseur. |
 | `--refresh-access` | Interroge les APIs directes (Google, Mistral, Groq...) pour vérifier les modèles réellement accessibles par clé. |
 | `--filter-keys` | Ne retient dans le vivier d'attribution que les modèles rattachés à des clés disponibles ou locaux/gratuits. |
@@ -188,7 +210,7 @@ Consultez LANCEURS.md pour plus de détails.
 | `--no-fallback` | Désactive le surclassement automatique si aucun modèle exact n'est trouvé. |
 | `--models PATH` | Spécifie un chemin personnalisé vers `models.json`. |
 | `--agents PATH` | Spécifie un chemin personnalisé vers `agents_requirements.json`. |
-| `--serve [PORT]` | Démarre l'interface web locale sur 127.0.0.1 (défaut : 8765). |
+| `--serve [PORT]` | Démarre l'interface web locale sur 127.0.0.1 (défaut : 8765, plage : 1-65535). |
 | `-h`, `--help` | Affiche l'aide détaillée. |
 
 ---

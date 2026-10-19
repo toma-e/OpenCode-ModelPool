@@ -159,6 +159,75 @@ class TestMain(unittest.TestCase):
             self.assertEqual(args.provider_priority, "ollama,groq,openrouter")
             self.assertEqual(main.run(args, directory), 0)
 
+    def test_sync_openrouter_and_sync_all_flags(self) -> None:
+        """MP-202 : Vérifie l'aiguillage CLI entre --sync-openrouter et --sync-all."""
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            self._write_valid_files(directory)
+
+            # Test --sync-openrouter
+            args_or = main.build_parser().parse_args(["--sync-openrouter"])
+            with patch("src.service.ApplicationService.sync_catalogue") as mock_sync:
+                from src.service import OperationResult
+                mock_sync.return_value = OperationResult(True, "10 modèles")
+                ret = main.run(args_or, directory)
+                self.assertEqual(ret, 0)
+                mock_sync.assert_called_once()
+                _, kwargs = mock_sync.call_args
+                self.assertFalse(kwargs.get("multi_provider", True))
+
+            # Test --sync-all
+            args_all = main.build_parser().parse_args(["--sync-all"])
+            with patch("src.service.ApplicationService.sync_catalogue") as mock_sync_all:
+                mock_sync_all.return_value = OperationResult(True, "50 modèles")
+                ret = main.run(args_all, directory)
+                self.assertEqual(ret, 0)
+                mock_sync_all.assert_called_once()
+                _, kwargs = mock_sync_all.call_args
+                self.assertTrue(kwargs.get("multi_provider", False))
+
+    def test_check_ready_cli_flag(self) -> None:
+        """MP-207 : Vérifie la commande CLI --check-ready (mode strict)."""
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            self._write_valid_files(directory)
+
+            args = main.build_parser().parse_args(["--check-ready"])
+
+            # Cas échec de readiness
+            with patch("src.service.ApplicationService.check_fleet_readiness", return_value=(False, ["Clé manquante"])):
+                ret_fail = main.run(args, directory)
+                self.assertEqual(ret_fail, 1)
+
+            # Cas succès de readiness
+            with patch("src.service.ApplicationService.check_fleet_readiness", return_value=(True, [])):
+                ret_ok = main.run(args, directory)
+                self.assertEqual(ret_ok, 0)
+
+    def test_diff_and_rollback_cli_flags(self) -> None:
+        """MP-206 : Vérifie les commandes CLI --diff et --rollback."""
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            self._write_valid_files(directory)
+
+            # Test --diff
+            args_diff = main.build_parser().parse_args(["--diff"])
+            with patch("src.service.ApplicationService.preview_export", return_value={
+                "target_path": str(directory / "config" / "opencode.json"),
+                "diff": "+ {\"model\": \"test\"}",
+                "is_valid": True,
+                "validation_errors": [],
+            }):
+                ret_diff = main.run(args_diff, directory)
+                self.assertEqual(ret_diff, 0)
+
+            # Test --rollback
+            from src.service import OperationResult
+            args_rb = main.build_parser().parse_args(["--rollback"])
+            with patch("src.service.ApplicationService.rollback_export", return_value=OperationResult(True, "Restauré")):
+                ret_rb = main.run(args_rb, directory)
+                self.assertEqual(ret_rb, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

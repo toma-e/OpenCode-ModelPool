@@ -141,7 +141,7 @@ class TestExporter(unittest.TestCase):
 
     def test_build_opencode_config_with_base_config(self) -> None:
         base = {
-            "model": "openrouter/free",
+            "model": "custom/valid-model",
             "permission": {"bash": {"*": "allow"}},
             "provider": {"ollama": {"name": "Ollama Local"}},
             "agent": {
@@ -154,12 +154,18 @@ class TestExporter(unittest.TestCase):
             base_config=base,
         )
         self.assertEqual(config["$schema"], "https://opencode.ai/config.json")
-        self.assertEqual(config["model"], "openrouter/free")
+        self.assertEqual(config["model"], "custom/valid-model")
         self.assertEqual(config["permission"]["bash"]["*"], "allow")
         self.assertEqual(config["provider"]["ollama"]["name"], "Ollama Local")
         self.assertIn("custom_agent", config["agent"])
         self.assertIn("coder_agent", config["agent"])
         self.assertEqual(config["agent"]["coder_agent"]["model"], "openrouter/test/model-fast")
+
+    def test_build_opencode_config_replaces_obsolete_free_default(self) -> None:
+        """MP-206 : Remplace le modèle par défaut 'openrouter/free' par le premier modèle actif."""
+        base = {"model": "openrouter/free"}
+        config = build_opencode_config([self.assigned_result], [self.agent_req], base_config=base)
+        self.assertEqual(config["model"], "openrouter/test/model-fast")
 
     def test_format_opencode_model_id_preserves_custom_provider(self) -> None:
         """Vérifie que les identifiants de modèles de fournisseurs locaux déclarés ne sont pas forcés vers openrouter."""
@@ -215,9 +221,13 @@ class TestExporter(unittest.TestCase):
         ]
         config = build_opencode_config(results, agents)
         self.assertEqual(config["agent"]["build"]["mode"], "primary")
+        self.assertEqual(config["agent"]["build"]["permission"], {"edit": "allow"})
         self.assertEqual(config["agent"]["plan"]["mode"], "primary")
+        self.assertEqual(config["agent"]["plan"]["permission"], {"edit": "deny"})
         self.assertEqual(config["agent"]["explore"]["mode"], "subagent")
+        self.assertEqual(config["agent"]["explore"]["permission"], {"edit": "deny"})
         self.assertEqual(config["agent"]["general"]["mode"], "subagent")
+        self.assertNotIn("permission", config["agent"]["general"])
 
 
 if __name__ == "__main__":

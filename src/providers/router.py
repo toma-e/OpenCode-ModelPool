@@ -43,6 +43,10 @@ class ExecutionTarget:
     is_local: bool = False
     description_label: str = ""    # ex: "Ollama Local (0$)", "Mistral Direct API", "OpenRouter Gateway"
     access_verified: bool = False  # True si le modèle a été trouvé dans la liste réelle de la clé
+    native_model_id: str = ""
+    pricing_source: str = "openrouter_catalog"
+    is_heuristic_match: bool = False
+    verification_status: str = "unverified"
 
 
 @dataclass(frozen=True)
@@ -99,7 +103,7 @@ def normalize_model_basename(model_id: str) -> str:
     # Remplacement des deux-points et séparateurs de version
     clean = clean.replace(":", "-").replace("_", "-")
     # Retrait des suffixes communs
-    clean = re.sub(r"-(instruct|it|chat|preview|latest|free)$", "", clean)
+    clean = re.sub(r"-(instruct|it|chat|preview|latest|free|versatile|instant)$", "", clean)
     clean = re.sub(r"-\d{8}$", "", clean)  # ex: -20241022
     clean = re.sub(r"-\d+-\d+$", "", clean)  # ex: -4-0
     # Harmonisation qwen-2.5 -> qwen2.5
@@ -171,6 +175,10 @@ def resolve_model_execution_target(
                         is_local=True,
                         description_label="Ollama Local (0$)",
                         access_verified=True,
+                        native_model_id=om.id,
+                        pricing_source="local_free",
+                        is_heuristic_match=False,
+                        verification_status="verified",
                     )
 
         # Cas 2 : Fournisseurs directs
@@ -185,14 +193,31 @@ def resolve_model_execution_target(
                 raw = reference_model.id.split("/", 1)[1] if "/" in reference_model.id else reference_model.id
                 native_id = raw
             if native_id:
+                from src.providers.direct import KNOWN_MODEL_PRICING
+                if native_id in KNOWN_MODEL_PRICING:
+                    cost_in, cost_out = KNOWN_MODEL_PRICING[native_id]
+                    pricing_source = "direct_api_pricing"
+                elif reference_model.cost_input_per_m > 0 or reference_model.cost_output_per_m > 0:
+                    cost_in, cost_out = reference_model.cost_input_per_m, reference_model.cost_output_per_m
+                    pricing_source = "reference_model_catalog"
+                elif reference_model.is_free:
+                    cost_in, cost_out = 0.0, 0.0
+                    pricing_source = "free_tier"
+                else:
+                    cost_in, cost_out = 0.0, 0.0
+                    pricing_source = "unknown"
                 return ExecutionTarget(
                     channel_provider=prov_key,
                     formatted_model_id=f"{channel.opencode_prefix}/{native_id}",
-                    effective_cost_input_per_m=reference_model.cost_input_per_m,
-                    effective_cost_output_per_m=reference_model.cost_output_per_m,
+                    effective_cost_input_per_m=cost_in,
+                    effective_cost_output_per_m=cost_out,
                     is_local=False,
                     description_label=channel.label,
                     access_verified=verified,
+                    native_model_id=native_id,
+                    pricing_source=pricing_source,
+                    is_heuristic_match=not verified,
+                    verification_status="verified" if verified else "unverified",
                 )
 
         # Cas 3 : OpenRouter (Passerelle universelle)
@@ -200,6 +225,7 @@ def resolve_model_execution_target(
             openrouter_id = reference_model.id
             if not openrouter_id.startswith("openrouter/"):
                 openrouter_id = f"openrouter/{openrouter_id}"
+            is_or_verified = is_avail
             return ExecutionTarget(
                 channel_provider="openrouter",
                 formatted_model_id=openrouter_id,
@@ -207,6 +233,11 @@ def resolve_model_execution_target(
                 effective_cost_output_per_m=reference_model.cost_output_per_m,
                 is_local=False,
                 description_label="OpenRouter Proxy",
+                access_verified=False,
+                native_model_id=reference_model.id,
+                pricing_source="openrouter_catalog",
+                is_heuristic_match=False,
+                verification_status="verified" if is_or_verified else "unverified",
             )
 
     # Fallback par défaut si aucune clé ne correspond
@@ -218,6 +249,11 @@ def resolve_model_execution_target(
         formatted_model_id=formatted_id,
         effective_cost_input_per_m=reference_model.cost_input_per_m,
         effective_cost_output_per_m=reference_model.cost_output_per_m,
-        is_local=reference_model.is_free,
+        is_local=False,
         description_label="Standard",
+        access_verified=False,
+        native_model_id=reference_model.id,
+        pricing_source="reference_model_catalog",
+        is_heuristic_match=True,
+        verification_status="unverified",
     )

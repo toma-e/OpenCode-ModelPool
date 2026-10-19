@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generated_at": "2026-10-17T17:55:00.130474+00:00",
+  "generated_at": "2026-10-19T16:39:47.513568+00:00",
   "metadata": {
     "generator": "OpenCode-ModelPool",
     "total_agents": 4,
@@ -8,46 +8,71 @@
     "unassigned_agents": 0
   },
   "budget_simulation": {
-    "total_estimated_monthly_cost": 0.765,
+    "total_estimated_monthly_cost": 0.0,
     "total_estimated_tokens": 4400000,
-    "estimated_free_tier_savings": 0.7,
-    "has_warnings": false,
+    "estimated_free_tier_savings": 2.2,
+    "has_warnings": true,
+    "is_total_estimable": true,
     "reports": [
       {
         "agent": "build",
-        "monthly_cost": 0.525,
-        "input_cost": 0.225,
-        "output_cost": 0.3,
+        "monthly_cost": 0.0,
+        "monthly_cost_formatted": "$0.0000",
+        "is_estimable": true,
+        "input_cost": 0.0,
+        "output_cost": 0.0,
         "max_budget": 15.0,
         "budget_exceeded": false,
-        "quota_warning": null
+        "quota_warning": "Risque d'atteinte des limites : volume estimé (2,000,000 tokens/mois) élevé pour un palier gratuit. Attention aux limites de débit (RPM/TPM). Quotas précis non garantis par l'API.",
+        "channel_provider": "openrouter",
+        "pricing_source": "openrouter_catalog",
+        "is_local": false,
+        "disclaimer": "Prévision estimative non contractuelle (tarifs API hors taxes)."
       },
       {
         "agent": "plan",
-        "monthly_cost": 0.24,
-        "input_cost": 0.12,
-        "output_cost": 0.12,
+        "monthly_cost": 0.0,
+        "monthly_cost_formatted": "$0.0000",
+        "is_estimable": true,
+        "input_cost": 0.0,
+        "output_cost": 0.0,
         "max_budget": 10.0,
         "budget_exceeded": false,
-        "quota_warning": null
+        "quota_warning": null,
+        "channel_provider": "openrouter",
+        "pricing_source": "openrouter_catalog",
+        "is_local": false,
+        "disclaimer": "Prévision estimative non contractuelle (tarifs API hors taxes)."
       },
       {
         "agent": "explore",
         "monthly_cost": 0.0,
+        "monthly_cost_formatted": "$0.0000",
+        "is_estimable": true,
         "input_cost": 0.0,
         "output_cost": 0.0,
         "max_budget": 2.0,
         "budget_exceeded": false,
-        "quota_warning": null
+        "quota_warning": null,
+        "channel_provider": "ollama",
+        "pricing_source": "local_free",
+        "is_local": true,
+        "disclaimer": "Exécution locale (0$ API, hors infrastructure et consommation matérielle)."
       },
       {
         "agent": "general",
         "monthly_cost": 0.0,
+        "monthly_cost_formatted": "$0.0000",
+        "is_estimable": true,
         "input_cost": 0.0,
         "output_cost": 0.0,
         "max_budget": 5.0,
         "budget_exceeded": false,
-        "quota_warning": null
+        "quota_warning": null,
+        "channel_provider": "ollama",
+        "pricing_source": "local_free",
+        "is_local": true,
+        "disclaimer": "Exécution locale (0$ API, hors infrastructure et consommation matérielle)."
       }
     ]
   },
@@ -65,30 +90,30 @@
       "requires_vision": false,
       "requires_reasoning": true,
       "prefer_tier1": true,
-      "estimated_monthly_cost": 0.525,
+      "estimated_monthly_cost": 0.0,
       "model": {
-        "id": "groq/openai/gpt-oss-120b",
-        "provider": "openai",
-        "tier": "pay_as_you_go",
-        "context_window": 131072,
+        "id": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+        "provider": "nvidia",
+        "tier": "free_tier",
+        "context_window": 1000000,
         "supports_tools": true,
-        "cost_input_per_m": 0.15,
-        "cost_output_per_m": 0.6,
-        "total_cost_per_m": 0.75,
+        "cost_input_per_m": 0.0,
+        "cost_output_per_m": 0.0,
+        "total_cost_per_m": 0.0,
         "supports_vision": false,
         "supports_reasoning": true
       },
       "selection_status": "exact",
       "selection_reason": "Correspondance exacte avec les exigences.",
       "fallback_chain": [
-        "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
+        "groq/openai/gpt-oss-120b"
       ]
     },
     "plan": {
       "name": "plan",
       "description": "Agent d'architecture et de cadrage : analyse et élaboration de plans sans modification directe",
       "enabled": true,
-      "requires_tools": false,
+      "requires_tools": true,
       "min_context_window": 64000,
       "allowed_providers": null,
       "max_monthly_budget": 10.0,
@@ -97,30 +122,30 @@
       "requires_vision": false,
       "requires_reasoning": true,
       "prefer_tier1": true,
-      "estimated_monthly_cost": 0.24,
+      "estimated_monthly_cost": 0.0,
       "model": {
-        "id": "groq/openai/gpt-oss-120b",
-        "provider": "openai",
-        "tier": "pay_as_you_go",
-        "context_window": 131072,
+        "id": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+        "provider": "nvidia",
+        "tier": "free_tier",
+        "context_window": 1000000,
         "supports_tools": true,
-        "cost_input_per_m": 0.15,
-        "cost_output_per_m": 0.6,
-        "total_cost_per_m": 0.75,
+        "cost_input_per_m": 0.0,
+        "cost_output_per_m": 0.0,
+        "total_cost_per_m": 0.0,
         "supports_vision": false,
         "supports_reasoning": true
       },
       "selection_status": "exact",
       "selection_reason": "Correspondance exacte avec les exigences.",
       "fallback_chain": [
-        "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
+        "groq/openai/gpt-oss-120b"
       ]
     },
     "explore": {
       "name": "explore",
       "description": "Sous-agent d'exploration rapide : recherche de fichiers et lecture du codebase en lecture seule",
       "enabled": true,
-      "requires_tools": false,
+      "requires_tools": true,
       "min_context_window": 32000,
       "allowed_providers": null,
       "max_monthly_budget": 2.0,
@@ -145,9 +170,9 @@
       "selection_status": "exact",
       "selection_reason": "Correspondance exacte avec les exigences.",
       "fallback_chain": [
-        "groq/openai/gpt-oss-20b",
-        "mistral/ministral-3b-latest",
-        "google/gemma-4-26b-a4b-it"
+        "google/gemma-4-26b-a4b-it",
+        "openrouter/google/gemma-4-31b-it:free",
+        "groq/openai/gpt-oss-20b"
       ]
     },
     "general": {
@@ -179,9 +204,9 @@
       "selection_status": "exact",
       "selection_reason": "Correspondance exacte avec les exigences.",
       "fallback_chain": [
-        "groq/openai/gpt-oss-20b",
         "google/gemma-4-26b-a4b-it",
-        "openrouter/google/gemma-4-31b-it:free"
+        "openrouter/google/gemma-4-31b-it:free",
+        "groq/openai/gpt-oss-20b"
       ]
     }
   }
