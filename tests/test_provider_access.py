@@ -6,7 +6,6 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from src.providers.access import (
-    STATUS_EMPTY,
     STATUS_ERROR,
     STATUS_OK,
     ProviderAccess,

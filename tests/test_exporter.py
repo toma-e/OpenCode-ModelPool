@@ -1,15 +1,11 @@
 """Tests unitaires pour le module d'export OpenCode exporter.py."""
 
-import json
-import tempfile
 import unittest
-from pathlib import Path
 
 from src.exporter import (
     build_modelpool_report_data,
     build_modelscope_report_data,
     build_opencode_config,
-    format_opencode_model_id,
     parse_json_or_jsonc,
 )
 from src.selector import (
