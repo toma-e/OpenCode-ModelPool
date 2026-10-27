@@ -15,12 +15,12 @@ import argparse
 import sys
 from pathlib import Path
 
+from src.service import ApplicationService
+
 # Résolution de la racine du projet
 BASE_DIR = Path(__file__).resolve().parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
-
-from src.service import ApplicationService
 
 
 def normalize_user_path(raw_input_str: str) -> Path:
