@@ -237,15 +237,15 @@ def run(args: argparse.Namespace, base_dir: Path = BASE_DIR) -> int:
         for prov, c in sorted(creds.items()):
             status_symbol = "✅ Oui" if c.is_available else "❌ Non"
             masked = c.masked_key if c.masked_key else ("(service local)" if prov == "ollama" else "(aucune)")
-            entry = cached.get(prov)
+            access_entry = cached.get(prov)
             if prov == "ollama":
                 verified_str = "(service local)"
             elif prov == "openrouter":
                 verified_str = "(catalogue public)"
-            elif entry and entry.masked_key == c.masked_key:
-                if entry.status == "ok":
-                    verified_str = f"✅ {len(entry.model_ids)} modèle(s)"
-                elif entry.status == "empty":
+            elif access_entry and access_entry.masked_key == c.masked_key:
+                if access_entry.status == "ok":
+                    verified_str = f"✅ {len(access_entry.model_ids)} modèle(s)"
+                elif access_entry.status == "empty":
                     verified_str = "⚠️  0 modèle"
                 else:
                     verified_str = "❌ erreur"
