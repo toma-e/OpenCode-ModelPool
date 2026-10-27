@@ -498,8 +498,8 @@ class ApplicationService:
         # Chaîne de repli hybride par agent (limites de débit / quotas) :
         # Passe 1 : canaux distincts en priorité ; Passe 2 : modèles distincts sur même canal si besoin.
         fallback_chains: dict[str, list[str]] = {}
-        for res, target in zip(results, execution_targets):
-            if res.model is None or target is None:
+        for res, exec_tgt in zip(results, execution_targets):
+            if res.model is None or exec_tgt is None:
                 continue
             candidate_targets: list[tuple[str, str]] = []
             for candidate in res.candidates[1:]:
@@ -513,8 +513,8 @@ class ApplicationService:
                     continue
                 candidate_targets.append((cand_target.formatted_model_id, cand_target.channel_provider))
             fallback_chains[res.agent_name] = build_hybrid_fallback_chain(
-                primary_formatted_id=target.formatted_model_id,
-                primary_channel=target.channel_provider,
+                primary_formatted_id=exec_tgt.formatted_model_id,
+                primary_channel=exec_tgt.channel_provider,
                 candidate_targets=candidate_targets,
                 max_length=3,
             )
