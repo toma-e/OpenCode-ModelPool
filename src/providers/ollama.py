@@ -17,6 +17,11 @@ from src.selector import Model, is_non_llm_model
 
 DEFAULT_OLLAMA_URL = "http://localhost:11434"
 
+REASONING_FAMILIES = ("r1", "deepseek-r1", "qwq", "thinking", "reasoner")
+REASONING_PATTERN = re.compile(
+    rf"(?:^|[-_/:])({'|'.join(re.escape(kw) for kw in REASONING_FAMILIES)})(?:$|[-_/:])"
+)
+
 
 def fetch_ollama_tags(
     base_url: str = DEFAULT_OLLAMA_URL,
@@ -78,11 +83,7 @@ def parse_ollama_model(raw: dict[str, Any]) -> Optional[Model]:
     supports_vision = "vision" in capabilities or any(kw in name_lower for kw in vision_capable_families)
 
     # Détection du raisonnement
-    reasoning_families = ("r1", "deepseek-r1", "qwq", "thinking", "reasoner")
-    supports_reasoning = "thinking" in capabilities or any(
-        re.search(rf"(?:^|[-_/:])({re.escape(kw)})(?:$|[-_/:])", name_lower)
-        for kw in reasoning_families
-    )
+    supports_reasoning = "thinking" in capabilities or bool(REASONING_PATTERN.search(name_lower))
 
     return Model(
         id=model_id,
