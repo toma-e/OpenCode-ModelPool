@@ -17,7 +17,6 @@ from src.providers.access import (
 )
 from src.providers.detector import ProviderCredentials
 from src.providers.router import (
-    DEFAULT_PROVIDER_PRIORITY,
     match_direct_model_id,
     resolve_model_execution_target,
 )
