@@ -8,6 +8,15 @@ from dataclasses import dataclass
 from typing import Any, Collection, Mapping, Optional, Sequence
 
 
+# Expressions régulières pré-compilées pour la détection de modèles non-LLM
+_AUDIO_REGEX_1 = re.compile(r"(?:^|[-_/:])(?:suno|udio|audio|voice|tts|xtts)(?:$|[-_/:])")
+_AUDIO_REGEX_2 = re.compile(r"(?:^|[-_/:])(?:chirp|speech(?:t\d*)?)(?:$|[-_/:0-9])")
+_EMBED_REGEX = re.compile(r"(?:^|[-_/:])(?:embed|embedding|embeddings|bge|gte|e5|rerank|reranker|aqa|voyage|voyageai)(?:$|[-_/:])")
+_IMAGE_REGEX = re.compile(r"(?:^|[-_/:])(?:flux|sora|veo|runway)(?:$|[-_/:0-9])")
+_IMAGE_SUBSTRING_REGEX = re.compile(r"[-_/:]image(?:$|[-_/:0-9])")
+_MODERATION_REGEX = re.compile(r"(?:^|[-_/:])moderation(?:$|[-_/:])")
+_ROBOTICS_REGEX = re.compile(r"(?:^|[-_/:])(?:openvla|octo|rt-[12]|pi0)(?:$|[-_/:])")
+
 # Fournisseurs de référence (Tier 1) mondialement reconnus pour la qualité de code et d'ingénierie
 TIER1_PROVIDERS: frozenset[str] = frozenset({
     "anthropic",
@@ -261,13 +270,13 @@ def is_non_llm_model(
     # Audio / Musique / Parole / Transcription
     if any(k in m_id for k in ("lyria", "musiclm", "whisper", "transcription", "seamless")):
         return True
-    if re.search(r"(?:^|[-_/:])(?:suno|udio|audio|voice|tts|xtts)(?:$|[-_/:])", m_id):
+    if _AUDIO_REGEX_1.search(m_id):
         return True
-    if re.search(r"(?:^|[-_/:])(?:chirp|speech(?:t\d*)?)(?:$|[-_/:0-9])", m_id):
+    if _AUDIO_REGEX_2.search(m_id):
         return True
 
     # Embeddings & Reranking
-    if re.search(r"(?:^|[-_/:])(?:embed|embedding|embeddings|bge|gte|e5|rerank|reranker|aqa|voyage|voyageai)(?:$|[-_/:])", m_id):
+    if _EMBED_REGEX.search(m_id):
         return True
     if "minilm" in m_id or "nomic-embed" in m_id or "mistral-embed" in m_id:
         return True
@@ -275,17 +284,17 @@ def is_non_llm_model(
     # Génération d'images / Vidéo
     if any(k in m_id for k in ("imagen", "dall-e", "dalle", "midjourney", "stable-diffusion", "sdxl", "cogvideo", "hunyuan-video")):
         return True
-    if re.search(r"(?:^|[-_/:])(?:flux|sora|veo|runway)(?:$|[-_/:0-9])", m_id):
+    if _IMAGE_REGEX.search(m_id):
         return True
-    if re.search(r"[-_/:]image(?:$|[-_/:0-9])", m_id) and not ("image-to-text" in m_id or "image2text" in m_id):
+    if _IMAGE_SUBSTRING_REGEX.search(m_id) and not ("image-to-text" in m_id or "image2text" in m_id):
         return True
 
     # Modération pure
-    if re.search(r"(?:^|[-_/:])moderation(?:$|[-_/:])", m_id):
+    if _MODERATION_REGEX.search(m_id):
         return True
 
     # Robotique / Embodied AI
-    if re.search(r"(?:^|[-_/:])(?:openvla|octo|rt-[12]|pi0)(?:$|[-_/:])", m_id):
+    if _ROBOTICS_REGEX.search(m_id):
         return True
 
     return False
