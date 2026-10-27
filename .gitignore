@@ -36,7 +36,9 @@ htmlcov/
 # Local backups & runtime data
 data/backups/
 config/backups/
+config/plugins/
 data/provider_access.json
+data/model_cooldowns.json
 .env
 .env.*
 *.bak

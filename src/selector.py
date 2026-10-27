@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Collection, Mapping, Optional, Sequence
 
 
 # Fournisseurs de référence (Tier 1) mondialement reconnus pour la qualité de code et d'ingénierie
@@ -345,12 +345,23 @@ def _parse_models(models: Sequence[Model | dict[str, Any]]) -> list[Model]:
     return [model if isinstance(model, Model) else Model.from_dict(model) for model in models]
 
 
+def _is_model_excluded(model_id: str, excluded_models: Optional[Collection[str]]) -> bool:
+    """Vérifie de manière insensible à la casse et au préfixe openrouter/ si un modèle est exclu (ex: quarantaine)."""
+    if not excluded_models:
+        return False
+    norm_set = {m.strip().lower() for m in excluded_models if m}
+    m_low = model_id.strip().lower()
+    m_stripped = m_low[len("openrouter/"):] if m_low.startswith("openrouter/") else m_low
+    return m_low in norm_set or m_stripped in norm_set or f"openrouter/{m_stripped}" in norm_set
+
+
 def rank_models_for_agent(
     agent_req: AgentRequirement | dict[str, Any],
     models: Sequence[Model | dict[str, Any]],
     allow_fallback: bool = False,
     channel_rank: Optional[Mapping[str, int]] = None,
     channel_costs: Optional[Mapping[str, float]] = None,
+    excluded_models: Optional[Collection[str]] = None,
 ) -> list[Model]:
     """Classe les modèles compatibles, puis les surclassements si demandé selon sort_strategy.
 
@@ -364,6 +375,8 @@ def rank_models_for_agent(
     - 'max_context' : fenêtre de contexte maximale, puis rang de canal et coût.
     """
     req, parsed_models = _parse_requirement(agent_req), _parse_models(models)
+    if excluded_models:
+        parsed_models = [m for m in parsed_models if not _is_model_excluded(m.id, excluded_models)]
     exact = [model for model in parsed_models if is_model_compatible(model, req)]
 
     def key(model: Model, fallback: bool = False) -> tuple[Any, ...]:
@@ -419,28 +432,122 @@ def resolve_model_for_agent(
     allow_fallback: bool = True,
     channel_rank: Optional[Mapping[str, int]] = None,
     channel_costs: Optional[Mapping[str, float]] = None,
+    excluded_models: Optional[Collection[str]] = None,
 ) -> SelectionResult:
-    """Attribue le meilleur modèle, avec override manuel documenté."""
+    """Attribue le meilleur modèle, avec override manuel documenté et repli si modèle en quarantaine."""
     req, parsed_models = _parse_requirement(agent_req), _parse_models(models)
     if req.force_model:
+        if _is_model_excluded(req.force_model, excluded_models):
+            # Le modèle imposé est en quarantaine suite à une erreur : bascule automatique sur les candidats sains
+            exact_alt = rank_models_for_agent(
+                req, parsed_models, channel_rank=channel_rank, channel_costs=channel_costs, excluded_models=excluded_models
+            )
+            if exact_alt:
+                chosen = exact_alt[0]
+                return SelectionResult(
+                    req.name,
+                    chosen,
+                    True,
+                    exact_alt,
+                    f"Repli sur erreur : le modèle imposé ({req.force_model}) est en quarantaine temporaire, bascule vers '{chosen.id}'.",
+                )
+            if allow_fallback:
+                fb_alt = rank_models_for_agent(
+                    req,
+                    parsed_models,
+                    allow_fallback=True,
+                    channel_rank=channel_rank,
+                    channel_costs=channel_costs,
+                    excluded_models=excluded_models,
+                )
+                if fb_alt:
+                    chosen = fb_alt[0]
+                    return SelectionResult(
+                        req.name,
+                        chosen,
+                        True,
+                        fb_alt,
+                        f"Repli sur erreur (surclassement) : le modèle imposé ({req.force_model}) est en quarantaine temporaire, bascule vers '{chosen.id}'.",
+                    )
+            return SelectionResult(
+                req.name,
+                None,
+                False,
+                [],
+                f"Modèle imposé '{req.force_model}' en quarantaine temporaire et aucun modèle de repli compatible disponible.",
+            )
         matching = next((model for model in parsed_models if model.id == req.force_model), None)
         if matching:
             violations = common_constraint_violations(matching, req)
             if not req.min_complexity <= matching.complexity_score <= req.max_complexity:
                 violations.insert(0, "plage de complexité")
             warning = f" Contraintes contournées : {', '.join(violations)}." if violations else ""
-            return SelectionResult(req.name, matching, False, [matching], f"Modèle imposé manuellement ({req.force_model}).{warning}")
+            # Fournir tout de même les candidats alternatifs sains pour la fallback_chain
+            other_candidates = rank_models_for_agent(
+                req, parsed_models, allow_fallback=allow_fallback, channel_rank=channel_rank, channel_costs=channel_costs, excluded_models=excluded_models
+            )
+            all_cands = [matching] + [m for m in other_candidates if m.id != matching.id]
+            return SelectionResult(req.name, matching, False, all_cands, f"Modèle imposé manuellement ({req.force_model}).{warning}")
         return SelectionResult(req.name, None, False, [], f"Modèle imposé '{req.force_model}' introuvable dans le catalogue.")
-    exact = rank_models_for_agent(req, parsed_models, channel_rank=channel_rank, channel_costs=channel_costs)
+    exact = rank_models_for_agent(
+        req, parsed_models, channel_rank=channel_rank, channel_costs=channel_costs, excluded_models=excluded_models
+    )
     strategy_suffix = f" (stratégie: {req.sort_strategy})" if req.sort_strategy != "lowest_cost" else ""
     if exact:
         return SelectionResult(req.name, exact[0], False, exact, f"Correspondance exacte avec les exigences{strategy_suffix}.")
     if allow_fallback:
-        fallback = rank_models_for_agent(req, parsed_models, allow_fallback=True, channel_rank=channel_rank, channel_costs=channel_costs)
+        fallback = rank_models_for_agent(
+            req, parsed_models, allow_fallback=True, channel_rank=channel_rank, channel_costs=channel_costs, excluded_models=excluded_models
+        )
         if fallback:
             chosen = fallback[0]
             return SelectionResult(req.name, chosen, True, fallback, f"Surclassement automatique (fallback) : aucun modèle dans la plage [{req.min_complexity}-{req.max_complexity}], modèle de complexité {chosen.complexity_score} sélectionné{strategy_suffix}.")
     return SelectionResult(req.name, None, False, [], "Aucun modèle compatible trouvé respectant les contraintes.")
+
+
+def build_hybrid_fallback_chain(
+    primary_formatted_id: str,
+    primary_channel: str,
+    candidate_targets: Sequence[tuple[str, str]],
+    max_length: int = 3,
+) -> list[str]:
+    """Construit une chaîne de repli hybride ordonnée pour un agent.
+
+    - Passe 1 (Priorité Inter-Canaux) : privilégie d'abord des candidats exécutables sur
+      des fournisseurs/canaux distincts du modèle principal (évite les limites de débit globales au fournisseur).
+    - Passe 2 (Complément Intra-Canal) : si moins de ``max_length`` modèles ont été retenus en Passe 1,
+      complète avec d'autres modèles distincts sur les canaux déjà représentés (ex: autre modèle sur OpenRouter).
+    """
+    if max_length <= 0 or not primary_formatted_id:
+        return []
+
+    seen_channels: set[str] = {primary_channel.lower()} if primary_channel else set()
+    seen_ids: set[str] = {primary_formatted_id}
+    chain: list[str] = []
+
+    # Passe 1 : Canaux distincts en priorité
+    for formatted_id, channel in candidate_targets:
+        if not formatted_id or formatted_id in seen_ids:
+            continue
+        norm_chan = (channel or "").lower()
+        if norm_chan in seen_channels:
+            continue
+        seen_channels.add(norm_chan)
+        seen_ids.add(formatted_id)
+        chain.append(formatted_id)
+        if len(chain) >= max_length:
+            return chain
+
+    # Passe 2 : Complément sur les mêmes canaux avec des modèles distincts
+    for formatted_id, _channel in candidate_targets:
+        if not formatted_id or formatted_id in seen_ids:
+            continue
+        seen_ids.add(formatted_id)
+        chain.append(formatted_id)
+        if len(chain) >= max_length:
+            return chain
+
+    return chain
 
 
 def select_model_for_agent(agent_req: AgentRequirement | dict[str, Any], models: Sequence[Model | dict[str, Any]], allow_fallback: bool = True) -> Optional[Model]:

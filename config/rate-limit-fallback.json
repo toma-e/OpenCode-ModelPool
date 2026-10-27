@@ -1,0 +1,104 @@
+{
+  "enabled": true,
+  "fallbackModels": [
+    {
+      "providerID": "groq",
+      "modelID": "openai/gpt-oss-120b"
+    },
+    {
+      "providerID": "openrouter",
+      "modelID": "nvidia/nemotron-3-super-120b-a12b:free"
+    },
+    {
+      "providerID": "openrouter",
+      "modelID": "nvidia/nemotron-3-super-120b-a12b"
+    },
+    {
+      "providerID": "google",
+      "modelID": "gemma-4-26b-a4b-it"
+    },
+    {
+      "providerID": "openrouter",
+      "modelID": "google/gemma-4-31b-it:free"
+    },
+    {
+      "providerID": "groq",
+      "modelID": "openai/gpt-oss-20b"
+    }
+  ],
+  "agentFallbackModels": {
+    "build": [
+      {
+        "providerID": "groq",
+        "modelID": "openai/gpt-oss-120b"
+      },
+      {
+        "providerID": "openrouter",
+        "modelID": "nvidia/nemotron-3-super-120b-a12b:free"
+      },
+      {
+        "providerID": "openrouter",
+        "modelID": "nvidia/nemotron-3-super-120b-a12b"
+      }
+    ],
+    "plan": [
+      {
+        "providerID": "groq",
+        "modelID": "openai/gpt-oss-120b"
+      },
+      {
+        "providerID": "openrouter",
+        "modelID": "nvidia/nemotron-3-super-120b-a12b:free"
+      },
+      {
+        "providerID": "openrouter",
+        "modelID": "nvidia/nemotron-3-super-120b-a12b"
+      }
+    ],
+    "explore": [
+      {
+        "providerID": "google",
+        "modelID": "gemma-4-26b-a4b-it"
+      },
+      {
+        "providerID": "openrouter",
+        "modelID": "google/gemma-4-31b-it:free"
+      },
+      {
+        "providerID": "groq",
+        "modelID": "openai/gpt-oss-20b"
+      }
+    ],
+    "general": [
+      {
+        "providerID": "google",
+        "modelID": "gemma-4-26b-a4b-it"
+      },
+      {
+        "providerID": "openrouter",
+        "modelID": "google/gemma-4-31b-it:free"
+      },
+      {
+        "providerID": "groq",
+        "modelID": "openai/gpt-oss-20b"
+      }
+    ]
+  },
+  "fallbackMode": "cycle",
+  "cooldownMs": 900000,
+  "patterns": [
+    "rate limit",
+    "rate_limit",
+    "usage limit",
+    "too many requests",
+    "429",
+    "quota exceeded",
+    "resource_exhausted",
+    "insufficient credits",
+    "payment required",
+    "402",
+    "overloaded",
+    "service unavailable",
+    "503"
+  ]
+}

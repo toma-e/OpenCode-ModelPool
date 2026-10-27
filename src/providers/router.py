@@ -143,6 +143,7 @@ def resolve_model_execution_target(
     credentials: Mapping[str, ProviderCredentials],
     ollama_models: Optional[Sequence[Model]] = None,
     direct_access: Optional[Mapping[str, Collection[str]]] = None,
+    excluded_targets: Optional[Collection[str]] = None,
 ) -> ExecutionTarget:
     """Détermine le meilleur canal d'exécution pour un modèle sélectionné.
 
@@ -152,18 +153,26 @@ def resolve_model_execution_target(
        - avec ``direct_access`` : uniquement si le modèle figure dans la liste réelle de la clé ;
        - sans ``direct_access`` (accès inconnu) : heuristique sur le nom du modèle.
     3. OpenRouter : passerelle universelle pour le reste du catalogue de référence.
+
+    Si ``excluded_targets`` est fourni (quarantaine / cooldown), tout canal (``provider:<nom>``)
+    ou identifiant de cible formaté présent dans ``excluded_targets`` est ignoré au profit du canal suivant.
     """
     base_target = normalize_model_basename(reference_model.id)
     ref_provider = reference_model.provider.lower().lstrip("~")
+    excluded_norm = {t.strip().lower() for t in excluded_targets if t} if excluded_targets else set()
 
     for provider in provider_priority:
         prov_key = PROVIDER_ALIASES.get(provider.lower(), provider.lower())
+        if f"provider:{prov_key}" in excluded_norm or f"provider:{provider.lower()}" in excluded_norm:
+            continue
         cred = credentials.get(prov_key)
         is_avail = cred.is_available if cred else False
 
         # Cas 1 : Ollama local
         if prov_key == "ollama" and is_avail and ollama_models:
             for om in ollama_models:
+                if om.id.lower() in excluded_norm:
+                    continue
                 om_base = normalize_model_basename(om.id)
                 # Correspondance exacte ou partielle forte (ex: qwen2.5-coder-7b et qwen2.5-coder:7b)
                 if om_base == base_target or (len(om_base) > 4 and om_base in base_target) or (len(base_target) > 4 and base_target in om_base):
@@ -193,6 +202,9 @@ def resolve_model_execution_target(
                 raw = reference_model.id.split("/", 1)[1] if "/" in reference_model.id else reference_model.id
                 native_id = raw
             if native_id:
+                formatted_direct_id = f"{channel.opencode_prefix}/{native_id}"
+                if formatted_direct_id.lower() in excluded_norm:
+                    continue
                 from src.providers.direct import KNOWN_MODEL_PRICING
                 if native_id in KNOWN_MODEL_PRICING:
                     cost_in, cost_out = KNOWN_MODEL_PRICING[native_id]
@@ -208,7 +220,7 @@ def resolve_model_execution_target(
                     pricing_source = "unknown"
                 return ExecutionTarget(
                     channel_provider=prov_key,
-                    formatted_model_id=f"{channel.opencode_prefix}/{native_id}",
+                    formatted_model_id=formatted_direct_id,
                     effective_cost_input_per_m=cost_in,
                     effective_cost_output_per_m=cost_out,
                     is_local=False,
@@ -225,6 +237,8 @@ def resolve_model_execution_target(
             openrouter_id = reference_model.id
             if not openrouter_id.startswith("openrouter/"):
                 openrouter_id = f"openrouter/{openrouter_id}"
+            if openrouter_id.lower() in excluded_norm:
+                continue
             is_or_verified = is_avail
             return ExecutionTarget(
                 channel_provider="openrouter",

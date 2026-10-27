@@ -125,6 +125,42 @@ def build_parser() -> argparse.ArgumentParser:
         help="Restaure la configuration OpenCode depuis la dernière sauvegarde horodatée ou .bak (MP-206).",
     )
     parser.add_argument(
+        "--failover",
+        "--report-error",
+        type=str,
+        default=None,
+        metavar="AGENT_OR_MODEL",
+        dest="failover",
+        help="Signale une erreur (429, quota, 5xx) sur un agent ou un modèle, le met en quarantaine et bascule automatiquement sur le modèle de repli.",
+    )
+    parser.add_argument(
+        "--error-reason",
+        type=str,
+        default="rate_limit",
+        choices=["rate_limit", "quota_exceeded", "insufficient_credits", "service_unavailable", "auth_error", "other"],
+        help="Nature de l'erreur motivant le repli (défaut : rate_limit).",
+    )
+    parser.add_argument(
+        "--cooldown-minutes",
+        type=int,
+        default=None,
+        metavar="MINUTES",
+        help="Durée personnalisée de mise en quarantaine en minutes (défaut automatique selon --error-reason).",
+    )
+    parser.add_argument(
+        "--list-cooldowns",
+        action="store_true",
+        help="Affiche les modèles et fournisseurs actuellement en quarantaine (cooldown actif).",
+    )
+    parser.add_argument(
+        "--clear-cooldowns",
+        nargs="?",
+        const="all",
+        default=None,
+        metavar="TARGET_ID",
+        help="Lève la quarantaine de tous les modèles (ou uniquement de TARGET_ID) et les réhabilite.",
+    )
+    parser.add_argument(
         "--serve",
         nargs="?",
         const=DEFAULT_SERVE_PORT,
@@ -161,6 +197,9 @@ def render_results(report: FleetReport) -> None:
                     print(f"  Coût estimé       : ${agent_budget.monthly_total_cost:.4f}")
                 if agent_budget.quota_warning:
                     print(f"  Alerte quota      : {agent_budget.quota_warning}")
+            chain = report.fallback_chains.get(agent.name, [])
+            if chain:
+                print(f"  Chaîne de repli   : {' -> '.join(chain)}")
         else:
             print(f"  Aucun modèle compatible : {result.reason}")
     print("-" * 75)
@@ -250,6 +289,58 @@ def run(args: argparse.Namespace, base_dir: Path = BASE_DIR) -> int:
             print(f"❌ {res.message}", file=sys.stderr)
             return 1
         print(f"✅ {res.message}")
+        return 0
+
+    if getattr(args, "list_cooldowns", False):
+        cooldowns = service.get_active_cooldowns()
+        if not cooldowns:
+            print("✅ Aucun modèle ni fournisseur n'est actuellement en quarantaine.")
+            return 0
+        print(f"\n⏳ Modèles / Fournisseurs en quarantaine active ({len(cooldowns)}) :\n")
+        print(f"{'Cible':<48} {'Motif':<22} {'Temps restant'}")
+        print("-" * 85)
+        for entry in cooldowns:
+            rem_min = max(1, (entry.remaining_seconds() + 59) // 60)
+            print(f"{entry.target_id:<48} {entry.reason:<22} ~{rem_min} min (exp: {entry.expires_at[:19]}Z)")
+        print("-" * 85)
+        return 0
+
+    if getattr(args, "clear_cooldowns", None) is not None:
+        target = None if args.clear_cooldowns == "all" else args.clear_cooldowns
+        res = service.clear_cooldowns(
+            target_id=target,
+            allow_fallback=allow_fallback,
+            filter_by_keys=filter_by_keys,
+            auto_export=bool(args.export),
+            export_path=args.export,
+        )
+        if not res.ok:
+            print(f"❌ {res.message}", file=sys.stderr)
+            return 1
+        print(f"✅ {res.message}")
+        if res.report:
+            render_results(res.report)
+        return 0
+
+    if getattr(args, "failover", None):
+        duration_sec = args.cooldown_minutes * 60 if getattr(args, "cooldown_minutes", None) else None
+        export_target = args.export if args.export else "config/opencode.json"
+        res = service.report_model_error(
+            target_or_agent=args.failover,
+            reason=getattr(args, "error_reason", "rate_limit"),
+            duration_seconds=duration_sec,
+            allow_fallback=allow_fallback,
+            filter_by_keys=filter_by_keys,
+            auto_export=True,
+            export_path=export_target,
+        )
+        if not res.ok:
+            LOGGER.error("Échec de la bascule : %s", res.message)
+            print(f"❌ {res.message}", file=sys.stderr)
+            return 1
+        print(f"⚡ {res.message}")
+        if res.report:
+            render_results(res.report)
         return 0
 
     if getattr(args, "diff", None):

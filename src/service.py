@@ -26,9 +26,18 @@ except ImportError:
     msvcrt = None  # type: ignore[assignment]
 
 from src.budget import AgentBudgetReport, FleetBudgetReport, simulate_fleet_budget
+from src.cooldown import (
+    CooldownEntry,
+    create_cooldown_entry,
+    is_model_in_cooldown,
+    read_cooldowns,
+    write_cooldowns,
+)
 from src.exporter import (
     build_modelpool_report_data,
     build_opencode_config,
+    build_opencode_fallback_plugin_js,
+    build_rate_limit_fallback_config,
     parse_json_or_jsonc,
     validate_opencode_config,
 )
@@ -63,6 +72,7 @@ from src.selector import (
     AgentRequirement,
     Model,
     SelectionResult,
+    build_hybrid_fallback_chain,
     is_non_llm_model,
     resolve_model_for_agent,
 )
@@ -85,6 +95,7 @@ class FleetReport:
     fallback_chains: dict[str, list[str]] = field(default_factory=dict)
     # {fournisseur: {"verified": bool, "model_count": int, "checked_at": str|None}}
     access_summary: dict[str, dict[str, Any]] = field(default_factory=dict)
+    cooldowns: list[CooldownEntry] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -229,6 +240,7 @@ def serialize_report(report: FleetReport) -> dict[str, Any]:
                 "reason": result.reason,
                 "model": _model_payload(result.model) if result.model else None,
                 "execution_target": target_payload,
+                "fallback_chain": list(report.fallback_chains.get(agent.name, [])),
                 "alternatives": [_model_payload(model) for model in result.candidates[1:]],
                 "budget": _budget_payload(agent_budget) if agent_budget else None,
                 "constraints": {
@@ -263,6 +275,7 @@ def serialize_report(report: FleetReport) -> dict[str, Any]:
         "provider_priority": list(report.provider_priority),
         "fallback_chains": report.fallback_chains,
         "access_summary": report.access_summary,
+        "cooldowns": [c.to_dict() for c in report.cooldowns],
         "assignments": assignments,
         "diagnostics": list(report.diagnostics),
     }
@@ -277,44 +290,57 @@ class ApplicationService:
         models_path: Optional[Path] = None,
         agents_path: Optional[Path] = None,
         access_path: Optional[Path] = None,
+        cooldown_path: Optional[Path] = None,
     ) -> None:
         self.base_dir = base_dir
         self.models_path = models_path if models_path is not None else (base_dir / "data" / "models.json")
         self.agents_path = agents_path if agents_path is not None else (base_dir / "config" / "agents_requirements.json")
         self.access_path = access_path if access_path is not None else (base_dir / "data" / "provider_access.json")
+        self.cooldown_path = cooldown_path if cooldown_path is not None else (base_dir / "data" / "model_cooldowns.json")
         self.default_export_path = base_dir / DEFAULT_EXPORT_RELATIVE
         self._lock = threading.RLock()
         self._lock_path = base_dir / "data" / ".modelpool.lock"
+        self._file_lock_depth = 0
 
     @contextlib.contextmanager
     def _file_lock(self) -> Iterator[None]:
-        """Verrou inter-processus utilisant fcntl.flock (POSIX) ou msvcrt.locking (Windows)."""
-        if fcntl is None and msvcrt is None:
-            yield
-            return
-        try:
-            self._lock_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self._lock_path, "a+", encoding="utf-8") as lock_file:
-                fd = lock_file.fileno()
-                if fcntl is not None:
-                    fcntl.flock(fd, fcntl.LOCK_EX)
-                elif msvcrt is not None:
-                    lock_file.seek(0)
-                    msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+        """Verrou inter-processus réentrant utilisant fcntl.flock (POSIX) ou msvcrt.locking (Windows)."""
+        with self._lock:
+            if fcntl is None and msvcrt is None:
+                yield
+                return
+            if self._file_lock_depth > 0:
+                self._file_lock_depth += 1
                 try:
                     yield
                 finally:
+                    self._file_lock_depth -= 1
+                return
+            try:
+                self._lock_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(self._lock_path, "a+", encoding="utf-8") as lock_file:
+                    fd = lock_file.fileno()
+                    if fcntl is not None:
+                        fcntl.flock(fd, fcntl.LOCK_EX)
+                    elif msvcrt is not None:
+                        lock_file.seek(0)
+                        msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+                    self._file_lock_depth += 1
                     try:
-                        if fcntl is not None:
-                            fcntl.flock(fd, fcntl.LOCK_UN)
-                        elif msvcrt is not None:
-                            lock_file.seek(0)
-                            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
-                    except OSError:
-                        pass
-        except OSError:
-            # Si le système de fichiers refuse le verrouillage (ex: share distant incompatible), fallback
-            yield
+                        yield
+                    finally:
+                        self._file_lock_depth -= 1
+                        try:
+                            if fcntl is not None:
+                                fcntl.flock(fd, fcntl.LOCK_UN)
+                            elif msvcrt is not None:
+                                lock_file.seek(0)
+                                msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+                        except OSError:
+                            pass
+            except OSError:
+                # Si le système de fichiers refuse le verrouillage (ex: share distant incompatible), fallback
+                yield
 
     def resolve_export_path(self, requested: str | Path | None = None) -> Path:
         """Résout le chemin d'export OpenCode relativement à la racine du projet ou au répertoire utilisateur (~)."""
@@ -359,6 +385,15 @@ class ApplicationService:
         diagnostics.extend(access_diagnostics)
         access_summary = self._build_access_summary(creds, cached_access, direct_access)
 
+        # Lecture des quarantaines actives (Circuit-Breaker / Cooldown)
+        active_cooldowns = read_cooldowns(self.cooldown_path)
+        excluded_targets = {c.target_id for c in active_cooldowns}
+        for c in active_cooldowns:
+            rem_min = max(1, (c.remaining_seconds() + 59) // 60)
+            diagnostics.append(
+                f"Quarantaine active ({c.reason_label}) sur '{c.target_id}' — réhabilitation dans ~{rem_min} min."
+            )
+
         route_cache: dict[str, ExecutionTarget] = {}
 
         def _route(model: Model) -> ExecutionTarget:
@@ -370,6 +405,7 @@ class ApplicationService:
                     credentials=creds,
                     ollama_models=ollama_models,
                     direct_access=direct_access,
+                    excluded_targets=excluded_targets,
                 )
                 route_cache[model.id] = cached
             return cached
@@ -392,6 +428,19 @@ class ApplicationService:
                     "(aucun canal disponible ne peut les exécuter avec vos clés)."
                 )
 
+        # Identification des modèles dont même le canal d'exécution résolu est en quarantaine
+        excluded_model_ids: set[str] = set()
+        if active_cooldowns:
+            for m in models:
+                target = _route(m)
+                if is_model_in_cooldown(m.id, target.formatted_model_id, target.channel_provider, active_cooldowns):
+                    excluded_model_ids.add(m.id)
+                    excluded_model_ids.add(target.formatted_model_id)
+            # Ajouter aussi directement les cibles de quarantaine pour gérer force_model
+            for c in active_cooldowns:
+                if not c.target_id.lower().startswith("provider:"):
+                    excluded_model_ids.add(c.target_id)
+
         # Priorité des canaux : un modèle exécutable via un canal prioritaire (ex: crédits gratuits
         # Mistral/Google) est préféré à tout modèle d'un canal suivant.
         channel_rank = {m.id: _channel_index(_route(m)) for m in models}
@@ -406,6 +455,7 @@ class ApplicationService:
                 allow_fallback=allow_fallback,
                 channel_rank=channel_rank,
                 channel_costs=channel_costs,
+                excluded_models=excluded_model_ids,
             )
             for agent in agents
         ]
@@ -446,24 +496,29 @@ class ApplicationService:
                 execution_targets.append(None)
                 adjusted_results.append(res)
 
-        # Chaîne de repli par agent (limites de débit / quotas) : modèles suivants sur des canaux distincts
+        # Chaîne de repli hybride par agent (limites de débit / quotas) :
+        # Passe 1 : canaux distincts en priorité ; Passe 2 : modèles distincts sur même canal si besoin.
         fallback_chains: dict[str, list[str]] = {}
         for res, target in zip(results, execution_targets):
             if res.model is None or target is None:
                 continue
-            seen_channels = {target.channel_provider}
-            seen_ids = {target.formatted_model_id}
-            chain: list[str] = []
+            candidate_targets: list[tuple[str, str]] = []
             for candidate in res.candidates[1:]:
                 cand_target = _route(candidate)
-                if cand_target.channel_provider in seen_channels or cand_target.formatted_model_id in seen_ids:
+                if is_model_in_cooldown(
+                    candidate.id,
+                    cand_target.formatted_model_id,
+                    cand_target.channel_provider,
+                    active_cooldowns,
+                ):
                     continue
-                seen_channels.add(cand_target.channel_provider)
-                seen_ids.add(cand_target.formatted_model_id)
-                chain.append(cand_target.formatted_model_id)
-                if len(chain) >= 3:
-                    break
-            fallback_chains[res.agent_name] = chain
+                candidate_targets.append((cand_target.formatted_model_id, cand_target.channel_provider))
+            fallback_chains[res.agent_name] = build_hybrid_fallback_chain(
+                primary_formatted_id=target.formatted_model_id,
+                primary_channel=target.channel_provider,
+                candidate_targets=candidate_targets,
+                max_length=3,
+            )
 
         budget = simulate_fleet_budget(adjusted_results, agents, execution_targets=execution_targets)
         if not models:
@@ -499,6 +554,7 @@ class ApplicationService:
             execution_targets=execution_targets,
             fallback_chains=fallback_chains,
             access_summary=access_summary,
+            cooldowns=active_cooldowns,
         )
 
     def _build_access_summary(
@@ -789,6 +845,25 @@ class ApplicationService:
                 )
                 write_json_atomic(target_report_path, report_data)
 
+                # Génération automatique de rate-limit-fallback.json et du plugin OpenCode de repli à chaud
+                fallback_cfg_path = target_path.parent / "rate-limit-fallback.json"
+                fallback_cfg_data = build_rate_limit_fallback_config(
+                    export_results,
+                    fallback_chains=report.fallback_chains,
+                )
+                write_json_atomic(fallback_cfg_path, fallback_cfg_data)
+
+                plugin_dir = target_path.parent / "plugins"
+                plugin_dir.mkdir(parents=True, exist_ok=True)
+                plugin_path = plugin_dir / "modelpool-fallback.mjs"
+                plugin_js = build_opencode_fallback_plugin_js(
+                    export_results,
+                    fallback_chains=report.fallback_chains,
+                    project_dir=str(self.base_dir.resolve()),
+                    export_path=str(target_path.resolve()),
+                )
+                plugin_path.write_text(plugin_js, encoding="utf-8")
+
                 exported = target_path.resolve()
             except ValueError as error:
                 return OperationResult(False, str(error))
@@ -1076,6 +1151,155 @@ class ApplicationService:
             if backup_path:
                 msg_parts.append(f"Backup créé : {backup_path.name}.")
             return OperationResult(True, " ".join(msg_parts), report)
+
+    def get_active_cooldowns(self) -> list[CooldownEntry]:
+        """Retourne la liste des quarantaines actives (non expirées)."""
+        with self._lock:
+            return read_cooldowns(self.cooldown_path)
+
+    def report_model_error(
+        self,
+        target_or_agent: str,
+        reason: str = "rate_limit",
+        duration_seconds: Optional[int] = None,
+        error_detail: Optional[str] = None,
+        allow_fallback: bool = True,
+        filter_by_keys: bool = False,
+        auto_export: bool = True,
+        export_path: str | Path | None = None,
+    ) -> OperationResult:
+        """Signale une erreur sur un agent, un modèle ou un fournisseur, l'isole en quarantaine et bascule sur le modèle de repli."""
+        clean_target = (target_or_agent or "").strip()
+        if not clean_target:
+            return OperationResult(False, "Veuillez indiquer un nom d'agent ou un identifiant de modèle à basculer.")
+
+        with self._lock, self._file_lock():
+            try:
+                current_report = self._build_report_unlocked(
+                    allow_fallback=allow_fallback,
+                    filter_by_keys=filter_by_keys,
+                )
+                resolved_target_id = clean_target
+                affected_agent: Optional[str] = None
+
+                # Vérifier si la cible correspond au nom d'un agent (ex: 'build', 'plan', 'explore', 'general')
+                for idx, res in enumerate(current_report.results):
+                    if res.agent_name.lower() == clean_target.lower():
+                        affected_agent = res.agent_name
+                        exec_target = (
+                            current_report.execution_targets[idx]
+                            if idx < len(current_report.execution_targets)
+                            else None
+                        )
+                        if exec_target is not None:
+                            resolved_target_id = exec_target.formatted_model_id
+                        elif res.model is not None:
+                            resolved_target_id = res.model.id
+                        else:
+                            return OperationResult(
+                                False,
+                                f"L'agent '{res.agent_name}' n'a actuellement aucun modèle attribué à basculer.",
+                                current_report,
+                            )
+                        break
+
+                new_entry = create_cooldown_entry(
+                    target_id=resolved_target_id,
+                    reason=reason,
+                    duration_seconds=duration_seconds,
+                    error_detail=error_detail,
+                )
+                existing = read_cooldowns(self.cooldown_path)
+                write_cooldowns(self.cooldown_path, [*existing, new_entry])
+
+                # Recalcul immédiat et ré-export si demandé
+                if auto_export:
+                    target_export = export_path if export_path is not None else self.default_export_path
+                    exported = self.export_config(
+                        path=target_export,
+                        allow_fallback=allow_fallback,
+                        filter_by_keys=filter_by_keys,
+                    )
+                    updated_report = exported.report
+                else:
+                    updated_report = self._build_report_unlocked(
+                        allow_fallback=allow_fallback,
+                        filter_by_keys=filter_by_keys,
+                    )
+
+                rem_min = max(1, (new_entry.remaining_seconds() + 59) // 60)
+                transition_msg = ""
+                if updated_report is not None and affected_agent is not None:
+                    for idx, res in enumerate(updated_report.results):
+                        if res.agent_name == affected_agent:
+                            new_target = (
+                                updated_report.execution_targets[idx]
+                                if idx < len(updated_report.execution_targets)
+                                else None
+                            )
+                            new_model_str = (
+                                new_target.formatted_model_id
+                                if new_target
+                                else (res.model.id if res.model else "aucun modèle")
+                            )
+                            transition_msg = f" Agent '{affected_agent}' basculé vers '{new_model_str}'."
+                            break
+
+                msg = (
+                    f"Quarantaine activée sur '{resolved_target_id}' ({new_entry.reason_label}, ~{rem_min} min)."
+                    f"{transition_msg}"
+                )
+                return OperationResult(True, msg, updated_report)
+            except Exception as error:
+                return OperationResult(False, f"Échec du repli sur erreur : {error}")
+
+    def clear_cooldowns(
+        self,
+        target_id: Optional[str] = None,
+        allow_fallback: bool = True,
+        filter_by_keys: bool = False,
+        auto_export: bool = False,
+        export_path: str | Path | None = None,
+    ) -> OperationResult:
+        """Lève la quarantaine d'un modèle spécifique ou de tous les modèles et recalcule les attributions."""
+        with self._lock, self._file_lock():
+            try:
+                existing = read_cooldowns(self.cooldown_path)
+                if target_id and target_id.strip() and target_id.strip().lower() != "all":
+                    clean = target_id.strip().lower()
+                    clean_stripped = clean[len("openrouter/"):] if clean.startswith("openrouter/") else clean
+                    remaining = [
+                        e
+                        for e in existing
+                        if e.target_id.strip().lower() not in {clean, clean_stripped, f"openrouter/{clean_stripped}"}
+                    ]
+                    removed_count = len(existing) - len(remaining)
+                    write_cooldowns(self.cooldown_path, remaining)
+                    msg = (
+                        f"Quarantaine levée pour '{target_id.strip()}'."
+                        if removed_count > 0
+                        else f"Aucune quarantaine active trouvée pour '{target_id.strip()}'."
+                    )
+                else:
+                    removed_count = len(existing)
+                    write_cooldowns(self.cooldown_path, [])
+                    msg = f"Toutes les quarantaines ont été levées ({removed_count} modèle(s) réhabilité(s))."
+
+                if auto_export:
+                    exported = self.export_config(
+                        path=export_path if export_path is not None else self.default_export_path,
+                        allow_fallback=allow_fallback,
+                        filter_by_keys=filter_by_keys,
+                    )
+                    report = exported.report
+                else:
+                    report = self._build_report_unlocked(
+                        allow_fallback=allow_fallback,
+                        filter_by_keys=filter_by_keys,
+                    )
+                return OperationResult(True, msg, report)
+            except Exception as error:
+                return OperationResult(False, f"Impossible de lever la quarantaine : {error}")
 
 
 

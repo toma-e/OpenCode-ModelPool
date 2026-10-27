@@ -204,13 +204,47 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/agent/update":
             if not isinstance(body, dict):
                 self._send_json(400, {"ok": False, "message": "Corps JSON attendu."})
+            else:
+                agent_name = body.get("agent_name")
+                updates = body.get("updates")
+                if not isinstance(agent_name, str) or not isinstance(updates, dict):
+                    self._send_json(400, {"ok": False, "message": "Champs 'agent_name' (str) et 'updates' (dict) obligatoires."})
+                else:
+                    self._send_operation(self.service.update_agent_requirement(agent_name, updates, allow_fallback=fallback))
+            return
+        if parsed.path == "/api/failover":
+            if not isinstance(body, dict):
+                self._send_json(400, {"ok": False, "message": "Corps JSON attendu."})
                 return
-            agent_name = body.get("agent_name")
-            updates = body.get("updates")
-            if not isinstance(agent_name, str) or not isinstance(updates, dict):
-                self._send_json(400, {"ok": False, "message": "Champs 'agent_name' (str) et 'updates' (dict) obligatoires."})
+            target = body.get("target") or body.get("agent_name") or body.get("model_id")
+            if not isinstance(target, str) or not target.strip():
+                self._send_json(400, {"ok": False, "message": "Champ 'target' (ou 'agent_name') obligatoire."})
                 return
-            self._send_operation(self.service.update_agent_requirement(agent_name, updates, allow_fallback=fallback))
+            reason = str(body.get("reason") or "rate_limit").strip()
+            auto_export = bool(body.get("auto_export", True))
+            self._send_operation(
+                self.service.report_model_error(
+                    target_or_agent=target.strip(),
+                    reason=reason,
+                    allow_fallback=fallback,
+                    filter_by_keys=filter_keys,
+                    auto_export=auto_export,
+                )
+            )
+            return
+        if parsed.path == "/api/cooldowns/clear":
+            target_id = body.get("target_id") if isinstance(body, dict) else None
+            if target_id is not None and not isinstance(target_id, str):
+                target_id = None
+            auto_export = bool(body.get("auto_export", False)) if isinstance(body, dict) else False
+            self._send_operation(
+                self.service.clear_cooldowns(
+                    target_id=target_id,
+                    allow_fallback=fallback,
+                    filter_by_keys=filter_keys,
+                    auto_export=auto_export,
+                )
+            )
             return
         self._send_json(404, {"ok": False, "message": "Ressource introuvable."})
 

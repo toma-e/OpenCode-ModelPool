@@ -184,6 +184,7 @@
       </div>
       <div id="priority_list" class="priority-list"></div>
     </section>
+    <section id="cooldowns_section" class="card" style="display:none;border-color:#7a3e28;background:#261a18;margin-bottom:1rem;"></section>
     <section id="summary" class="summary"></section>
     <section id="assignments"></section>
   </main>
@@ -336,6 +337,37 @@
       if (report.provider_priority) {
         renderPriorityPanel(report.provider_priority);
       }
+      const cooldownsSec = document.getElementById("cooldowns_section");
+      const activeCooldowns = report.cooldowns || [];
+      if (activeCooldowns.length > 0) {
+        cooldownsSec.style.display = "block";
+        const cdItems = activeCooldowns.map((c) => {
+          const remMin = Math.max(1, Math.ceil((c.remaining_seconds || 0) / 60));
+          return `<li style="margin-bottom:0.35rem;display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;">
+            <code>${escapeHtml(c.target_id)}</code>
+            <span style="color:var(--warn);font-size:0.85rem;">${escapeHtml(c.reason_label || c.reason)} (~${remMin} min restantes)</span>
+            <button type="button" class="btn-sm btn-clear-cd" data-target="${escapeHtml(c.target_id)}" style="background:#3a4a5e;border-color:var(--line);padding:0.15rem 0.5rem;font-size:0.78rem;">Réhabiliter</button>
+          </li>`;
+        }).join("");
+        cooldownsSec.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
+          <strong style="color:var(--warn);">⏳ Modèles / Canaux en quarantaine temporaire (${activeCooldowns.length})</strong>
+          <button type="button" id="clear_all_cd_btn" class="btn-sm" style="background:#3a4a5e;border-color:var(--line);">Tout réhabiliter</button>
+        </div>
+        <ul style="margin-top:0.5rem;">${cdItems}</ul>`;
+        const clearAllBtn = document.getElementById("clear_all_cd_btn");
+        if (clearAllBtn) {
+          clearAllBtn.addEventListener("click", () => call("/api/cooldowns/clear", "POST", { target_id: "all", auto_export: true }));
+        }
+        cooldownsSec.querySelectorAll(".btn-clear-cd").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const targetId = btn.getAttribute("data-target");
+            call("/api/cooldowns/clear", "POST", { target_id: targetId, auto_export: true });
+          });
+        });
+      } else {
+        cooldownsSec.style.display = "none";
+        cooldownsSec.innerHTML = "";
+      }
       const cat = report.catalogue || {};
       const budget = report.budget || {};
       const monthlyCostLabel = budget.is_total_estimable === false ? "Non estimable" : money(budget.total_monthly_cost);
@@ -398,7 +430,24 @@
           ? `<span class="channel-badge ${target.is_local ? 'local' : ''}" title="ID export OpenCode : ${escapeHtml(target.formatted_model_id)}">Canal : ${escapeHtml(target.description_label)}${escapeHtml(verifiedTag)}</span>`
           : "";
 
+        const fbChain = agent.fallback_chain || (report.fallback_chains && report.fallback_chains[agent.name]) || [];
+        const fbChainHtml = fbChain.length > 0
+          ? `<p style="font-size:0.88rem;"><strong class="muted">Chaîne de repli auto :</strong> ${fbChain.map((m) => `<code>${escapeHtml(m)}</code>`).join(" &rarr; ")}</p>`
+          : "";
+
         const agentIdx = index;
+        const failoverControls = agent.model
+          ? `<div style="display:flex;align-items:center;gap:0.4rem;margin-left:auto;">
+              <select id="failover-reason-${agentIdx}" title="Motif d'erreur du modèle actuel">
+                <option value="rate_limit">429 Limite de débit (15m)</option>
+                <option value="quota_exceeded">Quota épuisé RPD (12h)</option>
+                <option value="insufficient_credits">402 Crédits épuisés (24h)</option>
+                <option value="service_unavailable">503 Indisponible (30m)</option>
+              </select>
+              <button type="button" class="btn-sm btn-failover" data-agent-name="${escapeHtml(agent.name)}" data-agent-idx="${agentIdx}" style="background:#8a3b2e;border-color:#a84a3b;" title="Exclure temporairement le modèle actuel et basculer immédiatement sur le modèle de repli">⚡ Basculer (Repli)</button>
+            </div>`
+          : "";
+
         return `<article class="card">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.4rem;">
             <div class="status ${escapeHtml(agent.status)}">${escapeHtml(statusLabel(agent.status))} · stratégie: ${escapeHtml(strategy)}${escapeHtml(tierTag)}${escapeHtml(visionTag)}${escapeHtml(reasoningTag)}${escapeHtml(tier1Tag)}</div>
@@ -409,6 +458,7 @@
           ${agent.model ? `<p><code>${escapeHtml(agent.model.id)}</code> · complexité ${escapeHtml(agent.model.complexity_score)} · ${escapeHtml(agent.model.tier)}${modelBadges}</p>` : "<p class='muted'>Aucun modèle retenu.</p>"}
           <p>${escapeHtml(agent.reason)}</p>
           ${budgetLine}
+          ${fbChainHtml}
           ${alternatives ? `<p class="muted">Alternatives</p><ul>${alternatives}</ul>` : ""}
 
           <form class="form-row agent-form" data-agent-name="${escapeHtml(agent.name)}" data-agent-idx="${agentIdx}">
@@ -443,6 +493,7 @@
             </div>
 
             <button type="submit" class="btn-sm">Appliquer</button>
+            ${failoverControls}
           </form>
         </article>`;
       }).join("");
@@ -454,6 +505,16 @@
           const name = form.getAttribute("data-agent-name");
           const idx = form.getAttribute("data-agent-idx");
           saveAgentRequirements(name, idx);
+        });
+      });
+
+      document.querySelectorAll(".btn-failover").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const agentName = btn.getAttribute("data-agent-name");
+          const idx = btn.getAttribute("data-agent-idx");
+          const reasonSelect = document.getElementById("failover-reason-" + idx);
+          const reason = reasonSelect ? reasonSelect.value : "rate_limit";
+          call("/api/failover", "POST", { target: agentName, reason: reason, auto_export: true });
         });
       });
     }

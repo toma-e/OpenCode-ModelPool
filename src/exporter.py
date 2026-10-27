@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from src.budget import simulate_fleet_budget
 from src.selector import AgentRequirement, SelectionResult
@@ -473,4 +473,304 @@ def validate_opencode_config(config: Dict[str, Any]) -> Tuple[bool, List[str]]:
                 errors.append(f"Agent '{name}' : 'mode' invalide ('{agent_mode}' non reconnu).")
 
     return len(errors) == 0, errors
+
+
+def split_opencode_model_id(
+    formatted_id: str,
+    default_provider: str = "openrouter",
+) -> Tuple[str, str]:
+    """Découpe un identifiant de modèle OpenCode en couple ``(providerID, modelID)``.
+
+    Exemples:
+        'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free' -> ('openrouter', 'nvidia/nemotron-3-ultra-550b-a55b:free')
+        'groq/openai/gpt-oss-120b' -> ('groq', 'openai/gpt-oss-120b')
+        'ollama/qwen3.5:9b' -> ('ollama', 'qwen3.5:9b')
+        'openai/gpt-5-mini' -> ('openrouter', 'openai/gpt-5-mini')
+    """
+    clean = (formatted_id or "").strip()
+    if not clean:
+        return default_provider, ""
+    if "/" not in clean:
+        return default_provider, clean
+
+    first, rest = clean.split("/", 1)
+    known_prefixes = set(KNOWN_DIRECT_PROVIDERS) | {"openrouter"}
+    if first.lower() in known_prefixes:
+        return first.lower(), rest
+    return default_provider, clean
+
+
+def build_rate_limit_fallback_config(
+    results: Sequence[SelectionResult],
+    fallback_chains: Optional[Mapping[str, Sequence[str]]] = None,
+    cooldown_ms: int = 900_000,
+) -> Dict[str, Any]:
+    """Construit la configuration JSON standardisée pour le repli automatique sur limite de débit.
+
+    Compatible avec ``@azumag/opencode-rate-limit-fallback`` (``rate-limit-fallback.json``)
+    et le plugin local généré par OpenCode-ModelPool.
+    """
+    chains = fallback_chains or {}
+    global_models: List[Dict[str, str]] = []
+    seen_global: set[Tuple[str, str]] = set()
+    agent_fallbacks: Dict[str, List[Dict[str, str]]] = {}
+
+    for res in results:
+        agent_chain = chains.get(res.agent_name, [])
+        entries: List[Dict[str, str]] = []
+        seen_agent: set[Tuple[str, str]] = set()
+        for formatted_id in agent_chain:
+            prov_id, mod_id = split_opencode_model_id(formatted_id)
+            if not mod_id:
+                continue
+            pair = (prov_id, mod_id)
+            if pair not in seen_agent:
+                seen_agent.add(pair)
+                entries.append({"providerID": prov_id, "modelID": mod_id})
+            if pair not in seen_global:
+                seen_global.add(pair)
+                global_models.append({"providerID": prov_id, "modelID": mod_id})
+        agent_fallbacks[res.agent_name] = entries
+
+    return {
+        "enabled": True,
+        "fallbackModels": global_models,
+        "agentFallbackModels": agent_fallbacks,
+        "fallbackMode": "cycle",
+        "cooldownMs": cooldown_ms,
+        "patterns": [
+            "rate limit",
+            "rate_limit",
+            "usage limit",
+            "too many requests",
+            "429",
+            "quota exceeded",
+            "resource_exhausted",
+            "insufficient credits",
+            "payment required",
+            "402",
+            "overloaded",
+            "service unavailable",
+            "503",
+        ],
+    }
+
+
+def build_opencode_fallback_plugin_js(
+    results: Sequence[SelectionResult],
+    fallback_chains: Optional[Mapping[str, Sequence[str]]] = None,
+    project_dir: str = "",
+    export_path: str = "config/opencode.json",
+) -> str:
+    """Génère le code JavaScript ESM autonome du plugin OpenCode de repli à chaud.
+
+    Ce plugin s'exécute directement dans OpenCode :
+    1. Il intercepte les événements ``session.error`` et ``session.status`` (429, quota, 402, 503).
+    2. Il interrompt l'attente bloquée (``client.session.abort``), choisit le modèle suivant
+       dans la ``fallback_chain`` de l'agent ou du modèle actif, et relance automatiquement
+       le dernier prompt utilisateur avec le modèle de secours (``client.session.prompt``).
+    3. En tâche de fond, il appelle ``main.py --failover`` pour placer le modèle défaillant
+       en quarantaine dans ``data/model_cooldowns.json`` et mettre à jour ``opencode.json``.
+    """
+    fallback_cfg = build_rate_limit_fallback_config(results, fallback_chains=fallback_chains)
+    model_to_chain: Dict[str, List[Dict[str, str]]] = {}
+    for res in results:
+        if not res.model:
+            continue
+        formatted_primary = format_opencode_model_id(res.model.id)
+        agent_entries = fallback_cfg["agentFallbackModels"].get(res.agent_name, [])
+        if agent_entries:
+            model_to_chain[formatted_primary] = agent_entries
+            model_to_chain[res.model.id] = agent_entries
+
+    embedded_config = json.dumps(
+        {
+            "fallbackModels": fallback_cfg["fallbackModels"],
+            "agentFallbackModels": fallback_cfg["agentFallbackModels"],
+            "modelToChain": model_to_chain,
+            "cooldownMs": fallback_cfg["cooldownMs"],
+            "patterns": fallback_cfg["patterns"],
+            "projectDir": project_dir,
+            "exportPath": export_path,
+        },
+        indent=2,
+        ensure_ascii=False,
+    )
+
+    return f"""// Plugin auto-généré par OpenCode-ModelPool — Repli automatique sur erreur (429 / Quota / 503)
+import {{ spawn }} from "node:child_process";
+import path from "node:path";
+
+const CONFIG = {embedded_config};
+
+function classifyErrorReason(text) {{
+  const lower = String(text || "").toLowerCase();
+  if (lower.includes("402") || lower.includes("insufficient credits") || lower.includes("payment required") || lower.includes("billing")) {{
+    return "insufficient_credits";
+  }}
+  if (lower.includes("quota exceeded") || lower.includes("daily limit") || lower.includes("resource_exhausted") || lower.includes("usage limit")) {{
+    return "quota_exceeded";
+  }}
+  if (lower.includes("429") || lower.includes("rate limit") || lower.includes("rate_limit") || lower.includes("too many requests")) {{
+    return "rate_limit";
+  }}
+  if (lower.includes("503") || lower.includes("502") || lower.includes("504") || lower.includes("overloaded") || lower.includes("service unavailable")) {{
+    return "service_unavailable";
+  }}
+  return null;
+}}
+
+function matchesFallbackPattern(text) {{
+  const lower = String(text || "").toLowerCase();
+  if (!lower) return false;
+  return CONFIG.patterns.some((p) => lower.includes(p));
+}}
+
+function notifyModelPoolQuarantine(failedTarget, errorReason) {{
+  if (!CONFIG.projectDir || !failedTarget) return;
+  try {{
+    const mainScript = path.join(CONFIG.projectDir, "main.py");
+    const args = [
+      mainScript,
+      "--failover",
+      failedTarget,
+      "--error-reason",
+      errorReason || "rate_limit",
+      "--export",
+      CONFIG.exportPath || "config/opencode.json",
+    ];
+    const child = spawn("python3", args, {{
+      cwd: CONFIG.projectDir,
+      stdio: "ignore",
+      detached: true,
+    }});
+    child.unref();
+  }} catch (_err) {{
+    // Ne jamais bloquer la session OpenCode si l'appel d'arrière-plan échoue
+  }}
+}}
+
+export const ModelPoolFallbackPlugin = async ({{ client }}) => {{
+  const cooldownUntil = new Map();
+  const activeHandling = new Set();
+
+  function isCoolingDown(providerID, modelID) {{
+    const key = `${{providerID}}/${{modelID}}`;
+    const exp = cooldownUntil.get(key);
+    if (!exp) return false;
+    if (Date.now() >= exp) {{
+      cooldownUntil.delete(key);
+      return false;
+    }}
+    return true;
+  }}
+
+  function markCooldown(providerID, modelID) {{
+    const key = `${{providerID}}/${{modelID}}`;
+    cooldownUntil.set(key, Date.now() + (CONFIG.cooldownMs || 900000));
+  }}
+
+  function pickNextModel(agentName, currentModelKey) {{
+    const candidates = [
+      ...(CONFIG.agentFallbackModels[agentName] || []),
+      ...(CONFIG.modelToChain[currentModelKey] || []),
+      ...(CONFIG.fallbackModels || []),
+    ];
+    for (const item of candidates) {{
+      const key = `${{item.providerID}}/${{item.modelID}}`;
+      if (key !== currentModelKey && !isCoolingDown(item.providerID, item.modelID)) {{
+        return item;
+      }}
+    }}
+    return null;
+  }}
+
+  async function handleRateLimitOrError(sessionID, errorText, currentAgent, currentProviderID, currentModelID) {{
+    if (!sessionID || activeHandling.has(sessionID)) return;
+    if (!matchesFallbackPattern(errorText)) return;
+
+    activeHandling.add(sessionID);
+    try {{
+      const reason = classifyErrorReason(errorText) || "rate_limit";
+      const currentKey = currentProviderID && currentModelID ? `${{currentProviderID}}/${{currentModelID}}` : "";
+      if (currentProviderID && currentModelID) {{
+        markCooldown(currentProviderID, currentModelID);
+      }}
+
+      notifyModelPoolQuarantine(currentAgent || currentKey, reason);
+
+      const nextModel = pickNextModel(currentAgent || "build", currentKey);
+      if (!nextModel || !client?.session) return;
+
+      try {{
+        await client.session.abort({{ path: {{ id: sessionID }} }});
+      }} catch (_e) {{}}
+
+      let lastText = "Continue la tâche en cours.";
+      try {{
+        const msgs = await client.session.messages({{ path: {{ id: sessionID }} }});
+        const list = Array.isArray(msgs?.data) ? msgs.data : (Array.isArray(msgs) ? msgs : []);
+        for (let i = list.length - 1; i >= 0; i--) {{
+          const m = list[i];
+          if (m?.info?.role === "user" || m?.role === "user") {{
+            const parts = m?.parts || m?.info?.parts || [];
+            const textPart = parts.find((p) => p?.type === "text" && p?.text);
+            if (textPart?.text) {{
+              lastText = textPart.text;
+              break;
+            }}
+          }}
+        }}
+      }} catch (_e) {{}}
+
+      await client.session.prompt({{
+        path: {{ id: sessionID }},
+        body: {{
+          model: {{
+            providerID: nextModel.providerID,
+            modelID: nextModel.modelID,
+          }},
+          parts: [{{ type: "text", text: lastText }}],
+        }},
+      }});
+    }} finally {{
+      setTimeout(() => activeHandling.delete(sessionID), 2500);
+    }}
+  }}
+
+  return {{
+    event: async ({{ event }}) => {{
+      if (!event || !event.type) return;
+      if (event.type === "session.error") {{
+        const props = event.properties || {{}};
+        const sessionID = props.sessionID || props.id;
+        const errObj = props.error || {{}};
+        const errText = JSON.stringify(errObj);
+        await handleRateLimitOrError(
+          sessionID,
+          errText,
+          props.agent,
+          props.providerID,
+          props.modelID
+        );
+      }} else if (event.type === "session.status") {{
+        const props = event.properties || {{}};
+        const status = props.status || {{}};
+        if (status.type === "retry" && status.message) {{
+          await handleRateLimitOrError(
+            props.sessionID,
+            status.message,
+            props.agent,
+            props.providerID,
+            props.modelID
+          );
+        }}
+      }}
+    }},
+  }};
+}};
+
+export default ModelPoolFallbackPlugin;
+"""
+
 
