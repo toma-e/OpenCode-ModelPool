@@ -6,7 +6,6 @@ from src.exporter import (
     build_modelpool_report_data,
     build_modelscope_report_data,
     build_opencode_config,
-    format_opencode_model_id,
     parse_json_or_jsonc,
 )
 from src.selector import (
@@ -166,6 +165,7 @@ class TestExporter(unittest.TestCase):
 
     def test_format_opencode_model_id_preserves_custom_provider(self) -> None:
         """Vérifie que les identifiants de modèles de fournisseurs locaux déclarés ne sont pas forcés vers openrouter."""
+        from src.exporter import format_opencode_model_id
 
         base_config = {
             "provider": {
