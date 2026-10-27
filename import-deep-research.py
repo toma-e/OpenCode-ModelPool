@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """Script interactif et automatisé d'importation de résultats Gemini Deep Research dans OpenCode-ModelPool.
 
 Permet :
