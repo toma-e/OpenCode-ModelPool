@@ -418,7 +418,7 @@ def sync_models_from_all_providers(
     ollama_base_url: str = "http://localhost:11434",
     project_dir: Optional[Path] = None,
     opencode_auth_path: Optional[Path] = None,
-) -> Tuple[int, Optional[Path], Dict[str, int]]:
+) -> Tuple[int, Optional[Path], dict[str, int]]:
     """Synchronise les modèles depuis tous les fournisseurs configurés et détectés.
 
     Interroge :
@@ -439,8 +439,8 @@ def sync_models_from_all_providers(
         opencode_auth_path=opencode_auth_path,
     )
 
-    models_by_id: Dict[str, Model] = {}
-    counts: Dict[str, int] = {}
+    models_by_id: dict[str, Model] = {}
+    counts: dict[str, int] = {}
 
     # 1. OpenRouter
     if include_openrouter:

@@ -9,9 +9,9 @@ from __future__ import annotations
 import contextlib
 import json
 import threading
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any, Iterator, Mapping, Optional
 
 from datetime import datetime, timezone
 
@@ -51,7 +51,6 @@ from src.fetcher import (
 from src.providers.detector import (
     ProviderCredentials,
     detect_provider_credentials,
-    get_available_provider_names,
 )
 from src.providers.ollama import get_ollama_models
 from src.providers.access import (
@@ -664,7 +663,7 @@ class ApplicationService:
                     )
         return (len(errors) == 0, errors)
 
-    def get_providers_status(self) -> Dict[str, ProviderCredentials]:
+    def get_providers_status(self) -> dict[str, ProviderCredentials]:
         """Renvoie le statut des identifiants et clés pour chaque fournisseur."""
         return detect_provider_credentials(project_dir=self.base_dir)
 
