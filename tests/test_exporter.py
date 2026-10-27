@@ -1,6 +1,9 @@
 """Tests unitaires pour le module d'export OpenCode exporter.py."""
 
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from src.exporter import (
     build_modelpool_report_data,
@@ -166,6 +169,7 @@ class TestExporter(unittest.TestCase):
 
     def test_format_opencode_model_id_preserves_custom_provider(self) -> None:
         """Vérifie que les identifiants de modèles de fournisseurs locaux déclarés ne sont pas forcés vers openrouter."""
+        from src.exporter import format_opencode_model_id
 
         base_config = {
             "provider": {

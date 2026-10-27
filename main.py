@@ -206,7 +206,7 @@ def render_results(report: FleetReport) -> None:
     if report.budget.is_total_estimable:
         print(f"💰 Coût mensuel total estimé : ${report.budget.total_monthly_cost:.4f}")
     else:
-        print("💰 Coût mensuel total estimé : Non estimable (au moins un modèle a des tarifs non répertoriés)")
+        print(f"💰 Coût mensuel total estimé : Non estimable (au moins un modèle a des tarifs non répertoriés)")
     print(f"📊 Volume total estimé : {report.budget.total_tokens:,} tokens/mois")
     if report.diagnostics:
         print("\n⚠️  Diagnostics :")
