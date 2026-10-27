@@ -33,14 +33,17 @@ def normalize_user_path(raw_input_str: str) -> Path:
     # Cas 1 : Chemin Windows classique C:/Users/... -> /mnt/c/Users/...
     if re.match(r"^[a-zA-Z]:/", unix_style):
         drive = unix_style[0].lower()
-        return Path(f"/mnt/{drive}{unix_style[2:]}")
-
+        p = Path(f"/mnt/{drive}{unix_style[2:]}")
     # Cas 2 : Chemin UNC Windows vers WSL //wsl.localhost/Ubuntu/home/... -> /home/...
-    m = re.match(r"^//wsl(\.localhost)?/[^/]+(/.*)$", unix_style, re.IGNORECASE)
-    if m:
-        return Path(m.group(2))
+    elif m := re.match(r"^//wsl(\.localhost)?/[^/]+(/.*)$", unix_style, re.IGNORECASE):
+        p = Path(m.group(2))
+    else:
+        p = Path(cleaned).expanduser()
 
-    return Path(cleaned).expanduser()
+    try:
+        return p.resolve()
+    except (OSError, RuntimeError):
+        return p
 
 
 def prompt_select_file(search_dir: Path) -> Path:
@@ -49,30 +52,55 @@ def prompt_select_file(search_dir: Path) -> Path:
     print("🤖 Assistant d'intégration Gemini Deep Research -> OpenCode-ModelPool")
     print("=" * 75)
 
-    # Recherche des fichiers JSON candidats récents dans le dossier ou sous-dossiers courants
-    candidate_files: list[Path] = []
-    scan_dirs = [
-        search_dir,
-        search_dir / "Ressources",
-        search_dir / "ressources",
-        search_dir / "docs" / "google_ai_pro" / "deep_research",
+    try:
+        resolved_search_dir = search_dir.resolve()
+    except (OSError, RuntimeError):
+        resolved_search_dir = search_dir
+
+    raw_scan_dirs = [
+        resolved_search_dir,
+        resolved_search_dir / "Ressources",
+        resolved_search_dir / "ressources",
+        resolved_search_dir / "docs" / "google_ai_pro" / "deep_research",
         Path.home() / "Downloads",
         Path("/tmp"),
-        # Dossier Téléchargements Windows sous WSL (/mnt/c/Users/*/Downloads)
-        *list(Path("/mnt/c/Users").glob("*/Downloads")),
     ]
 
+    # Ajout sécurisé du dossier Téléchargements Windows sous WSL (/mnt/c/Users/*/Downloads)
+    mnt_users = Path("/mnt/c/Users")
+    if mnt_users.is_dir():
+        try:
+            raw_scan_dirs.extend(mnt_users.glob("*/Downloads"))
+        except OSError:
+            pass
+
+    # Résolution, déduplication et vérification des répertoires d'analyse
+    scan_dirs: list[Path] = []
+    for raw_d in raw_scan_dirs:
+        try:
+            resolved_d = raw_d.resolve()
+            if resolved_d.is_dir() and resolved_d not in scan_dirs:
+                scan_dirs.append(resolved_d)
+        except (OSError, RuntimeError):
+            continue
+
+    # Recherche des fichiers JSON candidats récents dans les dossiers nettoyés
+    candidate_files: list[Path] = []
+
     for d in scan_dirs:
-        if d.is_dir():
-            try:
-                for p in d.glob("*.json"):
-                    # Ignorer les flux ADS Windows (:Zone.Identifier), les fichiers de config ou package
-                    if ":" in p.name or "models.json" in p.name or "auth.json" in p.name or "package" in p.name:
-                        continue
-                    if p not in candidate_files and p.is_file():
-                        candidate_files.append(p)
-            except OSError:
-                pass
+        try:
+            for p in d.glob("*.json"):
+                # Ignorer les flux ADS Windows (:Zone.Identifier), les fichiers de config ou package
+                if ":" in p.name or "models.json" in p.name or "auth.json" in p.name or "package" in p.name:
+                    continue
+                try:
+                    resolved_p = p.resolve()
+                    if resolved_p not in candidate_files and resolved_p.is_file():
+                        candidate_files.append(resolved_p)
+                except (OSError, RuntimeError):
+                    continue
+        except (OSError, RuntimeError):
+            pass
 
     # Tri par date de modification décroissante
     candidate_files.sort(key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True)
