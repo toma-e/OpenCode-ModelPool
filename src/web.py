@@ -256,9 +256,23 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
             return None
         if length <= 0 or length > self.MAX_POST_BODY_BYTES:
             return None
-        raw = self.rfile.read(length)
+
+        remaining = length
+        chunk_size = 65536
+        raw_chunks = bytearray()
+        while remaining > 0:
+            to_read = min(remaining, chunk_size)
+            chunk = self.rfile.read(to_read)
+            if not chunk:
+                break
+            raw_chunks.extend(chunk)
+            remaining -= len(chunk)
+
+        if len(raw_chunks) != length:
+            return None
+
         try:
-            return json.loads(raw.decode("utf-8") or "{}")
+            return json.loads(raw_chunks.decode("utf-8") or "{}")
         except (UnicodeDecodeError, json.JSONDecodeError):
             return None
 

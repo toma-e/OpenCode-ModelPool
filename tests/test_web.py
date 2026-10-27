@@ -273,6 +273,39 @@ class TestWeb(unittest.TestCase):
         self.assertIn("priorité", post_data.get("message", "").lower())
         self.assertEqual(self.service.get_provider_priority(), new_order)
 
+    def test_read_json_body_chunking_and_security(self) -> None:
+        """Vérifie le comportement de _read_json_body avec lecture par blocs et limites de taille."""
+        from src.web import LocalInterfaceHandler
+        import io
+
+        class DummyHandler(LocalInterfaceHandler):
+            def __init__(self, headers: dict[str, str], rfile: io.BytesIO):
+                self.headers = headers
+                self.rfile = rfile
+
+        # 1. Body valide lu en plusieurs blocs (si > chunk_size)
+        payload_data = {"key": "x" * 70000}
+        raw = json.dumps(payload_data).encode("utf-8")
+        handler = DummyHandler({"Content-Length": str(len(raw))}, io.BytesIO(raw))
+        res = handler._read_json_body()
+        self.assertEqual(res, payload_data)
+
+        # 2. Content-Length trop grand (> MAX_POST_BODY_BYTES)
+        handler = DummyHandler({"Content-Length": "2000000"}, io.BytesIO(b"{}"))
+        self.assertIsNone(handler._read_json_body())
+
+        # 3. Content-Length invalide
+        handler = DummyHandler({"Content-Length": "invalid"}, io.BytesIO(b"{}"))
+        self.assertIsNone(handler._read_json_body())
+
+        # 4. Stream incomplet (EOF avant Content-Length)
+        handler = DummyHandler({"Content-Length": "100"}, io.BytesIO(b"short"))
+        self.assertIsNone(handler._read_json_body())
+
+        # 5. Contenu JSON invalide
+        handler = DummyHandler({"Content-Length": "10"}, io.BytesIO(b"{not-json}"))
+        self.assertIsNone(handler._read_json_body())
+
 
 if __name__ == "__main__":
     unittest.main()
