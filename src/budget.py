@@ -185,8 +185,8 @@ def simulate_fleet_budget(
     free_tier_savings = 0.0
 
     for agent in agents:
-        res = results_by_name.get(agent.name)
-        model = res.model if res else None
+        res_item: Optional[SelectionResult] = results_by_name.get(agent.name)
+        model = res_item.model if res_item and res_item.model else None
         target = targets_by_name.get(agent.name)
 
         report = simulate_agent_budget(agent, model, execution_target=target)

@@ -299,9 +299,9 @@ def run(args: argparse.Namespace, base_dir: Path = BASE_DIR) -> int:
         print(f"\n⏳ Modèles / Fournisseurs en quarantaine active ({len(cooldowns)}) :\n")
         print(f"{'Cible':<48} {'Motif':<22} {'Temps restant'}")
         print("-" * 85)
-        for entry in cooldowns:
-            rem_min = max(1, (entry.remaining_seconds() + 59) // 60)
-            print(f"{entry.target_id:<48} {entry.reason:<22} ~{rem_min} min (exp: {entry.expires_at[:19]}Z)")
+        for entry_item in cooldowns:
+            rem_min = max(1, (entry_item.remaining_seconds() + 59) // 60)
+            print(f"{entry_item.target_id:<48} {entry_item.reason:<22} ~{rem_min} min (exp: {entry_item.expires_at[:19]}Z)")
         print("-" * 85)
         return 0
 
