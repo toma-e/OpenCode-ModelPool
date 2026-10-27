@@ -219,7 +219,7 @@ def serialize_report(report: FleetReport) -> dict[str, Any]:
             status = "exact"
         agent_budget = budget_by_agent.get(agent.name)
         target = report.execution_targets[index] if index < len(report.execution_targets) else None
-        target_payload = {
+        target_payload: dict[str, Any] | None = {
             "channel_provider": target.channel_provider,
             "formatted_model_id": target.formatted_model_id,
             "is_local": target.is_local,
@@ -227,7 +227,7 @@ def serialize_report(report: FleetReport) -> dict[str, Any]:
             "cost_in": target.effective_cost_input_per_m,
             "cost_out": target.effective_cost_output_per_m,
             "access_verified": target.access_verified,
-        } if target else None
+        } if target is not None else None
 
         assignments.append(
             {
@@ -396,9 +396,9 @@ class ApplicationService:
         route_cache: dict[str, ExecutionTarget] = {}
 
         def _route(model: Model) -> ExecutionTarget:
-            cached = route_cache.get(model.id)
-            if cached is None:
-                cached = resolve_model_execution_target(
+            cached_target: ExecutionTarget | None = route_cache.get(model.id)
+            if cached_target is None:
+                cached_target = resolve_model_execution_target(
                     reference_model=model,
                     provider_priority=priority,
                     credentials=creds,
@@ -406,8 +406,8 @@ class ApplicationService:
                     direct_access=direct_access,
                     excluded_targets=excluded_targets,
                 )
-                route_cache[model.id] = cached
-            return cached
+                route_cache[model.id] = cached_target
+            return cached_target
 
         normalized_priority = [PROVIDER_ALIASES.get(p.lower(), p.lower()) for p in priority]
 
@@ -465,13 +465,13 @@ class ApplicationService:
 
         for res in results:
             if res.model:
-                target = _route(res.model)
-                execution_targets.append(target)
+                resolved_target: ExecutionTarget = _route(res.model)
+                execution_targets.append(resolved_target)
                 # Si le modèle est dérouté sur Ollama local, ajuster le coût à 0.0 pour le budget
                 effective_model = res.model
-                if target.is_local:
+                if resolved_target.is_local:
                     effective_model = Model(
-                        id=target.formatted_model_id,
+                        id=resolved_target.formatted_model_id,
                         provider="ollama",
                         tier="free_tier",
                         cost_input_per_m=0.0,
@@ -498,8 +498,8 @@ class ApplicationService:
         # Chaîne de repli hybride par agent (limites de débit / quotas) :
         # Passe 1 : canaux distincts en priorité ; Passe 2 : modèles distincts sur même canal si besoin.
         fallback_chains: dict[str, list[str]] = {}
-        for res, target in zip(results, execution_targets):
-            if res.model is None or target is None:
+        for res, exec_tgt in zip(results, execution_targets):
+            if res.model is None or exec_tgt is None:
                 continue
             candidate_targets: list[tuple[str, str]] = []
             for candidate in res.candidates[1:]:
@@ -513,8 +513,8 @@ class ApplicationService:
                     continue
                 candidate_targets.append((cand_target.formatted_model_id, cand_target.channel_provider))
             fallback_chains[res.agent_name] = build_hybrid_fallback_chain(
-                primary_formatted_id=target.formatted_model_id,
-                primary_channel=target.channel_provider,
+                primary_formatted_id=exec_tgt.formatted_model_id,
+                primary_channel=exec_tgt.channel_provider,
                 candidate_targets=candidate_targets,
                 max_length=3,
             )
@@ -640,11 +640,11 @@ class ApplicationService:
             cached_access, creds, list(DIRECT_CHANNELS.keys()), strict_freshness=strict_freshness
         )
 
-        for index, (agent, result) in enumerate(zip(report.agents, report.results)):
+        for i, (agent, result) in enumerate(zip(report.agents, report.results)):
             if result.model is None:
                 errors.append(f"Agent '{agent.name}' : aucun modèle attribué.")
                 continue
-            target = report.execution_targets[index] if index < len(report.execution_targets) else None
+            target = report.execution_targets[i] if i < len(report.execution_targets) else None
             if target is None:
                 errors.append(f"Agent '{agent.name}' : aucune cible d'exécution résolue pour '{result.model.id}'.")
                 continue
