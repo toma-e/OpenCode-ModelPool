@@ -396,9 +396,8 @@ class ApplicationService:
         route_cache: dict[str, ExecutionTarget] = {}
 
         def _route(model: Model) -> ExecutionTarget:
-            cached = route_cache.get(model.id)
-            if cached is None:
-                cached = resolve_model_execution_target(
+            if model.id not in route_cache:
+                route_cache[model.id] = resolve_model_execution_target(
                     reference_model=model,
                     provider_priority=priority,
                     credentials=creds,
@@ -406,8 +405,7 @@ class ApplicationService:
                     direct_access=direct_access,
                     excluded_targets=excluded_targets,
                 )
-                route_cache[model.id] = cached
-            return cached
+            return route_cache[model.id]
 
         normalized_priority = [PROVIDER_ALIASES.get(p.lower(), p.lower()) for p in priority]
 
@@ -431,10 +429,10 @@ class ApplicationService:
         excluded_model_ids: set[str] = set()
         if active_cooldowns:
             for m in models:
-                target = _route(m)
-                if is_model_in_cooldown(m.id, target.formatted_model_id, target.channel_provider, active_cooldowns):
+                route_target = _route(m)
+                if is_model_in_cooldown(m.id, route_target.formatted_model_id, route_target.channel_provider, active_cooldowns):
                     excluded_model_ids.add(m.id)
-                    excluded_model_ids.add(target.formatted_model_id)
+                    excluded_model_ids.add(route_target.formatted_model_id)
             # Ajouter aussi directement les cibles de quarantaine pour gérer force_model
             for c in active_cooldowns:
                 if not c.target_id.lower().startswith("provider:"):
@@ -465,13 +463,13 @@ class ApplicationService:
 
         for res in results:
             if res.model:
-                target = _route(res.model)
-                execution_targets.append(target)
+                exec_target: Optional[ExecutionTarget] = _route(res.model)
+                execution_targets.append(exec_target)
                 # Si le modèle est dérouté sur Ollama local, ajuster le coût à 0.0 pour le budget
                 effective_model = res.model
-                if target.is_local:
+                if exec_target and exec_target.is_local:
                     effective_model = Model(
-                        id=target.formatted_model_id,
+                        id=exec_target.formatted_model_id,
                         provider="ollama",
                         tier="free_tier",
                         cost_input_per_m=0.0,
@@ -565,16 +563,16 @@ class ApplicationService:
         summary: dict[str, dict[str, Any]] = {}
         for prov in DIRECT_CHANNELS:
             cred = creds.get(prov)
-            entry = cached_access.get(prov)
+            acc_entry: Optional[ProviderAccess] = cached_access.get(prov)
             verified = prov in direct_access
-            count = len(direct_access[prov]) if verified else (len(entry.model_ids) if entry else 0)
+            count = len(direct_access[prov]) if verified else (len(acc_entry.model_ids) if acc_entry else 0)
             summary[prov] = {
                 "available": bool(cred and cred.is_available),
                 "verified": verified,
                 "model_count": count,
-                "status": entry.status if entry else "not_checked",
-                "checked_at": entry.checked_at if entry else None,
-                "error": entry.error if entry else None,
+                "status": acc_entry.status if acc_entry else "not_checked",
+                "checked_at": acc_entry.checked_at if acc_entry else None,
+                "error": acc_entry.error if acc_entry else None,
             }
         return summary
 
@@ -804,15 +802,15 @@ class ApplicationService:
                 )
                 target_path = self.resolve_export_path(path)
                 # L'identifiant exporté est celui du canal retenu (ex: mistral/..., google/...)
-                export_results = [
-                    replace(res, model=replace(res.model, id=target.formatted_model_id))
-                    if res.model is not None and target is not None
-                    else res
-                    for res, target in zip(
-                        report.results,
-                        list(report.execution_targets) + [None] * len(report.results),
-                    )
-                ]
+                export_results: list[SelectionResult] = []
+                for res, target in zip(
+                    report.results,
+                    list(report.execution_targets) + [None] * len(report.results),
+                ):
+                    if res.model is not None and target is not None:
+                        export_results.append(replace(res, model=replace(res.model, id=target.formatted_model_id)))
+                    else:
+                        export_results.append(res)
                 config_data = build_opencode_config(
                     export_results,
                     report.agents,
@@ -1231,14 +1229,14 @@ class ApplicationService:
                 if updated_report is not None and affected_agent is not None:
                     for idx, res in enumerate(updated_report.results):
                         if res.agent_name == affected_agent:
-                            new_target = (
+                            eff_target: Optional[ExecutionTarget] = (
                                 updated_report.execution_targets[idx]
                                 if idx < len(updated_report.execution_targets)
                                 else None
                             )
                             new_model_str = (
-                                new_target.formatted_model_id
-                                if new_target
+                                eff_target.formatted_model_id
+                                if eff_target
                                 else (res.model.id if res.model else "aucun modèle")
                             )
                             transition_msg = f" Agent '{affected_agent}' basculé vers '{new_model_str}'."
