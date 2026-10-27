@@ -207,7 +207,8 @@ def _budget_payload(report: AgentBudgetReport) -> dict[str, Any]:
 
 def serialize_report(report: FleetReport) -> dict[str, Any]:
     """Sérialise un rapport de flotte pour l'API HTTP."""
-    budget_by_agent = {item.agent_name: item for item in report.budget.agent_reports}
+    agent_reports = report.budget.agent_reports
+    budget_by_agent: Optional[dict[str, AgentBudgetReport]] = None
     assignments: list[dict[str, Any]] = []
     for index, (agent, result) in enumerate(zip(report.agents, report.results)):
         if result.model is None:
@@ -218,7 +219,13 @@ def serialize_report(report: FleetReport) -> dict[str, Any]:
             status = "fallback"
         else:
             status = "exact"
-        agent_budget = budget_by_agent.get(agent.name)
+
+        if index < len(agent_reports) and agent_reports[index].agent_name == agent.name:
+            agent_budget: Optional[AgentBudgetReport] = agent_reports[index]
+        else:
+            if budget_by_agent is None:
+                budget_by_agent = {item.agent_name: item for item in agent_reports}
+            agent_budget = budget_by_agent.get(agent.name)
         target = report.execution_targets[index] if index < len(report.execution_targets) else None
         target_payload = {
             "channel_provider": target.channel_provider,
