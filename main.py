@@ -1,7 +1,5 @@
 """Interface CLI de synchronisation, sélection, export et serveur web local."""
 
-from __future__ import annotations
-
 import argparse
 import logging
 import sys
