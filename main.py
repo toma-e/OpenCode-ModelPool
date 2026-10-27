@@ -204,7 +204,7 @@ def render_results(report: FleetReport) -> None:
     if report.budget.is_total_estimable:
         print(f"💰 Coût mensuel total estimé : ${report.budget.total_monthly_cost:.4f}")
     else:
-        print(f"💰 Coût mensuel total estimé : Non estimable (au moins un modèle a des tarifs non répertoriés)")
+        print("💰 Coût mensuel total estimé : Non estimable (au moins un modèle a des tarifs non répertoriés)")
     print(f"📊 Volume total estimé : {report.budget.total_tokens:,} tokens/mois")
     if report.diagnostics:
         print("\n⚠️  Diagnostics :")
@@ -297,9 +297,9 @@ def run(args: argparse.Namespace, base_dir: Path = BASE_DIR) -> int:
         print(f"\n⏳ Modèles / Fournisseurs en quarantaine active ({len(cooldowns)}) :\n")
         print(f"{'Cible':<48} {'Motif':<22} {'Temps restant'}")
         print("-" * 85)
-        for entry in cooldowns:
-            rem_min = max(1, (entry.remaining_seconds() + 59) // 60)
-            print(f"{entry.target_id:<48} {entry.reason:<22} ~{rem_min} min (exp: {entry.expires_at[:19]}Z)")
+        for cooldown_entry in cooldowns:
+            rem_min = max(1, (cooldown_entry.remaining_seconds() + 59) // 60)
+            print(f"{cooldown_entry.target_id:<48} {cooldown_entry.reason:<22} ~{rem_min} min (exp: {cooldown_entry.expires_at[:19]}Z)")
         print("-" * 85)
         return 0
 
