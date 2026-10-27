@@ -396,9 +396,9 @@ class ApplicationService:
         route_cache: dict[str, ExecutionTarget] = {}
 
         def _route(model: Model) -> ExecutionTarget:
-            cached = route_cache.get(model.id)
-            if cached is None:
-                cached = resolve_model_execution_target(
+            cached_target = route_cache.get(model.id)
+            if cached_target is None:
+                cached_target = resolve_model_execution_target(
                     reference_model=model,
                     provider_priority=priority,
                     credentials=creds,
@@ -406,8 +406,8 @@ class ApplicationService:
                     direct_access=direct_access,
                     excluded_targets=excluded_targets,
                 )
-                route_cache[model.id] = cached
-            return cached
+                route_cache[model.id] = cached_target
+            return cached_target
 
         normalized_priority = [PROVIDER_ALIASES.get(p.lower(), p.lower()) for p in priority]
 
@@ -498,11 +498,11 @@ class ApplicationService:
         # Chaîne de repli hybride par agent (limites de débit / quotas) :
         # Passe 1 : canaux distincts en priorité ; Passe 2 : modèles distincts sur même canal si besoin.
         fallback_chains: dict[str, list[str]] = {}
-        for res, target in zip(results, execution_targets):
-            if res.model is None or target is None:
+        for res_sel, exec_tgt in zip(results, execution_targets):
+            if res_sel.model is None or exec_tgt is None:
                 continue
             candidate_targets: list[tuple[str, str]] = []
-            for candidate in res.candidates[1:]:
+            for candidate in res_sel.candidates[1:]:
                 cand_target = _route(candidate)
                 if is_model_in_cooldown(
                     candidate.id,
@@ -512,9 +512,9 @@ class ApplicationService:
                 ):
                     continue
                 candidate_targets.append((cand_target.formatted_model_id, cand_target.channel_provider))
-            fallback_chains[res.agent_name] = build_hybrid_fallback_chain(
-                primary_formatted_id=target.formatted_model_id,
-                primary_channel=target.channel_provider,
+            fallback_chains[res_sel.agent_name] = build_hybrid_fallback_chain(
+                primary_formatted_id=exec_tgt.formatted_model_id,
+                primary_channel=exec_tgt.channel_provider,
                 candidate_targets=candidate_targets,
                 max_length=3,
             )
@@ -644,7 +644,7 @@ class ApplicationService:
             if result.model is None:
                 errors.append(f"Agent '{agent.name}' : aucun modèle attribué.")
                 continue
-            target = report.execution_targets[index] if index < len(report.execution_targets) else None
+            target: Optional[ExecutionTarget] = report.execution_targets[index] if index < len(report.execution_targets) else None
             if target is None:
                 errors.append(f"Agent '{agent.name}' : aucune cible d'exécution résolue pour '{result.model.id}'.")
                 continue
@@ -1185,11 +1185,7 @@ class ApplicationService:
                 for idx, res in enumerate(current_report.results):
                     if res.agent_name.lower() == clean_target.lower():
                         affected_agent = res.agent_name
-                        exec_target = (
-                            current_report.execution_targets[idx]
-                            if idx < len(current_report.execution_targets)
-                            else None
-                        )
+                        exec_target = current_report.execution_targets[idx] if idx < len(current_report.execution_targets) else None
                         if exec_target is not None:
                             resolved_target_id = exec_target.formatted_model_id
                         elif res.model is not None:

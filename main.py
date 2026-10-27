@@ -230,14 +230,14 @@ def run(args: argparse.Namespace, base_dir: Path = BASE_DIR) -> int:
     if getattr(args, "status_keys", False):
         creds = service.get_providers_status()
         from src.providers.access import read_provider_access
-        cached = read_provider_access(service.access_path)
+        cached_access = read_provider_access(service.access_path)
         print("\n🔑 État des fournisseurs et clés API détectés :\n")
         print(f"{'Fournisseur':<12} {'Disponible':<12} {'Source':<15} {'Modèles vérifiés':<18} {'Clé masquée'}")
         print("-" * 75)
         for prov, c in sorted(creds.items()):
             status_symbol = "✅ Oui" if c.is_available else "❌ Non"
             masked = c.masked_key if c.masked_key else ("(service local)" if prov == "ollama" else "(aucune)")
-            entry = cached.get(prov)
+            entry = cached_access.get(prov)
             if prov == "ollama":
                 verified_str = "(service local)"
             elif prov == "openrouter":
@@ -299,9 +299,9 @@ def run(args: argparse.Namespace, base_dir: Path = BASE_DIR) -> int:
         print(f"\n⏳ Modèles / Fournisseurs en quarantaine active ({len(cooldowns)}) :\n")
         print(f"{'Cible':<48} {'Motif':<22} {'Temps restant'}")
         print("-" * 85)
-        for entry in cooldowns:
-            rem_min = max(1, (entry.remaining_seconds() + 59) // 60)
-            print(f"{entry.target_id:<48} {entry.reason:<22} ~{rem_min} min (exp: {entry.expires_at[:19]}Z)")
+        for cd_entry in cooldowns:
+            rem_min = max(1, (cd_entry.remaining_seconds() + 59) // 60)
+            print(f"{cd_entry.target_id:<48} {cd_entry.reason:<22} ~{rem_min} min (exp: {cd_entry.expires_at[:19]}Z)")
         print("-" * 85)
         return 0
 
