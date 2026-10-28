@@ -107,7 +107,7 @@ def is_ollama_reachable(base_url: str = "http://localhost:11434", timeout: float
     req = urllib.request.Request(url, headers={"User-Agent": "OpenCode-ModelPool/1.0"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return resp.status == 200
+            return bool(resp.status == 200)
     except (urllib.error.URLError, TimeoutError, OSError):
         return False
 
