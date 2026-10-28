@@ -9,9 +9,9 @@ from __future__ import annotations
 import contextlib
 import json
 import threading
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any, Dict, Iterator, Mapping, Optional
 
 from datetime import datetime, timezone
 
@@ -51,7 +51,6 @@ from src.fetcher import (
 from src.providers.detector import (
     ProviderCredentials,
     detect_provider_credentials,
-    get_available_provider_names,
 )
 from src.providers.ollama import get_ollama_models
 from src.providers.access import (
@@ -219,7 +218,7 @@ def serialize_report(report: FleetReport) -> dict[str, Any]:
         else:
             status = "exact"
         agent_budget = budget_by_agent.get(agent.name)
-        target = report.execution_targets[index] if index < len(report.execution_targets) else None
+        target: Optional[ExecutionTarget] = report.execution_targets[index] if index < len(report.execution_targets) else None
         target_payload = {
             "channel_provider": target.channel_provider,
             "formatted_model_id": target.formatted_model_id,
@@ -499,8 +498,8 @@ class ApplicationService:
         # Chaîne de repli hybride par agent (limites de débit / quotas) :
         # Passe 1 : canaux distincts en priorité ; Passe 2 : modèles distincts sur même canal si besoin.
         fallback_chains: dict[str, list[str]] = {}
-        for res, target in zip(results, execution_targets):
-            if res.model is None or target is None:
+        for res, current_target in zip(results, execution_targets):
+            if res.model is None or current_target is None:
                 continue
             candidate_targets: list[tuple[str, str]] = []
             for candidate in res.candidates[1:]:
@@ -514,8 +513,8 @@ class ApplicationService:
                     continue
                 candidate_targets.append((cand_target.formatted_model_id, cand_target.channel_provider))
             fallback_chains[res.agent_name] = build_hybrid_fallback_chain(
-                primary_formatted_id=target.formatted_model_id,
-                primary_channel=target.channel_provider,
+                primary_formatted_id=current_target.formatted_model_id,
+                primary_channel=current_target.channel_provider,
                 candidate_targets=candidate_targets,
                 max_length=3,
             )
@@ -1186,7 +1185,7 @@ class ApplicationService:
                 for idx, res in enumerate(current_report.results):
                     if res.agent_name.lower() == clean_target.lower():
                         affected_agent = res.agent_name
-                        exec_target = (
+                        exec_target: Optional[ExecutionTarget] = (
                             current_report.execution_targets[idx]
                             if idx < len(current_report.execution_targets)
                             else None

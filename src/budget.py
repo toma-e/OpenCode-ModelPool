@@ -9,7 +9,7 @@ Ce module permet de :
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional, Sequence
+from typing import Any, List, Optional, Sequence
 
 from src.selector import AgentRequirement, Model, SelectionResult
 
@@ -171,12 +171,12 @@ def simulate_fleet_budget(
     Returns:
         FleetBudgetReport consolidé.
     """
-    results_by_name = {r.agent_name: r for r in results}
+    results_by_name: dict[str, SelectionResult] = {r.agent_name: r for r in results}
     targets_by_name: dict[str, Any] = {}
     if execution_targets is not None:
-        for res, target in zip(results, execution_targets):
-            if res and target:
-                targets_by_name[res.agent_name] = target
+        for result_item, target in zip(results, execution_targets):
+            if result_item and target:
+                targets_by_name[result_item.agent_name] = target
 
     agent_reports: List[AgentBudgetReport] = []
 
@@ -185,7 +185,7 @@ def simulate_fleet_budget(
     free_tier_savings = 0.0
 
     for agent in agents:
-        res = results_by_name.get(agent.name)
+        res: Optional[SelectionResult] = results_by_name.get(agent.name)
         model = res.model if res else None
         target = targets_by_name.get(agent.name)
 
