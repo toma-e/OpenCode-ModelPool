@@ -131,6 +131,7 @@ class TestMain(unittest.TestCase):
         import io
         from contextlib import redirect_stdout
         from src.budget import FleetBudgetReport
+        from src.selector import SelectionResult
         from src.service import FleetReport
 
         report = FleetReport(
