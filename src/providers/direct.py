@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import urllib.error
 import urllib.request
 from typing import Any, Dict, List, Optional
@@ -68,7 +67,7 @@ def _http_get_json(
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             content = resp.read()
-            data = json.loads(content.decode("utf-8"))
+            data = json.loads(content)
             return data if isinstance(data, dict) else None
     except (urllib.error.URLError, TimeoutError, OSError):
         return None
