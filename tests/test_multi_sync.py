@@ -7,7 +7,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from src.fetcher import SyncConfig, sync_models_from_all_providers
-from src.selector import Model
 
 
 class TestMultiSync(unittest.TestCase):
