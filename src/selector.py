@@ -8,6 +8,11 @@ from dataclasses import dataclass
 from typing import Any, Collection, Mapping, Optional, Sequence
 
 
+REASONING_KEYWORDS: tuple[str, ...] = ("o1", "o3", "o4", "r1", "qwq", "thinking", "reasoning", "reasoner")
+REASONING_PATTERN: re.Pattern[str] = re.compile(
+    rf"(?:^|[-_/:])({'|'.join(map(re.escape, REASONING_KEYWORDS))})(?:$|[-_/:])"
+)
+
 # Fournisseurs de référence (Tier 1) mondialement reconnus pour la qualité de code et d'ingénierie
 TIER1_PROVIDERS: frozenset[str] = frozenset({
     "anthropic",
@@ -105,11 +110,7 @@ class Model:
         if "supports_reasoning" in data:
             supports_reasoning = _bool(data["supports_reasoning"], "supports_reasoning", context)
         else:
-            reasoning_keywords = ("o1", "o3", "o4", "r1", "qwq", "thinking", "reasoning", "reasoner")
-            supports_reasoning = any(
-                re.search(rf"(?:^|[-_/:])({re.escape(kw)})(?:$|[-_/:])", model_id_lower)
-                for kw in reasoning_keywords
-            )
+            supports_reasoning = bool(REASONING_PATTERN.search(model_id_lower))
 
         return cls(
             id=model_id,
