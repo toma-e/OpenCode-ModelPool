@@ -11,7 +11,7 @@ import json
 import threading
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any, Dict, Iterator, Mapping, Optional
 
 from datetime import datetime, timezone
 
@@ -42,6 +42,7 @@ from src.exporter import (
     validate_opencode_config,
 )
 from src.fetcher import (
+    SyncConfig,
     create_backup,
     fetch_openrouter_models,
     sync_models_from_all_providers,
@@ -738,11 +739,12 @@ class ApplicationService:
         # Mode multi-fournisseurs complet
         with self._lock, self._file_lock():
             try:
-                count, backup, summary = sync_models_from_all_providers(
-                    self.models_path,
+                sync_cfg = SyncConfig(
+                    output_path=self.models_path,
                     include_ollama=include_ollama,
                     project_dir=self.base_dir,
                 )
+                count, backup, summary = sync_models_from_all_providers(sync_cfg)
                 sources_str = ", ".join(f"{k}: {v}" for k, v in summary.items() if v > 0)
                 message = f"{count} modèles synchronisés avec succès ({sources_str})"
                 # Mise à jour du cache d'accès réel des clés

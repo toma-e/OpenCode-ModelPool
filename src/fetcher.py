@@ -18,9 +18,10 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from src.selector import Model, is_non_llm_model
 
@@ -408,8 +409,23 @@ def sync_models_from_openrouter(
     return len(parsed_models), backup_path
 
 
+@dataclass
+class SyncConfig:
+    """Configuration pour la synchronisation multi-fournisseurs."""
+
+    output_path: Path
+    create_backup_file: bool = True
+    exclude_batch: bool = True
+    min_models_threshold: int = 1
+    include_openrouter: bool = True
+    include_ollama: bool = True
+    ollama_base_url: str = "http://localhost:11434"
+    project_dir: Optional[Path] = None
+    opencode_auth_path: Optional[Path] = None
+
+
 def sync_models_from_all_providers(
-    output_path: Path,
+    output_path: Path | SyncConfig | None = None,
     create_backup_file: bool = True,
     exclude_batch: bool = True,
     min_models_threshold: int = 1,
@@ -418,6 +434,7 @@ def sync_models_from_all_providers(
     ollama_base_url: str = "http://localhost:11434",
     project_dir: Optional[Path] = None,
     opencode_auth_path: Optional[Path] = None,
+    config: Optional[SyncConfig] = None,
 ) -> Tuple[int, Optional[Path], Dict[str, int]]:
     """Synchronise les modèles depuis tous les fournisseurs configurés et détectés.
 
@@ -429,6 +446,35 @@ def sync_models_from_all_providers(
     Returns:
         Tuple (total_modèles_enregistrés, chemin_backup, dictionnaire_comptes_par_fournisseur).
     """
+    if isinstance(output_path, SyncConfig):
+        cfg = output_path
+    elif config is not None:
+        cfg = config
+    elif output_path is not None:
+        cfg = SyncConfig(
+            output_path=output_path,
+            create_backup_file=create_backup_file,
+            exclude_batch=exclude_batch,
+            min_models_threshold=min_models_threshold,
+            include_openrouter=include_openrouter,
+            include_ollama=include_ollama,
+            ollama_base_url=ollama_base_url,
+            project_dir=project_dir,
+            opencode_auth_path=opencode_auth_path,
+        )
+    else:
+        raise ValueError("Un objet SyncConfig ou un output_path doit être fourni.")
+
+    output_path = cfg.output_path
+    create_backup_file = cfg.create_backup_file
+    exclude_batch = cfg.exclude_batch
+    min_models_threshold = cfg.min_models_threshold
+    include_openrouter = cfg.include_openrouter
+    include_ollama = cfg.include_ollama
+    ollama_base_url = cfg.ollama_base_url
+    project_dir = cfg.project_dir
+    opencode_auth_path = cfg.opencode_auth_path
+
     from src.providers.detector import detect_provider_credentials
     from src.providers.ollama import get_ollama_models
 
@@ -537,7 +583,8 @@ if __name__ == "__main__":
     target = base_dir / "data" / "models.json"
     print(f"🔄 Synchronisation multi-fournisseurs vers {target}...")
     try:
-        count, bkp, counts = sync_models_from_all_providers(target, project_dir=base_dir)
+        config = SyncConfig(output_path=target, project_dir=base_dir)
+        count, bkp, counts = sync_models_from_all_providers(config)
         print(f"✅ {count} modèles synchronisés avec succès dans {target} : {counts}")
         if bkp:
             print(f"💾 Sauvegarde précédente conservée : {bkp}")

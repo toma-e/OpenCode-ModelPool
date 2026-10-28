@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from src.fetcher import sync_models_from_all_providers
+from src.fetcher import SyncConfig, sync_models_from_all_providers
 from src.selector import Model
 
 
@@ -35,13 +35,14 @@ class TestMultiSync(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             out_path = Path(temp_dir) / "models.json"
             no_auth = Path(temp_dir) / "empty_auth.json"
-            total, backup, summary = sync_models_from_all_providers(
-                out_path,
+            cfg = SyncConfig(
+                output_path=out_path,
                 include_openrouter=True,
                 include_ollama=True,
                 create_backup_file=False,
                 opencode_auth_path=no_auth,
             )
+            total, backup, summary = sync_models_from_all_providers(cfg)
 
             self.assertEqual(total, 2)
             self.assertEqual(summary.get("openrouter"), 1)
@@ -51,6 +52,40 @@ class TestMultiSync(unittest.TestCase):
             ids = [m["id"] for m in saved_data["models"]]
             self.assertIn("meta-llama/llama-3.3-70b-instruct", ids)
             self.assertIn("ollama/qwen2.5-coder:7b", ids)
+
+    @patch("src.fetcher.fetch_openrouter_models")
+    @patch("src.providers.detector.is_ollama_reachable", return_value=False)
+    def test_sync_backward_compatibility_positional_args(
+        self,
+        mock_ollama_reach: MagicMock,
+        mock_openrouter: MagicMock,
+    ) -> None:
+        mock_openrouter.return_value = [
+            {
+                "id": "meta-llama/llama-3.3-70b-instruct",
+                "pricing": {"prompt": "0.000001", "completion": "0.000002"},
+                "context_length": 131072,
+                "supported_parameters": ["tools"],
+            }
+        ]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            out_path = Path(temp_dir) / "models.json"
+            no_auth = Path(temp_dir) / "empty_auth.json"
+            total, backup, summary = sync_models_from_all_providers(
+                out_path,
+                False,  # create_backup_file
+                True,   # exclude_batch
+                1,      # min_models_threshold
+                True,   # include_openrouter
+                False,  # include_ollama
+                "http://localhost:11434",
+                None,   # project_dir
+                no_auth,
+            )
+
+            self.assertEqual(total, 1)
+            self.assertEqual(summary.get("openrouter"), 1)
 
 
 if __name__ == "__main__":
