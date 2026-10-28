@@ -256,7 +256,7 @@ def resolve_model_execution_target(
 
     # Fallback par défaut si aucune clé ne correspond
     formatted_id = reference_model.id
-    if not any(formatted_id.startswith(f"{p}/") for p in ["openrouter", "ollama", "mistral", "groq", "google", "anthropic", "cerebras"]):
+    if not formatted_id.startswith(("openrouter/", "ollama/", "mistral/", "groq/", "google/", "anthropic/", "cerebras/")):
         formatted_id = f"openrouter/{formatted_id}"
     return ExecutionTarget(
         channel_provider=ref_provider or "openrouter",
