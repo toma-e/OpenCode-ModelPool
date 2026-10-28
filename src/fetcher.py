@@ -27,6 +27,19 @@ from src.selector import Model, is_non_llm_model
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/models"
 MAX_TIMESTAMPED_BACKUPS = 20
 
+# Expressions régulières pré-compilées au niveau du module
+NANO_REGEX = re.compile(r"(?:^|[-_/:])(?:nano|micro|tiny)(?:$|[-_/:])")
+MINI_REGEX = re.compile(r"(?:^|[-_/:])mini(?:$|[-_/:])")
+LITE_REGEX = re.compile(r"(?:^|[-_/:])lite(?:$|[-_/:])")
+PARAM_SIZE_REGEX = re.compile(r"(?<![a-z0-9])(?:(\d+)x)?(\d+(?:\.\d+)?)b(?![a-z0-9])")
+REASONING_MINI_REGEX = re.compile(r"(?:^|[-_/:])o[134]-mini")
+REASONING_REGEX = re.compile(r"(?:^|[-_/:])(?:o1|o3|o4|r1|deepseek-r1)(?:$|[-_/:])")
+GPT5_REGEX = re.compile(r"(?:^|[-_/:])gpt-5(?:\.\d+)?(?:$|[-_/:])")
+GPT4_REGEX = re.compile(r"(?:^|[-_/:])gpt-4(?:\.\d+)?(?:$|[-_/:])")
+REASONING_ID_REGEX = re.compile(
+    r"(?:^|[-_/:])(?:o1|o3|o4|r1|qwq|thinking|reasoning|reasoner)(?:$|[-_/:])"
+)
+
 
 def estimate_complexity_score(model_id: str, prompt_cost_per_m: float) -> int:
     """Estime un score de complexité (1 à 5) basé sur l'identifiant et le tarif du modèle.
@@ -41,15 +54,13 @@ def estimate_complexity_score(model_id: str, prompt_cost_per_m: float) -> int:
     m_id = model_id.lower()
 
     # Détection des modificateurs de taille
-    has_nano = bool(re.search(r"(?:^|[-_/:])(?:nano|micro|tiny)(?:$|[-_/:])", m_id))
-    has_mini = bool(re.search(r"(?:^|[-_/:])mini(?:$|[-_/:])", m_id))
-    has_lite = bool("flash-lite" in m_id or re.search(r"(?:^|[-_/:])lite(?:$|[-_/:])", m_id))
+    has_nano = bool(NANO_REGEX.search(m_id))
+    has_mini = bool(MINI_REGEX.search(m_id))
+    has_lite = bool("flash-lite" in m_id or LITE_REGEX.search(m_id))
 
     # Extraction des tailles de paramètres (supportant le format standard et le format MoE NxMb)
     parameter_sizes: list[float] = []
-    for num_experts_str, param_str in re.findall(
-        r"(?<![a-z0-9])(?:(\d+)x)?(\d+(?:\.\d+)?)b(?![a-z0-9])", m_id
-    ):
+    for num_experts_str, param_str in PARAM_SIZE_REGEX.findall(m_id):
         base_size = float(param_str)
         if num_experts_str:
             # Pour un MoE (ex: 8x22b, 4x7b), la masse totale de paramètres est experts * base
@@ -62,7 +73,7 @@ def estimate_complexity_score(model_id: str, prompt_cost_per_m: float) -> int:
         return 1
 
     # Détection des variantes compactes de raisonnement (ex: o1-mini, o3-mini, o4-mini)
-    is_reasoning_mini = bool(re.search(r"(?:^|[-_/:])o[134]-mini", m_id))
+    is_reasoning_mini = bool(REASONING_MINI_REGEX.search(m_id))
 
     # Priorité 2 : Petits modèles (< 7.5B, mini, lite)
     if (has_mini and not is_reasoning_mini) or has_lite or any(1.5 < size <= 7.5 for size in parameter_sizes):
@@ -73,10 +84,10 @@ def estimate_complexity_score(model_id: str, prompt_cost_per_m: float) -> int:
         return 4 if "high" in m_id else 3
 
     # Priorité 5 : Modèles phares / raisonnement de pointe (avec frontières strictes)
-    is_reasoning = bool(re.search(r"(?:^|[-_/:])(?:o1|o3|o4|r1|deepseek-r1)(?:$|[-_/:])", m_id))
+    is_reasoning = bool(REASONING_REGEX.search(m_id))
     if is_reasoning or any(k in m_id for k in ["opus", "sonnet", "405b"]):
         return 5
-    if re.search(r"(?:^|[-_/:])gpt-5(?:\.\d+)?(?:$|[-_/:])", m_id) or re.search(r"(?:^|[-_/:])gpt-4(?:\.\d+)?(?:$|[-_/:])", m_id):
+    if GPT5_REGEX.search(m_id) or GPT4_REGEX.search(m_id):
         return 5
 
     # Priorité 4 : Modèles 70B+, MoE lourds (>=35B cumulés) et codeurs spécialisés
@@ -192,11 +203,7 @@ def parse_openrouter_model(raw: dict[str, Any]) -> Optional[Model]:
     # Détection des modèles de raisonnement (reasoning / thinking models)
     reasoning_obj = raw.get("reasoning")
     has_reasoning_field = reasoning_obj is not None and reasoning_obj is not False
-    reasoning_keywords = ("o1", "o3", "o4", "r1", "qwq", "thinking", "reasoning", "reasoner")
-    is_reasoning_id = any(
-        re.search(rf"(?:^|[-_/:])({re.escape(kw)})(?:$|[-_/:])", model_id_lower)
-        for kw in reasoning_keywords
-    )
+    is_reasoning_id = bool(REASONING_ID_REGEX.search(model_id_lower))
     supports_reasoning = has_reasoning_field or is_reasoning_id or "reasoning" in supported_params
 
     complexity_score = estimate_complexity_score(model_id, cost_in)
