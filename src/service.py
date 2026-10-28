@@ -10,6 +10,7 @@ import contextlib
 import json
 import threading
 from dataclasses import asdict, dataclass, field, replace
+from itertools import chain, repeat
 from pathlib import Path
 from typing import Any, Iterator, Optional
 
@@ -811,7 +812,7 @@ class ApplicationService:
                     else res
                     for res, target in zip(
                         report.results,
-                        list(report.execution_targets) + [None] * len(report.results),
+                        chain(report.execution_targets, repeat(None)),
                     )
                 ]
                 config_data = build_opencode_config(
@@ -899,7 +900,7 @@ class ApplicationService:
                 else res
                 for res, target in zip(
                     report.results,
-                    list(report.execution_targets) + [None] * len(report.results),
+                    chain(report.execution_targets, repeat(None)),
                 )
             ]
             config_data = build_opencode_config(
