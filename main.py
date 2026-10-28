@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
+from src.providers.access import read_provider_access
 from src.service import ApplicationService, FleetReport, load_data
 
 LOGGER = logging.getLogger(__name__)
@@ -229,7 +230,6 @@ def run(args: argparse.Namespace, base_dir: Path = BASE_DIR) -> int:
 
     if getattr(args, "status_keys", False):
         creds = service.get_providers_status()
-        from src.providers.access import read_provider_access
         cached = read_provider_access(service.access_path)
         print("\n🔑 État des fournisseurs et clés API détectés :\n")
         print(f"{'Fournisseur':<12} {'Disponible':<12} {'Source':<15} {'Modèles vérifiés':<18} {'Clé masquée'}")
