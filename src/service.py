@@ -184,6 +184,13 @@ def _model_payload(model: Model) -> dict[str, Any]:
     }
 
 
+def _prepare_export_result(res: SelectionResult, target: Optional[ExecutionTarget]) -> SelectionResult:
+    if res.model is not None and target is not None:
+        res_model: Model = res.model
+        return replace(res, model=replace(res_model, id=target.formatted_model_id))
+    return res
+
+
 def _budget_payload(report: AgentBudgetReport) -> dict[str, Any]:
     return {
         "model_id": report.model_id,
@@ -464,11 +471,12 @@ class ApplicationService:
         adjusted_results: list[SelectionResult] = []
 
         for res in results:
-            if res.model:
-                target = _route(res.model)
+            if res.model is not None:
+                res_model: Model = res.model
+                target = _route(res_model)
                 execution_targets.append(target)
                 # Si le modèle est dérouté sur Ollama local, ajuster le coût à 0.0 pour le budget
-                effective_model = res.model
+                effective_model = res_model
                 if target.is_local:
                     effective_model = Model(
                         id=target.formatted_model_id,
@@ -476,11 +484,11 @@ class ApplicationService:
                         tier="free_tier",
                         cost_input_per_m=0.0,
                         cost_output_per_m=0.0,
-                        context_window=res.model.context_window,
-                        supports_tools=res.model.supports_tools,
-                        complexity_score=res.model.complexity_score,
-                        supports_vision=res.model.supports_vision,
-                        supports_reasoning=res.model.supports_reasoning,
+                        context_window=res_model.context_window,
+                        supports_tools=res_model.supports_tools,
+                        complexity_score=res_model.complexity_score,
+                        supports_vision=res_model.supports_vision,
+                        supports_reasoning=res_model.supports_reasoning,
                     )
                 adjusted_results.append(
                     SelectionResult(
@@ -498,8 +506,8 @@ class ApplicationService:
         # Chaîne de repli hybride par agent (limites de débit / quotas) :
         # Passe 1 : canaux distincts en priorité ; Passe 2 : modèles distincts sur même canal si besoin.
         fallback_chains: dict[str, list[str]] = {}
-        for res, target in zip(results, execution_targets):
-            if res.model is None or target is None:
+        for res, exec_tgt in zip(results, execution_targets):
+            if res.model is None or exec_tgt is None:
                 continue
             candidate_targets: list[tuple[str, str]] = []
             for candidate in res.candidates[1:]:
@@ -513,8 +521,8 @@ class ApplicationService:
                     continue
                 candidate_targets.append((cand_target.formatted_model_id, cand_target.channel_provider))
             fallback_chains[res.agent_name] = build_hybrid_fallback_chain(
-                primary_formatted_id=target.formatted_model_id,
-                primary_channel=target.channel_provider,
+                primary_formatted_id=exec_tgt.formatted_model_id,
+                primary_channel=exec_tgt.channel_provider,
                 candidate_targets=candidate_targets,
                 max_length=3,
             )
@@ -805,9 +813,7 @@ class ApplicationService:
                 target_path = self.resolve_export_path(path)
                 # L'identifiant exporté est celui du canal retenu (ex: mistral/..., google/...)
                 export_results = [
-                    replace(res, model=replace(res.model, id=target.formatted_model_id))
-                    if res.model is not None and target is not None
-                    else res
+                    _prepare_export_result(res, target)
                     for res, target in zip(
                         report.results,
                         list(report.execution_targets) + [None] * len(report.results),
@@ -893,9 +899,7 @@ class ApplicationService:
             )
             target_path = self.resolve_export_path(path)
             export_results = [
-                replace(res, model=replace(res.model, id=target.formatted_model_id))
-                if res.model is not None and target is not None
-                else res
+                _prepare_export_result(res, target)
                 for res, target in zip(
                     report.results,
                     list(report.execution_targets) + [None] * len(report.results),
