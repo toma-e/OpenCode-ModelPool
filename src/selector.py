@@ -20,6 +20,29 @@ TIER1_PROVIDERS: frozenset[str] = frozenset({
     "qwen",
 })
 
+# Expresssions régulières pré-compilées pour la détection rapide des modèles non-LLM
+_RE_AUDIO_VOICE: re.Pattern[str] = re.compile(
+    r"(?:^|[-_/:])(?:suno|udio|audio|voice|tts|xtts)(?:$|[-_/:])"
+)
+_RE_CHIRP_SPEECH: re.Pattern[str] = re.compile(
+    r"(?:^|[-_/:])(?:chirp|speech(?:t\d*)?)(?:$|[-_/:0-9])"
+)
+_RE_EMBED_RERANK: re.Pattern[str] = re.compile(
+    r"(?:^|[-_/:])(?:embed|embedding|embeddings|bge|gte|e5|rerank|reranker|aqa|voyage|voyageai)(?:$|[-_/:])"
+)
+_RE_IMAGE_GEN_MODELS: re.Pattern[str] = re.compile(
+    r"(?:^|[-_/:])(?:flux|sora|veo|runway)(?:$|[-_/:0-9])"
+)
+_RE_IMAGE_GEN_PATTERNS: re.Pattern[str] = re.compile(
+    r"[-_/:]image(?:$|[-_/:0-9])"
+)
+_RE_MODERATION: re.Pattern[str] = re.compile(
+    r"(?:^|[-_/:])moderation(?:$|[-_/:])"
+)
+_RE_ROBOTICS: re.Pattern[str] = re.compile(
+    r"(?:^|[-_/:])(?:openvla|octo|rt-[12]|pi0)(?:$|[-_/:])"
+)
+
 
 def _required(data: dict[str, Any], field: str, context: str) -> Any:
     if field not in data:
@@ -261,13 +284,13 @@ def is_non_llm_model(
     # Audio / Musique / Parole / Transcription
     if any(k in m_id for k in ("lyria", "musiclm", "whisper", "transcription", "seamless")):
         return True
-    if re.search(r"(?:^|[-_/:])(?:suno|udio|audio|voice|tts|xtts)(?:$|[-_/:])", m_id):
+    if _RE_AUDIO_VOICE.search(m_id):
         return True
-    if re.search(r"(?:^|[-_/:])(?:chirp|speech(?:t\d*)?)(?:$|[-_/:0-9])", m_id):
+    if _RE_CHIRP_SPEECH.search(m_id):
         return True
 
     # Embeddings & Reranking
-    if re.search(r"(?:^|[-_/:])(?:embed|embedding|embeddings|bge|gte|e5|rerank|reranker|aqa|voyage|voyageai)(?:$|[-_/:])", m_id):
+    if _RE_EMBED_RERANK.search(m_id):
         return True
     if "minilm" in m_id or "nomic-embed" in m_id or "mistral-embed" in m_id:
         return True
@@ -275,17 +298,17 @@ def is_non_llm_model(
     # Génération d'images / Vidéo
     if any(k in m_id for k in ("imagen", "dall-e", "dalle", "midjourney", "stable-diffusion", "sdxl", "cogvideo", "hunyuan-video")):
         return True
-    if re.search(r"(?:^|[-_/:])(?:flux|sora|veo|runway)(?:$|[-_/:0-9])", m_id):
+    if _RE_IMAGE_GEN_MODELS.search(m_id):
         return True
-    if re.search(r"[-_/:]image(?:$|[-_/:0-9])", m_id) and not ("image-to-text" in m_id or "image2text" in m_id):
+    if _RE_IMAGE_GEN_PATTERNS.search(m_id) and not ("image-to-text" in m_id or "image2text" in m_id):
         return True
 
     # Modération pure
-    if re.search(r"(?:^|[-_/:])moderation(?:$|[-_/:])", m_id):
+    if _RE_MODERATION.search(m_id):
         return True
 
     # Robotique / Embodied AI
-    if re.search(r"(?:^|[-_/:])(?:openvla|octo|rt-[12]|pi0)(?:$|[-_/:])", m_id):
+    if _RE_ROBOTICS.search(m_id):
         return True
 
     return False
