@@ -8,6 +8,7 @@ from src.providers.detector import ProviderCredentials
 from src.providers.router import (
     DEFAULT_PROVIDER_PRIORITY,
     ExecutionTarget,
+    match_direct_model_id,
     normalize_model_basename,
     resolve_model_execution_target,
 )
@@ -148,6 +149,201 @@ class TestRouter(unittest.TestCase):
         self.assertEqual(target_direct.effective_cost_output_per_m, 0.79)
         self.assertFalse(target_direct.is_heuristic_match)
         self.assertEqual(target_direct.verification_status, "verified")
+
+    def test_match_direct_model_id_edge_cases(self) -> None:
+        """Vérifie match_direct_model_id pour listes vides, correspondances exactes, colons et normalisation."""
+        self.assertIsNone(match_direct_model_id("mistralai/mistral-large-2411", []))
+        self.assertIsNone(match_direct_model_id("mistralai/mistral-large-2411", set()))
+
+        # Correspondance exacte insensible à la casse
+        available = ["mistral-large-latest", "codestral-latest"]
+        self.assertEqual(
+            match_direct_model_id("mistralai/mistral-large-latest", available),
+            "mistral-large-latest",
+        )
+
+        # Correspondance avec élimination du suffixe deux-points (:free, etc.)
+        available_google = ["gemini-2.0-flash-exp"]
+        self.assertEqual(
+            match_direct_model_id("google/gemini-2.0-flash-exp:free", available_google),
+            "gemini-2.0-flash-exp",
+        )
+
+        # Correspondance canonique si l'ID exact n'est pas présent
+        available_qwen = ["qwen2.5-coder-7b-instruct"]
+        self.assertEqual(
+            match_direct_model_id("qwen/qwen-2.5-coder-7b-instruct", available_qwen),
+            "qwen2.5-coder-7b-instruct",
+        )
+
+        # Modèle complètement absent
+        self.assertIsNone(match_direct_model_id("anthropic/claude-3-5-sonnet-20241022", available))
+
+    def test_resolve_model_execution_target_exclusions(self) -> None:
+        """Vérifie la gestion des exclusions par canal (provider:key) et par cible spécifique."""
+        creds = {
+            "mistralai": ProviderCredentials("mistralai", True, "env", "sk-mis***"),
+            "openrouter": ProviderCredentials("openrouter", True, "env", "sk-or***"),
+        }
+
+        # Exclusion par provider:key
+        t_prov_excl = resolve_model_execution_target(
+            reference_model=self.ref_mistral,
+            provider_priority=["mistralai", "openrouter"],
+            credentials=creds,
+            excluded_targets={"provider:mistralai"},
+        )
+        self.assertEqual(t_prov_excl.channel_provider, "openrouter")
+
+        # Exclusion par ID formaté direct ("mistral/mistral-large-2411")
+        t_target_excl = resolve_model_execution_target(
+            reference_model=self.ref_mistral,
+            provider_priority=["mistralai", "openrouter"],
+            credentials=creds,
+            excluded_targets={"mistral/mistral-large-2411"},
+        )
+        self.assertEqual(t_target_excl.channel_provider, "openrouter")
+
+        # Exclusion de l'unique modèle Ollama
+        creds_ollama = {"ollama": ProviderCredentials("ollama", True, "ollama")}
+        t_ollama_excl = resolve_model_execution_target(
+            reference_model=self.ref_qwen,
+            provider_priority=["ollama"],
+            credentials=creds_ollama,
+            ollama_models=[self.ollama_model],
+            excluded_targets={"ollama/qwen2.5-coder:7b"},
+        )
+        self.assertEqual(t_ollama_excl.channel_provider, "qwen")  # Default fallback provider
+
+    def test_resolve_model_execution_target_direct_pricing_sources(self) -> None:
+        """Vérifie la résolution des sources de prix directes (reference_model_catalog, free_tier, unknown)."""
+        creds = {
+            "mistralai": ProviderCredentials("mistralai", True, "env", "sk-mis***"),
+            "google": ProviderCredentials("google", True, "env", "sk-goog***"),
+        }
+
+        # 1. reference_model_catalog (modèle payant non répertorié dans KNOWN_MODEL_PRICING)
+        ref_custom_mistral = Model(
+            id="mistralai/custom-mistral-model", provider="mistralai", tier="pay_as_you_go",
+            cost_input_per_m=1.5, cost_output_per_m=4.5, context_window=32768,
+            supports_tools=True, complexity_score=3,
+        )
+        t_custom = resolve_model_execution_target(
+            reference_model=ref_custom_mistral,
+            provider_priority=["mistralai"],
+            credentials=creds,
+            direct_access={"mistralai": {"custom-mistral-model"}},
+        )
+        self.assertEqual(t_custom.pricing_source, "reference_model_catalog")
+        self.assertEqual(t_custom.effective_cost_input_per_m, 1.5)
+        self.assertEqual(t_custom.effective_cost_output_per_m, 4.5)
+
+        # 2. free_tier (modèle tier free_tier sans coût)
+        ref_free_gemini = Model(
+            id="google/gemini-2.0-flash-exp:free", provider="google", tier="free_tier",
+            cost_input_per_m=0.0, cost_output_per_m=0.0, context_window=1000000,
+            supports_tools=True, complexity_score=4,
+        )
+        t_free = resolve_model_execution_target(
+            reference_model=ref_free_gemini,
+            provider_priority=["google"],
+            credentials=creds,
+            direct_access={"google": {"gemini-2.0-flash-exp"}},
+        )
+        self.assertEqual(t_free.pricing_source, "free_tier")
+        self.assertEqual(t_free.effective_cost_input_per_m, 0.0)
+
+        # 3. free_tier (modèle tier pay_as_you_go mais avec coûts 0.0 car is_free est True)
+        ref_zero_payg = Model(
+            id="google/experimental-model", provider="google", tier="pay_as_you_go",
+            cost_input_per_m=0.0, cost_output_per_m=0.0, context_window=32768,
+            supports_tools=True, complexity_score=3,
+        )
+        t_zero = resolve_model_execution_target(
+            reference_model=ref_zero_payg,
+            provider_priority=["google"],
+            credentials=creds,
+            direct_access={"google": {"experimental-model"}},
+        )
+        self.assertEqual(t_zero.pricing_source, "free_tier")
+
+    def test_resolve_model_execution_target_direct_access_miss_fallthrough(self) -> None:
+        """Vérifie qu'un échec de correspondance dans direct_access fait passer au fournisseur suivant."""
+        creds = {
+            "mistralai": ProviderCredentials("mistralai", True, "env", "sk-mis***"),
+            "openrouter": ProviderCredentials("openrouter", True, "env", "sk-or***"),
+        }
+        # direct_access contient uniquement 'mistral-small', alors que le modèle demandé est 'mistral-large-2411'
+        direct_access = {"mistralai": {"mistral-small"}}
+
+        target = resolve_model_execution_target(
+            reference_model=self.ref_mistral,
+            provider_priority=["mistralai", "openrouter"],
+            credentials=creds,
+            direct_access=direct_access,
+        )
+        self.assertEqual(target.channel_provider, "openrouter")
+        self.assertEqual(target.formatted_model_id, "openrouter/mistralai/mistral-large-2411")
+
+    def test_resolve_model_execution_target_provider_aliases_and_case(self) -> None:
+        """Vérifie la prise en compte des alias de fournisseurs (mistral, gemini) et la tolérance aux majuscules."""
+        creds = {
+            "mistralai": ProviderCredentials("mistralai", True, "env", "sk-mis***"),
+            "google": ProviderCredentials("google", True, "env", "sk-goog***"),
+        }
+        priority = ["MISTRAL", "GEMINI"]
+
+        target = resolve_model_execution_target(
+            reference_model=self.ref_mistral,
+            provider_priority=priority,
+            credentials=creds,
+        )
+        self.assertEqual(target.channel_provider, "mistralai")
+
+    def test_resolve_model_execution_target_openrouter_prefix_and_unverified(self) -> None:
+        """Vérifie la mise en forme du préfixe openrouter/ et le statut unverified sans clé OpenRouter."""
+        ref_or_model = Model(
+            id="openrouter/anthropic/claude-3-5-sonnet", provider="anthropic", tier="flagship",
+            cost_input_per_m=3.0, cost_output_per_m=15.0, context_window=200000,
+            supports_tools=True, complexity_score=5,
+        )
+        # Clé OpenRouter non disponible
+        creds: dict[str, ProviderCredentials] = {}
+
+        target = resolve_model_execution_target(
+            reference_model=ref_or_model,
+            provider_priority=["openrouter"],
+            credentials=creds,
+        )
+        self.assertEqual(target.channel_provider, "openrouter")
+        self.assertEqual(target.formatted_model_id, "openrouter/anthropic/claude-3-5-sonnet")
+        self.assertEqual(target.verification_status, "unverified")
+
+    def test_resolve_model_execution_target_fallback_defaults(self) -> None:
+        """Vérifie le repli par défaut si la liste des priorités est vide ou si aucun canal ne correspond."""
+        target_empty = resolve_model_execution_target(
+            reference_model=self.ref_mistral,
+            provider_priority=[],
+            credentials={},
+        )
+        self.assertEqual(target_empty.channel_provider, "mistralai")
+        self.assertEqual(target_empty.formatted_model_id, "openrouter/mistralai/mistral-large-2411")
+        self.assertTrue(target_empty.is_heuristic_match)
+        self.assertEqual(target_empty.description_label, "Standard")
+
+        # Modèle de référence avec un ID non préfixé
+        ref_simple = Model(
+            id="some-custom-model", provider="", tier="pay_as_you_go",
+            cost_input_per_m=1.0, cost_output_per_m=1.0, context_window=8000,
+            supports_tools=False, complexity_score=2,
+        )
+        target_simple = resolve_model_execution_target(
+            reference_model=ref_simple,
+            provider_priority=[],
+            credentials={},
+        )
+        self.assertEqual(target_simple.channel_provider, "openrouter")
+        self.assertEqual(target_simple.formatted_model_id, "openrouter/some-custom-model")
 
 
 if __name__ == "__main__":
