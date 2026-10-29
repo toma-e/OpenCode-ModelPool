@@ -159,14 +159,6 @@ python3 main.py --sync
 python3 -m src.fetcher
 ```
 
-### Intégration Rapide de Benchmarks Gemini Deep Research
-Pour intégrer de nouveaux tarifs ou modèles sourcés via Deep Research de manière interactive :
-```bash
-python3 import-deep-research.py
-# Ou directement en ligne de commande :
-python3 main.py --import-models chemin/vers/resultats.json
-```
-
 ### Interface Web Locale
 Pour consulter les affectations dans le navigateur (écoute uniquement sur `127.0.0.1`) :
 ```bash
@@ -235,20 +227,6 @@ push et pull request.
 
 ---
 
-## 🤝 Collaboration Multi-Agents & Écosystème Google AI Pro
+## 🤝 Guide de Développement & Onboarding
 
-Ce projet est conçu pour être développé et maintenu par plusieurs agents de code en parallèle :
-- **Cursor / Windsurf :** pilotés via [`.cursorrules`](.cursorrules)
-- **Claude Code (Anthropic) :** piloté via [`CLAUDE.md`](CLAUDE.md)
-- **GitHub Copilot / OpenAI Codex :** piloté via [`.github/copilot-instructions.md`](.github/copilot-instructions.md)
-- **Mistral AI / Codestral :** piloté via [`MISTRAL.md`](MISTRAL.md)
-- **OpenCode, Antigravity, Aider & autres :** pilotés via [`AGENTS.md`](AGENTS.md)
-- **Jules (Google Labs) :** agent de codage autonome en cloud VM piloté via [`.jules/instructions.md`](.jules/instructions.md) et validé automatiquement par CI/CD ([`.github/workflows/jules-validation.yml`](.github/workflows/jules-validation.yml)).
-
-### 🚀 Délégation Avancée Google AI Pro
-Pour enrichir ses capacités d'intelligence de marché sans alourdir le runtime Python standard :
-- **Gemini Deep Research :** benchmarks tarifaires multi-fournisseurs et surveillance des quotas ([`docs/google_ai_pro/deep_research/`](docs/google_ai_pro/deep_research/)).
-- **NotebookLM :** mémoire architecturale continue sans hallucination et radar de modèles ([`docs/google_ai_pro/notebooklm/`](docs/google_ai_pro/notebooklm/)).
-- **Jules (Google Labs) :** automatisation de la relecture de PR et résolution de bogues ([`docs/google_ai_pro/jules/`](docs/google_ai_pro/jules/)).
-
-Consultez [AGENTS.md](AGENTS.md) pour la documentation complète d'onboarding, les invariants et l'architecture générale, ainsi que le dossier [`docs/google_ai_pro/`](docs/google_ai_pro/).
+Consultez [AGENTS.md](AGENTS.md) et [`.cursorrules`](.cursorrules) pour la documentation complète d'onboarding, les invariants d'ingénierie et l'architecture générale.

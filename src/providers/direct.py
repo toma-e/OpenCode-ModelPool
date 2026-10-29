@@ -28,6 +28,7 @@ KNOWN_MODEL_PRICING: Dict[str, tuple[float, float]] = {
     "ministral-3b-latest": (0.04, 0.04),
     "open-mistral-nemo": (0.15, 0.15),
     "open-codestral-mamba": (0.15, 0.15),
+    "pixtral-12b-2409": (0.15, 0.15),
     # Groq (prix inférence ultra-rapide)
     "llama-3.3-70b-versatile": (0.59, 0.79),
     "llama-3.1-8b-instant": (0.05, 0.08),
@@ -35,14 +36,17 @@ KNOWN_MODEL_PRICING: Dict[str, tuple[float, float]] = {
     "llama3-8b-8192": (0.05, 0.08),
     "mixtral-8x7b-32768": (0.24, 0.24),
     "gemma2-9b-it": (0.20, 0.20),
-    "deepseek-r1-distill-llama-70b": (0.75, 0.99),
+    "deepseek-r1-distill-llama-70b": (0.59, 0.79),
     # Google AI Studio / Gemini
     "gemini-2.5-pro": (1.25, 5.0),
     "gemini-2.5-flash": (0.075, 0.30),
     "gemini-2.5-flash-lite": (0.0375, 0.15),
+    "gemini-2.0-flash": (0.10, 0.40),
+    "gemini-3-flash-preview": (0.50, 1.00),
     "gemini-1.5-pro": (1.25, 5.0),
     "gemini-1.5-flash": (0.075, 0.30),
     # Anthropic
+    "claude-3-7-sonnet-20250219": (3.0, 15.0),
     "claude-3-5-sonnet-latest": (3.0, 15.0),
     "claude-3-5-sonnet-20241022": (3.0, 15.0),
     "claude-3-5-haiku-latest": (0.80, 4.0),
@@ -51,6 +55,7 @@ KNOWN_MODEL_PRICING: Dict[str, tuple[float, float]] = {
     "claude-3-opus-20240229": (15.0, 75.0),
     # Cerebras
     "llama3.1-8b": (0.10, 0.10),
+    "llama-3.3-70b": (0.60, 0.60),
     "llama3.1-70b": (0.60, 0.60),
     "llama3.3-70b": (0.60, 0.60),
 }
@@ -177,11 +182,12 @@ def fetch_google_models(api_key: Optional[str] = None) -> List[Model]:
     base_url = "https://generativelanguage.googleapis.com/v1beta/models"
     items: List[dict[str, Any]] = []
     page_token: Optional[str] = None
+    headers = {"x-goog-api-key": key, "Accept": "application/json"}
     for _ in range(20):  # garde-fou contre une pagination infinie
-        url = f"{base_url}?pageSize=1000&key={key}"
+        url = f"{base_url}?pageSize=1000"
         if page_token:
             url += f"&pageToken={page_token}"
-        data = _http_get_json(url, {"Accept": "application/json"})
+        data = _http_get_json(url, headers)
         if not data or not isinstance(data.get("models"), list):
             break
         items.extend(item for item in data["models"] if isinstance(item, dict))

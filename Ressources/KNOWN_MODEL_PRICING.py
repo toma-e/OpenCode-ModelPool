@@ -1,30 +1,38 @@
-KNOWN_MODEL_PRICING = {
-    # Google AI Studio
-    "gemini-2.0-flash": (0.10, 0.40),
-    "gemini-2.5-flash": (0.30, 2.50),
-    "gemini-2.5-pro": (1.25, 10.00),
-    "gemini-3-flash-preview": (0.50, 1.00),
-    
-    # Mistral AI
-    "mistral-large-latest": (0.68, 2.09),
-    "mistral-small-latest": (0.15, 0.60),
-    "codestral-latest": (0.30, 0.90),
-    "ministral-8b-latest": (0.15, 0.15),
-    "ministral-3b-latest": (0.10, 0.10),
-    "pixtral-12b-2409": (0.15, 0.15),
-    
-    # Groq Cloud
-    "llama-3.3-70b-versatile": (0.59, 0.79),
-    "llama-3.1-8b-instant": (0.05, 0.08),
-    "mixtral-8x7b-32768": (0.24, 0.24),
-    "deepseek-r1-distill-llama-70b": (0.59, 0.79),
-    
-    # Anthropic
-    "claude-3-5-sonnet-20241022": (3.00, 15.00),
-    "claude-3-5-haiku-20241022": (0.80, 4.00),
-    "claude-3-7-sonnet-20250219": (3.00, 15.00),
-    
-    # Cerebras
-    "llama-3.3-70b": (0.60, 0.60),
-    "llama3.1-8b": (0.10, 0.10),
-}
+"""Table canonique des tarifs de référence pour les fournisseurs directs.
+
+Générée à partir de src.providers.direct.KNOWN_MODEL_PRICING.
+"""
+
+KNOWN_MODEL_PRICING = {'mistral-large-latest': (2.0, 6.0),
+ 'mistral-small-latest': (0.2, 0.6),
+ 'codestral-latest': (0.3, 0.9),
+ 'ministral-8b-latest': (0.1, 0.1),
+ 'ministral-3b-latest': (0.04, 0.04),
+ 'open-mistral-nemo': (0.15, 0.15),
+ 'open-codestral-mamba': (0.15, 0.15),
+ 'pixtral-12b-2409': (0.15, 0.15),
+ 'llama-3.3-70b-versatile': (0.59, 0.79),
+ 'llama-3.1-8b-instant': (0.05, 0.08),
+ 'llama3-70b-8192': (0.59, 0.79),
+ 'llama3-8b-8192': (0.05, 0.08),
+ 'mixtral-8x7b-32768': (0.24, 0.24),
+ 'gemma2-9b-it': (0.2, 0.2),
+ 'deepseek-r1-distill-llama-70b': (0.59, 0.79),
+ 'gemini-2.5-pro': (1.25, 5.0),
+ 'gemini-2.5-flash': (0.075, 0.3),
+ 'gemini-2.5-flash-lite': (0.0375, 0.15),
+ 'gemini-2.0-flash': (0.1, 0.4),
+ 'gemini-3-flash-preview': (0.5, 1.0),
+ 'gemini-1.5-pro': (1.25, 5.0),
+ 'gemini-1.5-flash': (0.075, 0.3),
+ 'claude-3-7-sonnet-20250219': (3.0, 15.0),
+ 'claude-3-5-sonnet-latest': (3.0, 15.0),
+ 'claude-3-5-sonnet-20241022': (3.0, 15.0),
+ 'claude-3-5-haiku-latest': (0.8, 4.0),
+ 'claude-3-5-haiku-20241022': (0.8, 4.0),
+ 'claude-3-opus-latest': (15.0, 75.0),
+ 'claude-3-opus-20240229': (15.0, 75.0),
+ 'llama3.1-8b': (0.1, 0.1),
+ 'llama-3.3-70b': (0.6, 0.6),
+ 'llama3.1-70b': (0.6, 0.6),
+ 'llama3.3-70b': (0.6, 0.6)}

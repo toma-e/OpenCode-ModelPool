@@ -68,12 +68,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Interroge les APIs directes (Google, Mistral, Groq...) pour vérifier les modèles réellement accessibles avec vos clés.",
     )
     parser.add_argument(
-        "--import-models",
-        type=Path,
-        metavar="JSON_FILE",
-        help="Valide et intègre un fichier JSON de modèles (ex: résultat de Gemini Deep Research) dans le catalogue.",
-    )
-    parser.add_argument(
         "--provider-priority",
         type=str,
         default=None,
@@ -267,19 +261,6 @@ def run(args: argparse.Namespace, base_dir: Path = BASE_DIR) -> int:
         print(f"✅ {refreshed.message}")
         if refreshed.report:
             render_results(refreshed.report)
-        return 0
-
-    if getattr(args, "import_models", None):
-        import_path = Path(args.import_models).expanduser()
-        print(f"📥 Intégration des modèles depuis {import_path}...")
-        res = service.import_models_from_json(import_path, allow_fallback=allow_fallback, filter_by_keys=filter_by_keys)
-        if not res.ok:
-            LOGGER.error("Échec de l'intégration : %s", res.message)
-            print(f"❌ {res.message}", file=sys.stderr)
-            return 1
-        print(f"✅ {res.message}")
-        if res.report:
-            render_results(res.report)
         return 0
 
     if getattr(args, "rollback", None):

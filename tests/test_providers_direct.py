@@ -82,6 +82,11 @@ class TestDirectProviders(unittest.TestCase):
         self.assertEqual(models[1].id, "google/gemini-2.5-pro")
         self.assertEqual(models[0].provider, "google")
 
+        # Vérifier que l'URL ne contient pas la clé et que l'en-tête x-goog-api-key est présent
+        req = mock_urlopen.call_args[0][0]
+        self.assertNotIn("key=", req.full_url)
+        self.assertEqual(req.headers.get("X-goog-api-key"), "fake-google-key")
+
     @patch("src.providers.direct.urllib.request.urlopen")
     def test_fetch_anthropic_models(self, mock_urlopen: MagicMock) -> None:
         mock_resp = MagicMock()

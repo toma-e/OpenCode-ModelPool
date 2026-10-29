@@ -117,8 +117,7 @@ Si le projet doit continuer d'évoluer, les tâches prioritaires suivantes sont 
 1. ✅ **Gestion multi-sources (Complété) :** Agrégation d'Ollama local et des 5 fournisseurs directs (Google, Mistral, Groq, Cerebras, Anthropic) avec routage automatique et priorité des canaux.
 2. **Automatisation de la veille de modèles :** Cron GitHub Actions (ou tâche planifiée) pour mettre à jour `data/models.json` chaque semaine depuis OpenRouter.
 3. **Fiabilisation du catalogue & exclusion des modèles non-LLM :** Filtrage automatique strict des modèles audio/musique (Lyria, etc.), TTS, transcription, embeddings purs et robotique pour empêcher toute attribution non pertinente aux agents de code.
-4. ✅ **Intégration & délégation outillée Google AI Pro (Complété) :** Formalisation des protocoles et points de contact spécifiques pour déléguer les benchmarks de pricing à Gemini Deep Research, la veille documentaire à NotebookLM et la validation CI/CD à Jules (voir section 8).
-5. **Pénalité de fiabilité free-tier :** Pondération ou option de désactivation des modèles `:free` pour les agents critiques.
+4. **Pénalité de fiabilité free-tier :** Pondération ou option de désactivation des modèles `:free` pour les agents critiques.
 
 ---
 
@@ -126,34 +125,3 @@ Si le projet doit continuer d'évoluer, les tâches prioritaires suivantes sont 
 
 > **Ne proposez jamais de commit sans avoir créé ou mis à jour les tests unitaires correspondants dans `tests/` et sans avoir vérifié que `python3 -m unittest discover tests` s'exécute avec succès.**
 
----
-
-## 8. Intégration & Délégation Google AI Pro 🚀
-
-Le projet formalise ses protocoles et points de contact avec l'écosystème d'outils avancés **Google AI Pro** sous [`docs/google_ai_pro/`](docs/google_ai_pro/) afin d'enrichir ses capacités d'intelligence sans alourdir le runtime Python :
-
-### 1. Gemini Deep Research (`docs/google_ai_pro/deep_research/`)
-- **Rôle** : Exploration autonome du marché des LLMs, benchmarks de tarification multi-fournisseurs ($/1M tokens) et surveillance des quotas/rate-limits.
-- **Points de contact** :
-  - [`prompts/pricing_benchmark.md`](docs/google_ai_pro/deep_research/prompts/pricing_benchmark.md) : Benchmark tarifaire multi-fournisseurs (LLMs code/texte uniquement, exclusion des modèles audio/multimédia purs).
-  - [`prompts/provider_updates.md`](docs/google_ai_pro/deep_research/prompts/provider_updates.md) : Veille des versions d'API, endpoints et dépréciations.
-  - [`prompts/token_monitoring.md`](docs/google_ai_pro/deep_research/prompts/token_monitoring.md) : Surveillance des quotas free-tier (RPM/TPM/RPD) et calibrage des alertes `src/budget.py`.
-  - [`schemas/benchmark_output.schema.json`](docs/google_ai_pro/deep_research/schemas/benchmark_output.schema.json) : Schéma de validation JSON conforme au contrat `src/selector.py:Model`.
-  - [`workflows/ingestion_procedure.md`](docs/google_ai_pro/deep_research/workflows/ingestion_procedure.md) : Procédure pas-à-pas de validation et fusion atomique dans `data/models.json`.
-
-### 2. NotebookLM (`docs/google_ai_pro/notebooklm/`)
-- **Rôle** : Mémoire architecturale continue sans hallucination (grounding exclusif sur le dépôt), analyse d'impact des évolutions et radar des nouvelles parutions.
-- **Points de contact** :
-  - [`source_ingestion_guide.md`](docs/google_ai_pro/notebooklm/source_ingestion_guide.md) : Guide d'ingestion et découpage en faisceaux documentaires (limite 500k mots).
-  - [`sources/curated_sources.json`](docs/google_ai_pro/notebooklm/sources/curated_sources.json) : Répertoire des sources internes et flux officiels des fournisseurs.
-  - [`prompts/architecture_grounding.md`](docs/google_ai_pro/notebooklm/prompts/architecture_grounding.md) : Requêtes d'analyse d'invariants et d'impact architectural.
-  - [`prompts/model_release_eval.md`](docs/google_ai_pro/notebooklm/prompts/model_release_eval.md) : Grille d'évaluation des nouveaux modèles pour les agents `build`, `plan`, `explore`, `general`.
-  - [`prompts/audio_overview_brief.md`](docs/google_ai_pro/notebooklm/prompts/audio_overview_brief.md) : Canevas de podcast technique 2 voix (Audio Overview).
-
-### 3. Jules - Google Labs Coding Agent (`docs/google_ai_pro/jules/` & `.jules/`)
-- **Rôle** : Agent de codage autonome opérant dans des VMs cloud GitHub pour la relecture de PR, la reproduction de bogues et l'implémentation de correctifs auto-validés.
-- **Points de contact** :
-  - [`.jules/instructions.md`](.jules/instructions.md) : Fichier ancrage à la racine pour prise en compte immédiate par Jules.
-  - [`.github/workflows/jules-validation.yml`](.github/workflows/jules-validation.yml) : Workflow CI/CD déclenché sur les PRs ou commentaires étiquetés `jules`.
-  - [`prompts/pr_review_prompt.md`](docs/google_ai_pro/jules/prompts/pr_review_prompt.md) : Grille d'évaluation automatisée de PR.
-  - [`prompts/bugfix_workflow.md`](docs/google_ai_pro/jules/prompts/bugfix_workflow.md) : Protocole TDD autonome de reproduction et résolution de bogues.
