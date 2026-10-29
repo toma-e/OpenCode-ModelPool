@@ -148,6 +148,190 @@
       color: var(--ok);
       border-color: #1f5e42;
     }
+    .tabs-nav {
+      display: flex;
+      gap: 0.5rem;
+      border-bottom: 2px solid var(--line);
+      margin-bottom: 1.25rem;
+    }
+    .tab-btn {
+      background: transparent;
+      border: none;
+      border-bottom: 3px solid transparent;
+      border-radius: 0;
+      padding: 0.65rem 1.25rem;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .tab-btn:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.03);
+    }
+    .tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    .tab-badge {
+      background: #23405f;
+      color: var(--text);
+      font-size: 0.75rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 1rem;
+      font-weight: normal;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    /* Styles pour la grille de modèles */
+    .models-toolbar {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 0.6rem;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .models-search-row {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .models-search-input {
+      flex: 1 1 250px;
+      background: #131b26;
+      border: 1px solid var(--line);
+      color: var(--text);
+      padding: 0.5rem 0.75rem;
+      border-radius: 0.4rem;
+      font-size: 0.95rem;
+    }
+    .models-filters-row {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      align-items: center;
+      font-size: 0.85rem;
+    }
+    .filter-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      background: #131b26;
+      border: 1px solid var(--line);
+      padding: 0.3rem 0.6rem;
+      border-radius: 0.3rem;
+      cursor: pointer;
+      user-select: none;
+    }
+    .filter-chip input {
+      margin: 0;
+      cursor: pointer;
+    }
+    .models-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+    }
+    .model-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 0.6rem;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+    }
+    .model-card:hover {
+      border-color: #3f5573;
+    }
+    .model-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .model-id {
+      font-family: monospace;
+      font-weight: 700;
+      font-size: 0.92rem;
+      word-break: break-all;
+      color: var(--text);
+    }
+    .model-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem;
+      margin: 0.4rem 0;
+    }
+    .model-badge {
+      font-size: 0.72rem;
+      padding: 0.12rem 0.45rem;
+      border-radius: 0.25rem;
+      background: #131b26;
+      border: 1px solid var(--line);
+      color: var(--muted);
+    }
+    .model-badge.free {
+      background: #143528;
+      color: var(--ok);
+      border-color: #1f5e42;
+    }
+    .model-badge.ready {
+      background: #19324d;
+      color: var(--accent);
+      border-color: #28517c;
+    }
+    .model-badge.cooldown {
+      background: #3a1c22;
+      color: var(--bad);
+      border-color: #7a3e28;
+    }
+    .model-details {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin: 0.5rem 0 0.8rem;
+      line-height: 1.4;
+    }
+    .model-actions {
+      border-top: 1px solid var(--line);
+      padding-top: 0.6rem;
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .pagination-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin: 1rem 0;
+      padding: 0.75rem;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 0.4rem;
+    }
+    .pagination-controls {
+      display: flex;
+      gap: 0.35rem;
+      align-items: center;
+    }
+
   </style>
 </head>
 <body>
@@ -169,28 +353,135 @@
   </header>
   <div id="banner" role="status"></div>
   <main>
-    <section id="diff_section" class="card" style="display:none;margin-bottom:1rem;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
-        <h2 style="margin:0;">Prévisualisation des modifications OpenCode (Diff unifié)</h2>
-        <button id="close_diff_btn" class="btn-sm" type="button">Fermer</button>
-      </div>
-      <div id="diff_status" style="margin-bottom:0.5rem;font-size:0.85rem;"></div>
-      <pre id="diff_content" style="background:#0d1117;padding:0.75rem;border-radius:0.4rem;overflow-x:auto;font-family:monospace;font-size:0.82rem;white-space:pre-wrap;border:1px solid var(--line);max-height:400px;overflow-y:auto;"></pre>
-    </section>
-    <section id="providers_bar" style="margin-bottom:0.75rem;display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;background:var(--panel);padding:0.6rem 1rem;border-radius:0.4rem;border:1px solid var(--line);font-size:0.85rem;"></section>
-    <section id="priority_section" class="priority-panel">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <div>
-          <strong style="font-size:0.95rem;">Ordre de priorité d'exécution des canaux / clés API</strong>
-          <span class="muted" style="font-size:0.82rem;margin-left:0.5rem;">(Le premier fournisseur compatible et disponible prend en charge le modèle)</span>
+    <nav class="tabs-nav">
+      <button type="button" id="tab_btn_agents" class="tab-btn active">
+        <span>Attribution des Agents</span>
+        <span id="tab_badge_agents" class="tab-badge">4</span>
+      </button>
+      <button type="button" id="tab_btn_models" class="tab-btn">
+        <span>Catalogue de Modèles</span>
+        <span id="tab_badge_models" class="tab-badge">...</span>
+      </button>
+    </nav>
+
+    <!-- Onglet 1 : Gestion des Agents -->
+    <div id="tab_content_agents" class="tab-content active">
+      <section id="diff_section" class="card" style="display:none;margin-bottom:1rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+          <h2 style="margin:0;">Prévisualisation des modifications OpenCode (Diff unifié)</h2>
+          <button id="close_diff_btn" class="btn-sm" type="button">Fermer</button>
         </div>
-        <button id="save_priority_btn" class="btn-sm" type="button">Sauvegarder la priorité</button>
+        <div id="diff_status" style="margin-bottom:0.5rem;font-size:0.85rem;"></div>
+        <pre id="diff_content" style="background:#0d1117;padding:0.75rem;border-radius:0.4rem;overflow-x:auto;font-family:monospace;font-size:0.82rem;white-space:pre-wrap;border:1px solid var(--line);max-height:400px;overflow-y:auto;"></pre>
+      </section>
+      <section id="providers_bar" style="margin-bottom:0.75rem;display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;background:var(--panel);padding:0.6rem 1rem;border-radius:0.4rem;border:1px solid var(--line);font-size:0.85rem;"></section>
+      <section id="priority_section" class="priority-panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <strong style="font-size:0.95rem;">Ordre de priorité d'exécution des canaux / clés API</strong>
+            <span class="muted" style="font-size:0.82rem;margin-left:0.5rem;">(Le premier fournisseur compatible et disponible prend en charge le modèle)</span>
+          </div>
+          <button id="save_priority_btn" class="btn-sm" type="button">Sauvegarder la priorité</button>
+        </div>
+        <div id="priority_list" class="priority-list"></div>
+      </section>
+      <section id="cooldowns_section" class="card" style="display:none;border-color:#7a3e28;background:#261a18;margin-bottom:1rem;"></section>
+      <section id="summary" class="summary"></section>
+      <section id="assignments"></section>
+    </div>
+
+    <!-- Onglet 2 : Catalogue de Modèles -->
+    <div id="tab_content_models" class="tab-content">
+      <section class="models-toolbar">
+        <div class="models-search-row">
+          <input type="text" id="model_search" class="models-search-input" placeholder="Rechercher par ID ou fournisseur (ex: claude, gemini, qwen, mistral)...">
+          <div style="display:flex;gap:0.5rem;align-items:center;">
+            <label for="model_sort" style="white-space:nowrap;">Trier par :</label>
+            <select id="model_sort">
+              <option value="cost_asc">Coût total croissant</option>
+              <option value="cost_desc">Coût total décroissant</option>
+              <option value="complexity_desc">Complexité décroissante</option>
+              <option value="context_desc">Taille de contexte max</option>
+              <option value="id_asc">Identifiant (A-Z)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="models-filters-row">
+          <div style="display:flex;gap:0.4rem;align-items:center;">
+            <label for="filter_provider" style="white-space:nowrap;">Fournisseur :</label>
+            <select id="filter_provider">
+              <option value="all">Tous les fournisseurs</option>
+            </select>
+          </div>
+
+          <div style="display:flex;gap:0.4rem;align-items:center;">
+            <label for="filter_tier" style="white-space:nowrap;">Tarif :</label>
+            <select id="filter_tier">
+              <option value="all">Tous</option>
+              <option value="free">Gratuits uniquement (:free / free_tier)</option>
+              <option value="paid">Payants uniquement</option>
+            </select>
+          </div>
+
+          <div style="display:flex;gap:0.4rem;align-items:center;">
+            <label for="filter_complexity" style="white-space:nowrap;">Complexité min :</label>
+            <select id="filter_complexity">
+              <option value="all">Toutes (1 à 5)</option>
+              <option value="1">≥ 1</option>
+              <option value="2">≥ 2</option>
+              <option value="3">≥ 3</option>
+              <option value="4">≥ 4</option>
+              <option value="5">5 uniquement</option>
+            </select>
+          </div>
+
+          <label class="filter-chip">
+            <input type="checkbox" id="filter_ready">
+            <span>Prêts / Clé active</span>
+          </label>
+          <label class="filter-chip">
+            <input type="checkbox" id="filter_tools">
+            <span>Tools (Function calling)</span>
+          </label>
+          <label class="filter-chip">
+            <input type="checkbox" id="filter_vision">
+            <span>Vision</span>
+          </label>
+          <label class="filter-chip">
+            <input type="checkbox" id="filter_reasoning">
+            <span>Raisonnement</span>
+          </label>
+        </div>
+      </section>
+
+      <div class="pagination-bar">
+        <div>
+          <span id="models_count_label" style="font-weight:600;">Chargement des modèles...</span>
+        </div>
+        <div class="pagination-controls">
+          <button type="button" id="page_prev" class="btn-sm" disabled>&larr; Précédent</button>
+          <span id="page_info" style="font-size:0.85rem;padding:0 0.4rem;">Page 1 / 1</span>
+          <button type="button" id="page_next" class="btn-sm" disabled>Suivant &rarr;</button>
+          <select id="page_size" style="margin-left:0.5rem;">
+            <option value="24">24 / page</option>
+            <option value="48" selected>48 / page</option>
+            <option value="96">96 / page</option>
+          </select>
+        </div>
       </div>
-      <div id="priority_list" class="priority-list"></div>
-    </section>
-    <section id="cooldowns_section" class="card" style="display:none;border-color:#7a3e28;background:#261a18;margin-bottom:1rem;"></section>
-    <section id="summary" class="summary"></section>
-    <section id="assignments"></section>
+
+      <div id="models_grid" class="models-grid"></div>
+
+      <div class="pagination-bar" id="pagination_bar_bottom">
+        <div></div>
+        <div class="pagination-controls">
+          <button type="button" id="page_prev_bottom" class="btn-sm" disabled>&larr; Précédent</button>
+          <span id="page_info_bottom" style="font-size:0.85rem;padding:0 0.4rem;">Page 1 / 1</span>
+          <button type="button" id="page_next_bottom" class="btn-sm" disabled>Suivant &rarr;</button>
+        </div>
+      </div>
+    </div>
   </main>
   <script>
     const banner = document.getElementById("banner");
@@ -375,6 +666,14 @@
       const cat = report.catalogue || {};
       const budget = report.budget || {};
       const monthlyCostLabel = budget.is_total_estimable === false ? "Non estimable" : money(budget.total_monthly_cost);
+
+      if (Array.isArray(report.assignments)) {
+        currentAgentNames = report.assignments.map((a) => a.name);
+        tabBadgeAgents.textContent = String(report.assignments.length);
+      }
+      if (cat.total_models !== undefined) {
+        tabBadgeModels.textContent = String(cat.total_models);
+      }
       summary.innerHTML = [
         ["Catalogue", (cat.total_models ?? 0) + " modèles"],
         ["Mise à jour", cat.last_updated || "inconnue"],
@@ -622,9 +921,331 @@
       }
     }
 
+    // Gestion des Onglets
+    const tabBtnAgents = document.getElementById("tab_btn_agents");
+    const tabBtnModels = document.getElementById("tab_btn_models");
+    const tabContentAgents = document.getElementById("tab_content_agents");
+    const tabContentModels = document.getElementById("tab_content_models");
+    const tabBadgeAgents = document.getElementById("tab_badge_agents");
+    const tabBadgeModels = document.getElementById("tab_badge_models");
+
+    function switchTab(tabName) {
+      if (tabName === "models") {
+        tabBtnAgents.classList.remove("active");
+        tabBtnModels.classList.add("active");
+        tabContentAgents.classList.remove("active");
+        tabContentModels.classList.add("active");
+        window.location.hash = "models";
+        if (catalogModels.length === 0) {
+          loadModelsCatalog();
+        }
+      } else {
+        tabBtnModels.classList.remove("active");
+        tabBtnAgents.classList.add("active");
+        tabContentModels.classList.remove("active");
+        tabContentAgents.classList.add("active");
+        window.location.hash = "agents";
+      }
+    }
+
+    tabBtnAgents.addEventListener("click", () => switchTab("agents"));
+    tabBtnModels.addEventListener("click", () => switchTab("models"));
+
+    if (window.location.hash === "#models") {
+      switchTab("models");
+    }
+
+    // Gestion du Catalogue de Modèles
+    let catalogModels = [];
+    let currentAgentNames = [];
+    let filteredModels = [];
+    let currentPage = 1;
+    let pageSize = 48;
+
+    const modelSearchInput = document.getElementById("model_search");
+    const modelSortSelect = document.getElementById("model_sort");
+    const filterProviderSelect = document.getElementById("filter_provider");
+    const filterTierSelect = document.getElementById("filter_tier");
+    const filterComplexitySelect = document.getElementById("filter_complexity");
+    const filterReadyInput = document.getElementById("filter_ready");
+    const filterToolsInput = document.getElementById("filter_tools");
+    const filterVisionInput = document.getElementById("filter_vision");
+    const filterReasoningInput = document.getElementById("filter_reasoning");
+
+    const modelsGrid = document.getElementById("models_grid");
+    const modelsCountLabel = document.getElementById("models_count_label");
+    const pagePrevBtn = document.getElementById("page_prev");
+    const pageNextBtn = document.getElementById("page_next");
+    const pageInfoSpan = document.getElementById("page_info");
+    const pagePrevBottomBtn = document.getElementById("page_prev_bottom");
+    const pageNextBottomBtn = document.getElementById("page_next_bottom");
+    const pageInfoBottomSpan = document.getElementById("page_info_bottom");
+    const pageSizeSelect = document.getElementById("page_size");
+
+    async function loadModelsCatalog() {
+      modelsCountLabel.textContent = "Chargement du catalogue...";
+      try {
+        const res = await fetch("/api/models");
+        const data = await res.json();
+        if (data.ok && Array.isArray(data.models)) {
+          catalogModels = data.models;
+          tabBadgeModels.textContent = String(catalogModels.length);
+          populateProviderFilter(catalogModels);
+          applyFiltersAndSort();
+        } else {
+          modelsCountLabel.textContent = "Erreur de chargement du catalogue.";
+        }
+      } catch (err) {
+        modelsCountLabel.textContent = "Impossible de joindre /api/models : " + err;
+      }
+    }
+
+    function populateProviderFilter(models) {
+      const providers = new Set();
+      models.forEach((m) => {
+        if (m.provider) providers.add(m.provider);
+      });
+      const sortedProviders = Array.from(providers).sort();
+      const currentVal = filterProviderSelect.value;
+      filterProviderSelect.innerHTML = '<option value="all">Tous les fournisseurs (' + providers.size + ')</option>' +
+        sortedProviders.map((p) => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join("");
+      if (providers.has(currentVal)) {
+        filterProviderSelect.value = currentVal;
+      }
+    }
+
+    function applyFiltersAndSort() {
+      const query = (modelSearchInput.value || "").trim().toLowerCase();
+      const selProvider = filterProviderSelect.value;
+      const selTier = filterTierSelect.value;
+      const selComp = filterComplexitySelect.value;
+      const readyOnly = filterReadyInput.checked;
+      const toolsOnly = filterToolsInput.checked;
+      const visionOnly = filterVisionInput.checked;
+      const reasoningOnly = filterReasoningInput.checked;
+      const sortKey = modelSortSelect.value;
+
+      filteredModels = catalogModels.filter((m) => {
+        if (query) {
+          const matchId = (m.id || "").toLowerCase().includes(query);
+          const matchProv = (m.provider || "").toLowerCase().includes(query);
+          if (!matchId && !matchProv) return false;
+        }
+        if (selProvider !== "all" && m.provider !== selProvider) {
+          return false;
+        }
+        if (selTier === "free" && !m.is_free && m.tier !== "free_tier") {
+          return false;
+        }
+        if (selTier === "paid" && (m.is_free || m.tier === "free_tier")) {
+          return false;
+        }
+        if (selComp !== "all") {
+          const minC = parseInt(selComp, 10);
+          if ((m.complexity_score ?? 0) < minC) return false;
+        }
+        if (readyOnly && !m.is_executable) {
+          return false;
+        }
+        if (toolsOnly && !m.supports_tools) {
+          return false;
+        }
+        if (visionOnly && !m.supports_vision) {
+          return false;
+        }
+        if (reasoningOnly && !m.supports_reasoning) {
+          return false;
+        }
+        return true;
+      });
+
+      filteredModels.sort((a, b) => {
+        if (sortKey === "cost_asc") {
+          return (a.total_cost_per_m ?? 0) - (b.total_cost_per_m ?? 0) || a.id.localeCompare(b.id);
+        }
+        if (sortKey === "cost_desc") {
+          return (b.total_cost_per_m ?? 0) - (a.total_cost_per_m ?? 0) || a.id.localeCompare(b.id);
+        }
+        if (sortKey === "complexity_desc") {
+          return (b.complexity_score ?? 0) - (a.complexity_score ?? 0) || (a.total_cost_per_m ?? 0) - (b.total_cost_per_m ?? 0);
+        }
+        if (sortKey === "context_desc") {
+          return (b.context_window ?? 0) - (a.context_window ?? 0) || a.id.localeCompare(b.id);
+        }
+        return a.id.localeCompare(b.id);
+      });
+
+      currentPage = 1;
+      renderModelsGrid();
+    }
+
+    function formatContextWindow(tokens) {
+      if (!tokens || tokens <= 0) return "—";
+      if (tokens >= 1000000) return (tokens / 1000000).toFixed(tokens % 1000000 === 0 ? 0 : 1) + "M";
+      if (tokens >= 1000) return (tokens / 1000).toFixed(0) + "k";
+      return String(tokens);
+    }
+
+    function renderModelsGrid() {
+      const total = filteredModels.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      if (currentPage > totalPages) currentPage = totalPages;
+
+      modelsCountLabel.textContent = `${total.toLocaleString("fr-FR")} modèle(s) affiché(s) sur ${catalogModels.length.toLocaleString("fr-FR")}`;
+
+      const startIndex = (currentPage - 1) * pageSize;
+      const pageItems = filteredModels.slice(startIndex, startIndex + pageSize);
+
+      const pageStr = `Page ${currentPage} / ${totalPages}`;
+      pageInfoSpan.textContent = pageStr;
+      pageInfoBottomSpan.textContent = pageStr;
+
+      pagePrevBtn.disabled = currentPage <= 1;
+      pagePrevBottomBtn.disabled = currentPage <= 1;
+      pageNextBtn.disabled = currentPage >= totalPages;
+      pageNextBottomBtn.disabled = currentPage >= totalPages;
+
+      if (pageItems.length === 0) {
+        modelsGrid.innerHTML = '<div style="grid-column: 1 / -1; padding: 2rem; text-align: center; color: var(--muted); background: var(--panel); border: 1px dashed var(--line); border-radius: 0.6rem;">Aucun modèle ne correspond aux filtres sélectionnés.</div>';
+        return;
+      }
+
+      modelsGrid.innerHTML = pageItems.map((m) => {
+        const isFree = m.is_free || m.tier === "free_tier";
+        const costStr = isFree ? "Gratuit (0.00$)" : `$${Number(m.total_cost_per_m || 0).toFixed(4)} / MTok`;
+        const inCost = isFree ? "0$" : `$${Number(m.cost_input_per_m || 0).toFixed(3)}`;
+        const outCost = isFree ? "0$" : `$${Number(m.cost_output_per_m || 0).toFixed(3)}`;
+        const target = m.execution_target || {};
+        const isReady = Boolean(m.is_executable);
+        const inCooldown = Boolean(m.in_cooldown);
+
+        let statusBadge = isReady
+          ? '<span class="model-badge ready" title="Canal disponible et prêt pour l\'exécution">✓ Prêt</span>'
+          : '<span class="model-badge" title="Canal direct non activé ou clé OpenRouter manquante">Non configuré</span>';
+        if (inCooldown) {
+          statusBadge = '<span class="model-badge cooldown" title="Modèle actuellement en quarantaine automatique">⏳ Quarantaine</span>';
+        }
+
+        const agentOptions = currentAgentNames.map((name) => `<option value="${escapeHtml(name)}">Assigner à ${escapeHtml(name)}</option>`).join("");
+
+        return `<div class="model-card">
+          <div>
+            <div class="model-header">
+              <span class="model-id" title="${escapeHtml(m.id)}">${escapeHtml(m.id)}</span>
+              ${statusBadge}
+            </div>
+            <div class="model-badges">
+              <span class="model-badge ${isFree ? 'free' : ''}">${isFree ? 'Free-Tier' : 'Pay-As-You-Go'}</span>
+              <span class="model-badge" style="color:var(--accent);">${escapeHtml(m.provider || 'inconnu')}</span>
+              <span class="model-badge">Complexité : ${escapeHtml(m.complexity_score ?? '—')}/5</span>
+              <span class="model-badge">Ctx : ${escapeHtml(formatContextWindow(m.context_window))}</span>
+              ${m.supports_tools ? '<span class="model-badge" style="color:var(--ok);">tools</span>' : ''}
+              ${m.supports_vision ? '<span class="model-badge">vision</span>' : ''}
+              ${m.supports_reasoning ? '<span class="model-badge">reasoning</span>' : ''}
+            </div>
+            <div class="model-details">
+              <div><strong>Coût :</strong> ${escapeHtml(costStr)} <span style="font-size:0.78rem;">(In: ${escapeHtml(inCost)} | Out: ${escapeHtml(outCost)})</span></div>
+              <div style="margin-top:0.25rem;"><strong>Canal résolu :</strong> ${escapeHtml(target.description_label || target.channel_provider || 'OpenRouter')}</div>
+              <div style="font-family:monospace;font-size:0.78rem;color:var(--muted);margin-top:0.2rem;">ID: ${escapeHtml(target.formatted_model_id || m.id)}</div>
+            </div>
+          </div>
+          <div class="model-actions">
+            <button type="button" class="btn-sm btn-copy-id" data-model-id="${escapeHtml(target.formatted_model_id || m.id)}" style="background:#19324d;border-color:#28517c;" title="Copier l'identifiant pour OpenCode">Copier ID</button>
+            <div style="display:flex;gap:0.3rem;align-items:center;">
+              <select class="assign-agent-select" style="max-width:140px;font-size:0.8rem;padding:0.2rem;">
+                <option value="">Imposer à...</option>
+                ${agentOptions}
+              </select>
+              <button type="button" class="btn-sm btn-assign-model" data-model-id="${escapeHtml(m.id)}" title="Imposer ce modèle à l'agent sélectionné">Fixer</button>
+            </div>
+          </div>
+        </div>`;
+      }).join("");
+
+      modelsGrid.querySelectorAll(".btn-copy-id").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = btn.getAttribute("data-model-id");
+          navigator.clipboard.writeText(id).then(() => {
+            const origText = btn.textContent;
+            btn.textContent = "Copié !";
+            btn.style.color = "var(--ok)";
+            setTimeout(() => {
+              btn.textContent = origText;
+              btn.style.color = "";
+            }, 1500);
+          }).catch(() => {
+            prompt("Identifiant OpenCode :", id);
+          });
+        });
+      });
+
+      modelsGrid.querySelectorAll(".btn-assign-model").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const modelId = btn.getAttribute("data-model-id");
+          const parentActions = btn.closest(".model-actions");
+          const select = parentActions ? parentActions.querySelector(".assign-agent-select") : null;
+          const agentName = select ? select.value : "";
+          if (!agentName) {
+            alert("Veuillez sélectionner un agent dans la liste déroulante avant d'appliquer.");
+            return;
+          }
+          assignModelToAgent(agentName, modelId);
+        });
+      });
+    }
+
+    async function assignModelToAgent(agentName, modelId) {
+      if (!confirm(`Imposer le modèle "${modelId}" à l'agent "${agentName}" ?`)) {
+        return;
+      }
+      try {
+        const response = await fetch("/api/agent/update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            agent_name: agentName,
+            updates: { force_model: modelId },
+            fallback: fallbackEnabled(),
+          }),
+        });
+        const payload = await response.json();
+        showBanner(Boolean(payload.ok), payload.message || (payload.ok ? `Modèle ${modelId} imposé à ${agentName}` : "Erreur"));
+        if (payload.report) {
+          render(payload.report);
+          switchTab("agents");
+        }
+      } catch (err) {
+        showBanner(false, "Échec de l'assignation : " + err);
+      }
+    }
+
+    [modelSearchInput, modelSortSelect, filterProviderSelect, filterTierSelect, filterComplexitySelect, filterReadyInput, filterToolsInput, filterVisionInput, filterReasoningInput].forEach((el) => {
+      if (el) {
+        el.addEventListener("input", applyFiltersAndSort);
+        el.addEventListener("change", applyFiltersAndSort);
+      }
+    });
+
+    function changePage(delta) {
+      currentPage += delta;
+      renderModelsGrid();
+      modelsGrid.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    pagePrevBtn.addEventListener("click", () => changePage(-1));
+    pagePrevBottomBtn.addEventListener("click", () => changePage(-1));
+    pageNextBtn.addEventListener("click", () => changePage(1));
+    pageNextBottomBtn.addEventListener("click", () => changePage(1));
+    pageSizeSelect.addEventListener("change", () => {
+      pageSize = parseInt(pageSizeSelect.value, 10) || 48;
+      currentPage = 1;
+      renderModelsGrid();
+    });
+
     document.getElementById("close_diff_btn").addEventListener("click", () => {
       document.getElementById("diff_section").style.display = "none";
     });
+
 
     document.getElementById("refresh_access").addEventListener("click", () => call("/api/refresh-access", "POST"));
     document.getElementById("recalculate").addEventListener("click", () => call("/api/recalculate", "POST"));
@@ -637,6 +1258,7 @@
 
     loadProvidersStatus();
     call("/api/report", "GET");
+    loadModelsCatalog();
   </script>
 </body>
 </html>

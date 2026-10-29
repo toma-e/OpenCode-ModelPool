@@ -1193,5 +1193,62 @@ class ApplicationService:
             except Exception as error:
                 return OperationResult(False, f"Impossible de lever la quarantaine : {error}")
 
+    def get_models_catalog(self) -> dict[str, Any]:
+        """Retourne la liste complète des modèles du catalogue avec leur statut de canal/disponibilité."""
+        with self._lock:
+            models, catalogue_updated_at, _agents, priority = _load_catalogue_and_agents(
+                self.models_path,
+                self.agents_path,
+            )
+            creds = detect_provider_credentials(project_dir=self.base_dir)
+            ollama_models = get_ollama_models() if creds.get("ollama") and creds["ollama"].is_available else []
+            cached_access = read_provider_access(self.access_path)
+            direct_access, _direct_errs = resolve_verified_access(
+                cached_access,
+                creds,
+                list(DIRECT_CHANNELS.keys()),
+            )
+            active_cooldowns = read_cooldowns(self.cooldown_path)
+            excluded_targets = {c.target_id for c in active_cooldowns}
+            openrouter_ok = bool(creds.get("openrouter") and creds["openrouter"].is_available)
+
+            models_payload: list[dict[str, Any]] = []
+            for model in models:
+                target = resolve_model_execution_target(
+                    reference_model=model,
+                    provider_priority=priority,
+                    credentials=creds,
+                    ollama_models=ollama_models,
+                    direct_access=direct_access,
+                    excluded_targets=excluded_targets,
+                )
+                in_cooldown = is_model_in_cooldown(
+                    model.id,
+                    target.formatted_model_id,
+                    target.channel_provider,
+                    active_cooldowns,
+                )
+                executable = self._is_executable(target, model, openrouter_ok)
+                m_dict = _model_payload(model)
+                m_dict["execution_target"] = {
+                    "channel_provider": target.channel_provider,
+                    "formatted_model_id": target.formatted_model_id,
+                    "is_local": target.is_local,
+                    "description_label": target.description_label,
+                    "cost_in": target.effective_cost_input_per_m,
+                    "cost_out": target.effective_cost_output_per_m,
+                    "access_verified": target.access_verified,
+                }
+                m_dict["is_executable"] = executable
+                m_dict["in_cooldown"] = in_cooldown
+                models_payload.append(m_dict)
+
+            return {
+                "total_models": len(models),
+                "last_updated": catalogue_updated_at,
+                "models": models_payload,
+            }
+
+
 
 

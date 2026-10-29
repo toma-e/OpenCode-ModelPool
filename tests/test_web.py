@@ -273,6 +273,26 @@ class TestWeb(unittest.TestCase):
         self.assertIn("priorité", post_data.get("message", "").lower())
         self.assertEqual(self.service.get_provider_priority(), new_order)
 
+    def test_models_catalog_get_endpoint(self) -> None:
+        """Vérifie la route GET /api/models retournant l'inventaire enrichi du catalogue."""
+        status, data = self._get("/api/models")
+        self.assertEqual(status, 200)
+        parsed = json.loads(data.decode("utf-8"))
+        self.assertTrue(parsed.get("ok"))
+        self.assertIn("models", parsed)
+        self.assertIn("total_models", parsed)
+        self.assertIsInstance(parsed["models"], list)
+        self.assertGreater(len(parsed["models"]), 0)
+
+        # Contrôle de structure d'un modèle retourné
+        first_model = parsed["models"][0]
+        self.assertIn("id", first_model)
+        self.assertIn("provider", first_model)
+        self.assertIn("complexity_score", first_model)
+        self.assertIn("supports_tools", first_model)
+        self.assertIn("is_executable", first_model)
+        self.assertIn("execution_target", first_model)
+
 
 if __name__ == "__main__":
     unittest.main()

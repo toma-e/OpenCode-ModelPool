@@ -65,7 +65,7 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
         if parsed.path in {"/", "/index.html"}:
             self._send_static("index.html", "text/html; charset=utf-8", head_only=True)
             return
-        if parsed.path == "/api/report":
+        if parsed.path in {"/api/report", "/api/models"}:
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
@@ -107,6 +107,13 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/priority":
             self._send_json(200, {"ok": True, "priority": self.service.get_provider_priority()})
+            return
+        if parsed.path == "/api/models":
+            try:
+                data = self.service.get_models_catalog()
+                self._send_json(200, {"ok": True, **data})
+            except Exception as error:
+                self._send_json(500, {"ok": False, "message": f"Erreur lors de la lecture du catalogue : {error}"})
             return
         self._send_json(404, {"ok": False, "message": "Ressource introuvable."})
 
