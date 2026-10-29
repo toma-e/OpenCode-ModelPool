@@ -39,6 +39,10 @@
     }
     button:disabled { opacity: 0.6; cursor: wait; }
     button.primary { background: #1f6feb; border-color: #1f6feb; }
+    button:focus-visible, select:focus-visible, input:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
     label { display: flex; gap: 0.4rem; align-items: center; color: var(--muted); font-size: 0.9rem; }
     #banner {
       display: none;
@@ -274,8 +278,8 @@
         return `<div class="priority-item">
           <span style="font-weight:700;color:var(--muted);">${i + 1}.</span>
           <strong>${escapeHtml(prov)}</strong>
-          <button type="button" class="btn-up" data-idx="${i}" ${upDisabled} title="Monter d'un rang">▲</button>
-          <button type="button" class="btn-down" data-idx="${i}" ${downDisabled} title="Descendre d'un rang">▼</button>
+          <button type="button" class="btn-up" data-idx="${i}" ${upDisabled} title="Monter d'un rang" aria-label="Monter ${escapeHtml(prov)} d'un rang">▲</button>
+          <button type="button" class="btn-down" data-idx="${i}" ${downDisabled} title="Descendre d'un rang" aria-label="Descendre ${escapeHtml(prov)} d'un rang">▼</button>
         </div>`;
       }).join("");
 
@@ -438,7 +442,7 @@
         const agentIdx = index;
         const failoverControls = agent.model
           ? `<div style="display:flex;align-items:center;gap:0.4rem;margin-left:auto;">
-              <select id="failover-reason-${agentIdx}" title="Motif d'erreur du modèle actuel">
+              <select id="failover-reason-${agentIdx}" title="Motif d'erreur du modèle actuel" aria-label="Motif d'erreur pour basculement de ${escapeHtml(agent.name)}">
                 <option value="rate_limit">429 Limite de débit (15m)</option>
                 <option value="quota_exceeded">Quota épuisé RPD (12h)</option>
                 <option value="insufficient_credits">402 Crédits épuisés (24h)</option>
