@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import cached_property
 import math
 import re
 from dataclasses import dataclass
@@ -148,6 +149,18 @@ class AgentRequirement:
     requires_vision: bool = False
     requires_reasoning: bool = False
     prefer_tier1: bool = True
+
+    @cached_property
+    def allowed_providers_set(self) -> Optional[frozenset[str]]:
+        if not self.allowed_providers:
+            return None
+        return frozenset(p.lower() for p in self.allowed_providers)
+
+    @cached_property
+    def excluded_providers_set(self) -> Optional[frozenset[str]]:
+        if not self.excluded_providers:
+            return None
+        return frozenset(p.lower() for p in self.excluded_providers)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any], context: str = "agent") -> AgentRequirement:
@@ -304,9 +317,10 @@ def common_constraint_violations(model: Model, agent_req: AgentRequirement) -> l
         violations.append("modèle de raisonnement requis")
     if agent_req.min_context_window is not None and model.context_window < agent_req.min_context_window:
         violations.append("fenêtre de contexte minimale")
-    if agent_req.allowed_providers and model.provider.lower() not in {item.lower() for item in agent_req.allowed_providers}:
+    provider_lower = model.provider.lower()
+    if agent_req.allowed_providers_set is not None and provider_lower not in agent_req.allowed_providers_set:
         violations.append("fournisseur non autorisé")
-    if agent_req.excluded_providers and model.provider.lower() in {item.lower() for item in agent_req.excluded_providers}:
+    if agent_req.excluded_providers_set is not None and provider_lower in agent_req.excluded_providers_set:
         violations.append("fournisseur exclu")
     if not agent_req.allow_free and model.is_free:
         violations.append("modèle gratuit interdit")
