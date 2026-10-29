@@ -9,9 +9,9 @@ from __future__ import annotations
 import contextlib
 import json
 import threading
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any, Dict, Iterator, Mapping, Optional
 
 from datetime import datetime, timezone
 
@@ -51,7 +51,6 @@ from src.fetcher import (
 from src.providers.detector import (
     ProviderCredentials,
     detect_provider_credentials,
-    get_available_provider_names,
 )
 from src.providers.ollama import get_ollama_models
 from src.providers.access import (
@@ -466,13 +465,13 @@ class ApplicationService:
 
         for res in results:
             if res.model:
-                target = _route(res.model)
-                execution_targets.append(target)
+                route_target: Optional[ExecutionTarget] = _route(res.model)
+                execution_targets.append(route_target)
                 # Si le modèle est dérouté sur Ollama local, ajuster le coût à 0.0 pour le budget
                 effective_model = res.model
-                if target.is_local:
+                if route_target and route_target.is_local:
                     effective_model = Model(
-                        id=target.formatted_model_id,
+                        id=route_target.formatted_model_id,
                         provider="ollama",
                         tier="free_tier",
                         cost_input_per_m=0.0,
@@ -499,8 +498,8 @@ class ApplicationService:
         # Chaîne de repli hybride par agent (limites de débit / quotas) :
         # Passe 1 : canaux distincts en priorité ; Passe 2 : modèles distincts sur même canal si besoin.
         fallback_chains: dict[str, list[str]] = {}
-        for res, target in zip(results, execution_targets):
-            if res.model is None or target is None:
+        for res, item_target in zip(results, execution_targets):
+            if res.model is None or item_target is None:
                 continue
             candidate_targets: list[tuple[str, str]] = []
             for candidate in res.candidates[1:]:
@@ -514,8 +513,8 @@ class ApplicationService:
                     continue
                 candidate_targets.append((cand_target.formatted_model_id, cand_target.channel_provider))
             fallback_chains[res.agent_name] = build_hybrid_fallback_chain(
-                primary_formatted_id=target.formatted_model_id,
-                primary_channel=target.channel_provider,
+                primary_formatted_id=item_target.formatted_model_id,
+                primary_channel=item_target.channel_provider,
                 candidate_targets=candidate_targets,
                 max_length=3,
             )
