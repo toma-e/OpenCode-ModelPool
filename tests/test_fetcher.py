@@ -170,6 +170,24 @@ class TestFetcher(unittest.TestCase):
         }
         self.assertIsNone(parse_openrouter_model(no_pricing_raw))
 
+    def test_parse_openrouter_model_invalid_pricing_types(self) -> None:
+        """Les prix non-numériques déclenchant ValueError ou TypeError doivent retourner None."""
+        invalid_pricing_cases = [
+            {"prompt": "not_a_number", "completion": "0.000001"},
+            {"prompt": "0.000001", "completion": "invalid_float"},
+            {"prompt": ["0.000001"], "completion": "0.000001"},
+            {"prompt": "0.000001", "completion": {"price": 0.000001}},
+            {"prompt": object(), "completion": "0.000001"},
+        ]
+        for pricing in invalid_pricing_cases:
+            raw = {
+                "id": "vendor/invalid-pricing-model",
+                "pricing": pricing,
+                "context_length": 4096,
+            }
+            with self.subTest(pricing=pricing):
+                self.assertIsNone(parse_openrouter_model(raw))
+
     def test_create_backup(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)

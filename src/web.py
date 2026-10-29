@@ -256,17 +256,25 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
             return None
         if length <= 0 or length > self.MAX_POST_BODY_BYTES:
             return None
-        raw = self.rfile.read(length)
-        try:
-            return json.loads(raw.decode("utf-8") or "{}")
-        except (UnicodeDecodeError, json.JSONDecodeError):
+
+        remaining = length
+        chunk_size = 65536
+        raw_chunks = bytearray()
+        while remaining > 0:
+            to_read = min(remaining, chunk_size)
+            chunk = self.rfile.read(to_read)
+            if not chunk:
+                break
+            raw_chunks.extend(chunk)
+            remaining -= len(chunk)
+
+        if len(raw_chunks) != length:
             return None
 
-    def _read_fallback_from_body(self, default: bool) -> bool:
-        body = self._read_json_body()
-        if isinstance(body, dict) and "fallback" in body and isinstance(body["fallback"], bool):
-            return body["fallback"]
-        return default
+        try:
+            return json.loads(raw_chunks.decode("utf-8") or "{}")
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return None
 
     def _sanitize_message(self, message: str) -> str:
         """Supprime les chemins absolus internes du serveur dans les messages d'erreur HTTP."""
@@ -287,7 +295,12 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
 
     def _send_static(self, filename: str, content_type: str, head_only: bool = False) -> None:
         target = (WEB_DIR / filename).resolve()
-        if not str(target).startswith(str(WEB_DIR.resolve())) or not target.is_file():
+        web_dir_resolved = WEB_DIR.resolve()
+        try:
+            is_sub = target.is_relative_to(web_dir_resolved)
+        except AttributeError:
+            is_sub = str(target).startswith(str(web_dir_resolved))
+        if not is_sub or not target.is_file():
             self._send_json(404, {"ok": False, "message": "Page introuvable."})
             return
         body = target.read_bytes()
