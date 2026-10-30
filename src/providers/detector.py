@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -44,12 +43,18 @@ class ProviderCredentials:
 
 
 def mask_key(key: Optional[str]) -> Optional[str]:
-    """Masque une clé d'API pour journalisation et diagnostic sécurisés."""
+    """Masque une clé d'API pour journalisation et diagnostic sécurisés.
+
+    Pour éviter la fuite d'information sur des clés courtes/moyennes (<= 12 car.),
+    le nombre de caractères affichés est réduit afin de masquer la majorité du secret.
+    """
     if not key or not isinstance(key, str):
         return None
     cleaned = key.strip()
     if len(cleaned) <= 8:
         return "****"
+    if len(cleaned) <= 12:
+        return f"{cleaned[:2]}...{cleaned[-2:]}"
     return f"{cleaned[:4]}...{cleaned[-4:]}"
 
 
