@@ -464,13 +464,13 @@ class ApplicationService:
 
         for res in results:
             if res.model:
-                target = _route(res.model)
-                execution_targets.append(target)
+                res_target = _route(res.model)
+                execution_targets.append(res_target)
                 # Si le modèle est dérouté sur Ollama local, ajuster le coût à 0.0 pour le budget
                 effective_model = res.model
-                if target.is_local:
+                if res_target.is_local:
                     effective_model = Model(
-                        id=target.formatted_model_id,
+                        id=res_target.formatted_model_id,
                         provider="ollama",
                         tier="free_tier",
                         cost_input_per_m=0.0,
@@ -497,8 +497,8 @@ class ApplicationService:
         # Chaîne de repli hybride par agent (limites de débit / quotas) :
         # Passe 1 : canaux distincts en priorité ; Passe 2 : modèles distincts sur même canal si besoin.
         fallback_chains: dict[str, list[str]] = {}
-        for res, target in zip(results, execution_targets):
-            if res.model is None or target is None:
+        for res, chain_target in zip(results, execution_targets):
+            if res.model is None or chain_target is None:
                 continue
             candidate_targets: list[tuple[str, str]] = []
             for candidate in res.candidates[1:]:
@@ -512,8 +512,8 @@ class ApplicationService:
                     continue
                 candidate_targets.append((cand_target.formatted_model_id, cand_target.channel_provider))
             fallback_chains[res.agent_name] = build_hybrid_fallback_chain(
-                primary_formatted_id=target.formatted_model_id,
-                primary_channel=target.channel_provider,
+                primary_formatted_id=chain_target.formatted_model_id,
+                primary_channel=chain_target.channel_provider,
                 candidate_targets=candidate_targets,
                 max_length=3,
             )
@@ -1076,13 +1076,13 @@ class ApplicationService:
                 for idx, res in enumerate(current_report.results):
                     if res.agent_name.lower() == clean_target.lower():
                         affected_agent = res.agent_name
-                        exec_target = (
+                        matched_target = (
                             current_report.execution_targets[idx]
                             if idx < len(current_report.execution_targets)
                             else None
                         )
-                        if exec_target is not None:
-                            resolved_target_id = exec_target.formatted_model_id
+                        if matched_target is not None:
+                            resolved_target_id = matched_target.formatted_model_id
                         elif res.model is not None:
                             resolved_target_id = res.model.id
                         else:
