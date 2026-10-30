@@ -1150,13 +1150,13 @@
             </div>
           </div>
           <div class="model-actions">
-            <button type="button" class="btn-sm btn-copy-id" data-model-id="${escapeHtml(target.formatted_model_id || m.id)}" style="background:#19324d;border-color:#28517c;" title="Copier l'identifiant pour OpenCode">Copier ID</button>
+            <button type="button" class="btn-sm btn-copy-id" data-model-id="${escapeHtml(target.formatted_model_id || m.id)}" style="background:#19324d;border-color:#28517c;" title="Copier l'identifiant pour OpenCode" aria-label="Copier l'identifiant ${escapeHtml(target.formatted_model_id || m.id)}">Copier ID</button>
             <div style="display:flex;gap:0.3rem;align-items:center;">
-              <select class="assign-agent-select" style="max-width:140px;font-size:0.8rem;padding:0.2rem;">
+              <select class="assign-agent-select" style="max-width:140px;font-size:0.8rem;padding:0.2rem;" aria-label="Sélectionner l'agent auquel imposer le modèle ${escapeHtml(m.id)}">
                 <option value="">Imposer à...</option>
                 ${agentOptions}
               </select>
-              <button type="button" class="btn-sm btn-assign-model" data-model-id="${escapeHtml(m.id)}" title="Imposer ce modèle à l'agent sélectionné">Fixer</button>
+              <button type="button" class="btn-sm btn-assign-model" data-model-id="${escapeHtml(m.id)}" title="Imposer ce modèle à l'agent sélectionné" aria-label="Fixer le modèle ${escapeHtml(m.id)}">Fixer</button>
             </div>
           </div>
         </div>`;
