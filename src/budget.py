@@ -174,9 +174,9 @@ def simulate_fleet_budget(
     results_by_name = {r.agent_name: r for r in results}
     targets_by_name: dict[str, Any] = {}
     if execution_targets is not None:
-        for res, target in zip(results, execution_targets):
-            if res and target:
-                targets_by_name[res.agent_name] = target
+        for res_item, target in zip(results, execution_targets):
+            if res_item and target:
+                targets_by_name[res_item.agent_name] = target
 
     agent_reports: List[AgentBudgetReport] = []
 
@@ -185,8 +185,8 @@ def simulate_fleet_budget(
     free_tier_savings = 0.0
 
     for agent in agents:
-        res = results_by_name.get(agent.name)
-        model = res.model if res else None
+        agent_res = results_by_name.get(agent.name)
+        model = agent_res.model if agent_res else None
         target = targets_by_name.get(agent.name)
 
         report = simulate_agent_budget(agent, model, execution_target=target)
