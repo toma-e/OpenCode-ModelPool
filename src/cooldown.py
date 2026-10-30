@@ -76,7 +76,21 @@ def classify_error_reason(
         return REASON_RATE_LIMIT
 
     if (status_code is not None and status_code >= 500) or any(
-        k in msg for k in ("overloaded", "service unavailable", "bad gateway", "gateway timeout", "timeout", "502", "503", "504", "connection refused")
+        k in msg for k in (
+            "overloaded",
+            "service unavailable",
+            "bad gateway",
+            "gateway timeout",
+            "timeout",
+            "idle timeout",
+            "upstream idle timeout",
+            "stream error",
+            "connection reset",
+            "502",
+            "503",
+            "504",
+            "connection refused",
+        )
     ):
         return REASON_SERVICE_UNAVAILABLE
 

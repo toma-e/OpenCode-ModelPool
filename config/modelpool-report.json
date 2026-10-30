@@ -1,16 +1,16 @@
 {
   "version": "1.0",
-  "generated_at": "2026-10-30T17:44:36.933323+00:00",
+  "generated_at": "2026-10-30T18:17:47.485758+00:00",
   "metadata": {
     "generator": "OpenCode-ModelPool",
-    "total_agents": 4,
-    "assigned_agents": 4,
+    "total_agents": 9,
+    "assigned_agents": 9,
     "unassigned_agents": 0
   },
   "budget_simulation": {
     "total_estimated_monthly_cost": 0.0,
-    "total_estimated_tokens": 4400000,
-    "estimated_free_tier_savings": 2.2,
+    "total_estimated_tokens": 9700000,
+    "estimated_free_tier_savings": 4.85,
     "has_warnings": true,
     "is_total_estimable": true,
     "reports": [
@@ -73,6 +73,81 @@
         "pricing_source": "local_free",
         "is_local": true,
         "disclaimer": "Exécution locale (0$ API, hors infrastructure et consommation matérielle)."
+      },
+      {
+        "agent": "test_runner",
+        "monthly_cost": 0.0,
+        "monthly_cost_formatted": "$0.0000",
+        "is_estimable": true,
+        "input_cost": 0.0,
+        "output_cost": 0.0,
+        "max_budget": 5.0,
+        "budget_exceeded": false,
+        "quota_warning": null,
+        "channel_provider": "ollama",
+        "pricing_source": "local_free",
+        "is_local": true,
+        "disclaimer": "Exécution locale (0$ API, hors infrastructure et consommation matérielle)."
+      },
+      {
+        "agent": "doc_writer",
+        "monthly_cost": 0.0,
+        "monthly_cost_formatted": "$0.0000",
+        "is_estimable": true,
+        "input_cost": 0.0,
+        "output_cost": 0.0,
+        "max_budget": 5.0,
+        "budget_exceeded": false,
+        "quota_warning": null,
+        "channel_provider": "ollama",
+        "pricing_source": "local_free",
+        "is_local": true,
+        "disclaimer": "Exécution locale (0$ API, hors infrastructure et consommation matérielle)."
+      },
+      {
+        "agent": "fast_researcher",
+        "monthly_cost": 0.0,
+        "monthly_cost_formatted": "$0.0000",
+        "is_estimable": true,
+        "input_cost": 0.0,
+        "output_cost": 0.0,
+        "max_budget": 2.0,
+        "budget_exceeded": false,
+        "quota_warning": null,
+        "channel_provider": "ollama",
+        "pricing_source": "local_free",
+        "is_local": true,
+        "disclaimer": "Exécution locale (0$ API, hors infrastructure et consommation matérielle)."
+      },
+      {
+        "agent": "code_reviewer",
+        "monthly_cost": 0.0,
+        "monthly_cost_formatted": "$0.0000",
+        "is_estimable": true,
+        "input_cost": 0.0,
+        "output_cost": 0.0,
+        "max_budget": 8.0,
+        "budget_exceeded": false,
+        "quota_warning": null,
+        "channel_provider": "openrouter",
+        "pricing_source": "openrouter_catalog",
+        "is_local": false,
+        "disclaimer": "Prévision estimative non contractuelle (tarifs API hors taxes)."
+      },
+      {
+        "agent": "coder_heavy",
+        "monthly_cost": 0.0,
+        "monthly_cost_formatted": "$0.0000",
+        "is_estimable": true,
+        "input_cost": 0.0,
+        "output_cost": 0.0,
+        "max_budget": 15.0,
+        "budget_exceeded": false,
+        "quota_warning": "Risque d'atteinte des limites : volume estimé (2,000,000 tokens/mois) élevé pour un palier gratuit. Attention aux limites de débit (RPM/TPM). Quotas précis non garantis par l'API.",
+        "channel_provider": "openrouter",
+        "pricing_source": "openrouter_catalog",
+        "is_local": false,
+        "disclaimer": "Prévision estimative non contractuelle (tarifs API hors taxes)."
       }
     ]
   },
@@ -106,9 +181,9 @@
       "selection_status": "exact",
       "selection_reason": "Correspondance exacte avec les exigences.",
       "fallback_chain": [
-        "groq/openai/gpt-oss-120b",
         "openrouter/deepseek/deepseek-v3.2",
-        "openrouter/deepseek/deepseek-v3.2-exp"
+        "openrouter/deepseek/deepseek-v3.2-exp",
+        "openrouter/openai/gpt-oss-120b"
       ]
     },
     "plan": {
@@ -140,9 +215,9 @@
       "selection_status": "exact",
       "selection_reason": "Correspondance exacte avec les exigences.",
       "fallback_chain": [
-        "groq/openai/gpt-oss-120b",
         "openrouter/deepseek/deepseek-v3.2",
-        "openrouter/deepseek/deepseek-v3.2-exp"
+        "openrouter/deepseek/deepseek-v3.2-exp",
+        "openrouter/openai/gpt-oss-120b"
       ]
     },
     "explore": {
@@ -174,9 +249,9 @@
       "selection_status": "exact",
       "selection_reason": "Correspondance exacte avec les exigences.",
       "fallback_chain": [
-        "google/gemma-4-26b-a4b-it",
-        "openrouter/google/gemma-4-31b-it:free",
-        "groq/openai/gpt-oss-20b"
+        "openrouter/google/gemma-4-26b-a4b-it:free",
+        "ollama/qwen2.5-coder:7b",
+        "openrouter/google/gemma-4-31b-it:free"
       ]
     },
     "general": {
@@ -208,9 +283,179 @@
       "selection_status": "exact",
       "selection_reason": "Correspondance exacte avec les exigences.",
       "fallback_chain": [
-        "google/gemma-4-26b-a4b-it",
+        "openrouter/google/gemma-4-26b-a4b-it:free",
         "openrouter/google/gemma-4-31b-it:free",
-        "groq/openai/gpt-oss-20b"
+        "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
+      ]
+    },
+    "test_runner": {
+      "name": "test_runner",
+      "description": "Sous-agent automatisant la génération de tests unitaires, l'exécution et le diagnostic d'échecs.",
+      "enabled": true,
+      "requires_tools": true,
+      "min_context_window": 32000,
+      "allowed_providers": null,
+      "max_monthly_budget": 5.0,
+      "sort_strategy": "lowest_cost",
+      "allow_free": true,
+      "requires_vision": false,
+      "requires_reasoning": false,
+      "prefer_tier1": true,
+      "estimated_monthly_cost": 0.0,
+      "model": {
+        "id": "ollama/qwen3.5:9b",
+        "provider": "ollama",
+        "tier": "free_tier",
+        "context_window": 262144,
+        "supports_tools": true,
+        "cost_input_per_m": 0.0,
+        "cost_output_per_m": 0.0,
+        "total_cost_per_m": 0.0,
+        "supports_vision": true,
+        "supports_reasoning": true
+      },
+      "selection_status": "exact",
+      "selection_reason": "Correspondance exacte avec les exigences.",
+      "fallback_chain": [
+        "openrouter/google/gemma-4-26b-a4b-it:free",
+        "openrouter/google/gemma-4-31b-it:free",
+        "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
+      ]
+    },
+    "doc_writer": {
+      "name": "doc_writer",
+      "description": "Sous-agent spécialisé dans la rédaction de docstrings, tutoriels et spécifications claires.",
+      "enabled": true,
+      "requires_tools": false,
+      "min_context_window": 32000,
+      "allowed_providers": null,
+      "max_monthly_budget": 5.0,
+      "sort_strategy": "lowest_cost",
+      "allow_free": true,
+      "requires_vision": false,
+      "requires_reasoning": false,
+      "prefer_tier1": true,
+      "estimated_monthly_cost": 0.0,
+      "model": {
+        "id": "ollama/qwen3.5:9b",
+        "provider": "ollama",
+        "tier": "free_tier",
+        "context_window": 262144,
+        "supports_tools": true,
+        "cost_input_per_m": 0.0,
+        "cost_output_per_m": 0.0,
+        "total_cost_per_m": 0.0,
+        "supports_vision": true,
+        "supports_reasoning": true
+      },
+      "selection_status": "exact",
+      "selection_reason": "Correspondance exacte avec les exigences.",
+      "fallback_chain": [
+        "openrouter/google/gemma-4-26b-a4b-it:free",
+        "ollama/gemma3:270m",
+        "openrouter/google/gemma-4-31b-it:free"
+      ]
+    },
+    "fast_researcher": {
+      "name": "fast_researcher",
+      "description": "Sous-agent ultra-rapide pour exploration de base de code et recherche d'informations en priorité gratuit.",
+      "enabled": true,
+      "requires_tools": true,
+      "min_context_window": 32000,
+      "allowed_providers": null,
+      "max_monthly_budget": 2.0,
+      "sort_strategy": "lowest_cost",
+      "allow_free": true,
+      "requires_vision": false,
+      "requires_reasoning": false,
+      "prefer_tier1": false,
+      "estimated_monthly_cost": 0.0,
+      "model": {
+        "id": "ollama/qwen3.5:9b",
+        "provider": "ollama",
+        "tier": "free_tier",
+        "context_window": 262144,
+        "supports_tools": true,
+        "cost_input_per_m": 0.0,
+        "cost_output_per_m": 0.0,
+        "total_cost_per_m": 0.0,
+        "supports_vision": true,
+        "supports_reasoning": true
+      },
+      "selection_status": "exact",
+      "selection_reason": "Correspondance exacte avec les exigences (fiabilité: prefer_free).",
+      "fallback_chain": [
+        "openrouter/thinkingmachines/inkling-small:free",
+        "openrouter/thinkingmachines/inkling:free",
+        "openrouter/nvidia/nemotron-3.5-lightning:free"
+      ]
+    },
+    "code_reviewer": {
+      "name": "code_reviewer",
+      "description": "Sous-agent d'analyse de diffs et audit de qualité/sécurité en lecture seule avec large fenêtre de contexte.",
+      "enabled": true,
+      "requires_tools": false,
+      "min_context_window": 64000,
+      "allowed_providers": null,
+      "max_monthly_budget": 8.0,
+      "sort_strategy": "lowest_cost",
+      "allow_free": true,
+      "requires_vision": false,
+      "requires_reasoning": true,
+      "prefer_tier1": true,
+      "estimated_monthly_cost": 0.0,
+      "model": {
+        "id": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+        "provider": "nvidia",
+        "tier": "free_tier",
+        "context_window": 1000000,
+        "supports_tools": true,
+        "cost_input_per_m": 0.0,
+        "cost_output_per_m": 0.0,
+        "total_cost_per_m": 0.0,
+        "supports_vision": false,
+        "supports_reasoning": true
+      },
+      "selection_status": "exact",
+      "selection_reason": "Correspondance exacte avec les exigences.",
+      "fallback_chain": [
+        "openrouter/deepseek/deepseek-v3.2",
+        "openrouter/deepseek/deepseek-v3.2-exp",
+        "openrouter/openai/gpt-oss-120b"
+      ]
+    },
+    "coder_heavy": {
+      "name": "coder_heavy",
+      "description": "Agent de développement intensif : algorithmes complexes, refactoring lourd et raisonnement poussé.",
+      "enabled": true,
+      "requires_tools": true,
+      "min_context_window": 64000,
+      "allowed_providers": null,
+      "max_monthly_budget": 15.0,
+      "sort_strategy": "lowest_cost",
+      "allow_free": true,
+      "requires_vision": false,
+      "requires_reasoning": true,
+      "prefer_tier1": true,
+      "estimated_monthly_cost": 0.0,
+      "model": {
+        "id": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+        "provider": "nvidia",
+        "tier": "free_tier",
+        "context_window": 1000000,
+        "supports_tools": true,
+        "cost_input_per_m": 0.0,
+        "cost_output_per_m": 0.0,
+        "total_cost_per_m": 0.0,
+        "supports_vision": false,
+        "supports_reasoning": true
+      },
+      "selection_status": "exact",
+      "selection_reason": "Correspondance exacte avec les exigences.",
+      "fallback_chain": [
+        "openrouter/deepseek/deepseek-v3.2",
+        "openrouter/deepseek/deepseek-v3.2-exp",
+        "openrouter/openai/gpt-oss-120b"
       ]
     }
   }

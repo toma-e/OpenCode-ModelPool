@@ -356,6 +356,7 @@ def build_opencode_config(
     agents: Sequence[AgentRequirement],
     base_config: Optional[Dict[str, Any]] = None,
     default_provider_prefix: str = "openrouter",
+    enable_fallback_plugin: bool = True,
 ) -> Dict[str, Any]:
     """Construit le dictionnaire de configuration strictement conforme au schéma OpenCode.
 
@@ -367,6 +368,7 @@ def build_opencode_config(
         agents: Exigences initiales des agents.
         base_config: Configuration OpenCode de base optionnelle à enrichir (ex: permissions, providers).
         default_provider_prefix: Préfixe du fournisseur OpenCode pour router les modèles (défaut 'openrouter').
+        enable_fallback_plugin: Active le plugin de repli automatique sur erreur (@azumag/opencode-rate-limit-fallback).
 
     Returns:
         Dictionnaire conforme au schéma officiel OpenCode.
@@ -433,6 +435,22 @@ def build_opencode_config(
     existing_native_agents = dict(final_config.get("agent", {})) if isinstance(final_config.get("agent"), dict) else {}
     existing_native_agents.update(opencode_agent_configs)
     final_config["agent"] = existing_native_agents
+
+    # Enregistrement automatique du plugin de repli d'OpenCode (Rate-limit / Quota / 504 Timeout)
+    fallback_plugin_pkg = "@azumag/opencode-rate-limit-fallback"
+    if enable_fallback_plugin:
+        if "plugins" in final_config and isinstance(final_config["plugins"], list):
+            if fallback_plugin_pkg not in final_config["plugins"] and not any(
+                isinstance(p, str) and p.startswith(fallback_plugin_pkg) for p in final_config["plugins"]
+            ):
+                final_config["plugins"].append(fallback_plugin_pkg)
+        elif "plugin" in final_config and isinstance(final_config["plugin"], list):
+            if fallback_plugin_pkg not in final_config["plugin"] and not any(
+                isinstance(p, str) and p.startswith(fallback_plugin_pkg) for p in final_config["plugin"]
+            ):
+                final_config["plugin"].append(fallback_plugin_pkg)
+        else:
+            final_config["plugin"] = [fallback_plugin_pkg]
 
     return final_config
 
@@ -538,6 +556,17 @@ def build_rate_limit_fallback_config(
         "agentFallbackModels": agent_fallbacks,
         "fallbackMode": "cycle",
         "cooldownMs": cooldown_ms,
+        "retryPolicy": {
+            "maxRetries": 2,
+            "strategy": "exponential",
+            "baseDelayMs": 500,
+            "maxDelayMs": 5000,
+            "jitterEnabled": True,
+            "jitterFactor": 0.1,
+            "timeoutMs": 30000,
+        },
+        "enableSubagentFallback": True,
+        "maxSubagentDepth": 10,
         "patterns": [
             "rate limit",
             "rate_limit",
@@ -552,6 +581,13 @@ def build_rate_limit_fallback_config(
             "overloaded",
             "service unavailable",
             "503",
+            "504",
+            "upstream idle timeout",
+            "idle timeout",
+            "gateway timeout",
+            "timeout",
+            "stream error",
+            "connection reset",
         ],
     }
 
@@ -614,7 +650,7 @@ function classifyErrorReason(text) {{
   if (lower.includes("429") || lower.includes("rate limit") || lower.includes("rate_limit") || lower.includes("too many requests")) {{
     return "rate_limit";
   }}
-  if (lower.includes("503") || lower.includes("502") || lower.includes("504") || lower.includes("overloaded") || lower.includes("service unavailable")) {{
+  if (lower.includes("504") || lower.includes("upstream idle timeout") || lower.includes("idle timeout") || lower.includes("gateway timeout") || lower.includes("stream error") || lower.includes("503") || lower.includes("502") || lower.includes("overloaded") || lower.includes("service unavailable") || lower.includes("timeout")) {{
     return "service_unavailable";
   }}
   return null;
@@ -741,28 +777,32 @@ export const ModelPoolFallbackPlugin = async ({{ client }}) => {{
   return {{
     event: async ({{ event }}) => {{
       if (!event || !event.type) return;
+      const props = event.properties || event.data || event || {{}};
+      const sessionID = props.sessionID || props.id || props.session?.id || event.sessionID || event.session?.id;
+      const agent = props.agent || event.agent;
+      const providerID = props.providerID || event.providerID;
+      const modelID = props.modelID || event.modelID;
+
       if (event.type === "session.error") {{
-        const props = event.properties || {{}};
-        const sessionID = props.sessionID || props.id;
-        const errObj = props.error || {{}};
-        const errText = JSON.stringify(errObj);
+        const errObj = props.error || event.error || {{}};
+        const errText = typeof errObj === "string" ? errObj : JSON.stringify(errObj);
         await handleRateLimitOrError(
           sessionID,
           errText,
-          props.agent,
-          props.providerID,
-          props.modelID
+          agent,
+          providerID,
+          modelID
         );
       }} else if (event.type === "session.status") {{
-        const props = event.properties || {{}};
-        const status = props.status || {{}};
-        if (status.type === "retry" && status.message) {{
+        const status = props.status || event.status || {{}};
+        const msg = status.message || (typeof status === "string" ? status : "");
+        if (status.type === "retry" || status.type === "error" || msg) {{
           await handleRateLimitOrError(
-            props.sessionID,
-            status.message,
-            props.agent,
-            props.providerID,
-            props.modelID
+            sessionID,
+            msg || JSON.stringify(status),
+            agent,
+            providerID,
+            modelID
           );
         }}
       }}

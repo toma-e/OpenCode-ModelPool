@@ -853,6 +853,17 @@ class ApplicationService:
                 )
                 plugin_path.write_text(plugin_js, encoding="utf-8")
 
+                # Synchronisation vers l'environnement OpenCode global (~/.config/opencode) si existant
+                try:
+                    global_opencode_dir = Path.home() / ".config" / "opencode"
+                    if global_opencode_dir.is_dir() and global_opencode_dir.resolve() != target_path.parent.resolve():
+                        write_json_atomic(global_opencode_dir / "rate-limit-fallback.json", fallback_cfg_data)
+                        global_plugins_dir = global_opencode_dir / "plugins"
+                        global_plugins_dir.mkdir(parents=True, exist_ok=True)
+                        (global_plugins_dir / "modelpool-fallback.mjs").write_text(plugin_js, encoding="utf-8")
+                except OSError:
+                    pass
+
                 exported = target_path.resolve()
             except ValueError as error:
                 return OperationResult(False, str(error))

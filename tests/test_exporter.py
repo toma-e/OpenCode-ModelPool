@@ -9,6 +9,7 @@ from src.exporter import (
     build_modelpool_report_data,
     build_modelscope_report_data,
     build_opencode_config,
+    build_rate_limit_fallback_config,
     format_opencode_model_id,
     parse_json_or_jsonc,
 )
@@ -58,6 +59,7 @@ class TestExporter(unittest.TestCase):
         config = build_opencode_config([self.assigned_result], [self.agent_req])
         self.assertEqual(config["$schema"], "https://opencode.ai/config.json")
         self.assertEqual(config["model"], "openrouter/test/model-fast")
+        self.assertEqual(config["plugin"], ["@azumag/opencode-rate-limit-fallback"])
 
         # Vérifier que les clés interdites par OpenCode sont absentes de la config OpenCode
         self.assertNotIn("metadata", config)
@@ -71,6 +73,40 @@ class TestExporter(unittest.TestCase):
         self.assertEqual(native_coder["model"], "openrouter/test/model-fast")
         self.assertEqual(native_coder["mode"], "primary")
         self.assertEqual(native_coder["description"], "Agent de code")
+
+    def test_build_opencode_config_plugin_options(self) -> None:
+        """Vérifie la personnalisation et la désactivation de l'injection du plugin de repli."""
+        # Désactivé
+        cfg_disabled = build_opencode_config(
+            [self.assigned_result], [self.agent_req], enable_fallback_plugin=False
+        )
+        self.assertNotIn("plugin", cfg_disabled)
+
+        # Base config avec 'plugins' (v2)
+        base_v2 = {"plugins": ["opencode-wakatime"]}
+        cfg_v2 = build_opencode_config(
+            [self.assigned_result], [self.agent_req], base_config=base_v2
+        )
+        self.assertEqual(cfg_v2["plugins"], ["opencode-wakatime", "@azumag/opencode-rate-limit-fallback"])
+
+    def test_build_rate_limit_fallback_config_patterns_and_policy(self) -> None:
+        """Vérifie que la configuration de secours inclut les erreurs de stream/timeout 504 et le retryPolicy."""
+        chains = {"coder_agent": ["test/model-fallback"]}
+        cfg = build_rate_limit_fallback_config([self.assigned_result], fallback_chains=chains)
+        self.assertTrue(cfg["enabled"])
+        self.assertEqual(cfg["fallbackMode"], "cycle")
+        self.assertIn("retryPolicy", cfg)
+        self.assertEqual(cfg["retryPolicy"]["maxRetries"], 2)
+        self.assertEqual(cfg["retryPolicy"]["strategy"], "exponential")
+
+        patterns = set(cfg["patterns"])
+        self.assertIn("429", patterns)
+        self.assertIn("504", patterns)
+        self.assertIn("upstream idle timeout", patterns)
+        self.assertIn("idle timeout", patterns)
+        self.assertIn("gateway timeout", patterns)
+        self.assertIn("stream error", patterns)
+        self.assertIn("timeout", patterns)
 
     def test_build_modelpool_report_data(self) -> None:
         self.assertIs(build_modelscope_report_data, build_modelpool_report_data)

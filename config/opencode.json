@@ -73,6 +73,34 @@
       "model": "ollama/qwen3.5:9b",
       "mode": "subagent",
       "description": "Sous-agent polyvalent : exécution de tâches déléguées et recherches complexes"
+    },
+    "test_runner": {
+      "model": "ollama/qwen3.5:9b",
+      "mode": "subagent",
+      "description": "Sous-agent automatisant la génération de tests unitaires, l'exécution et le diagnostic d'échecs."
+    },
+    "doc_writer": {
+      "model": "ollama/qwen3.5:9b",
+      "mode": "subagent",
+      "description": "Sous-agent spécialisé dans la rédaction de docstrings, tutoriels et spécifications claires."
+    },
+    "fast_researcher": {
+      "model": "ollama/qwen3.5:9b",
+      "mode": "subagent",
+      "description": "Sous-agent ultra-rapide pour exploration de base de code et recherche d'informations en priorité gratuit."
+    },
+    "code_reviewer": {
+      "model": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+      "mode": "subagent",
+      "description": "Sous-agent d'analyse de diffs et audit de qualité/sécurité en lecture seule avec large fenêtre de contexte."
+    },
+    "coder_heavy": {
+      "model": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+      "mode": "primary",
+      "description": "Agent de développement intensif : algorithmes complexes, refactoring lourd et raisonnement poussé."
     }
-  }
+  },
+  "plugin": [
+    "@azumag/opencode-rate-limit-fallback"
+  ]
 }

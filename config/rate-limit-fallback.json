@@ -2,10 +2,6 @@
   "enabled": true,
   "fallbackModels": [
     {
-      "providerID": "groq",
-      "modelID": "openai/gpt-oss-120b"
-    },
-    {
       "providerID": "openrouter",
       "modelID": "deepseek/deepseek-v3.2"
     },
@@ -14,38 +10,142 @@
       "modelID": "deepseek/deepseek-v3.2-exp"
     },
     {
-      "providerID": "google",
-      "modelID": "gemma-4-26b-a4b-it"
+      "providerID": "openrouter",
+      "modelID": "openai/gpt-oss-120b"
+    },
+    {
+      "providerID": "openrouter",
+      "modelID": "google/gemma-4-26b-a4b-it:free"
+    },
+    {
+      "providerID": "ollama",
+      "modelID": "qwen2.5-coder:7b"
     },
     {
       "providerID": "openrouter",
       "modelID": "google/gemma-4-31b-it:free"
     },
     {
-      "providerID": "groq",
-      "modelID": "openai/gpt-oss-20b"
+      "providerID": "openrouter",
+      "modelID": "nvidia/nemotron-3-ultra-550b-a55b:free"
+    },
+    {
+      "providerID": "ollama",
+      "modelID": "gemma3:270m"
+    },
+    {
+      "providerID": "openrouter",
+      "modelID": "thinkingmachines/inkling-small:free"
+    },
+    {
+      "providerID": "openrouter",
+      "modelID": "thinkingmachines/inkling:free"
+    },
+    {
+      "providerID": "openrouter",
+      "modelID": "nvidia/nemotron-3.5-lightning:free"
     }
   ],
   "agentFallbackModels": {
     "build": [
       {
-        "providerID": "groq",
-        "modelID": "openai/gpt-oss-120b"
-      },
-      {
         "providerID": "openrouter",
         "modelID": "deepseek/deepseek-v3.2"
       },
       {
         "providerID": "openrouter",
         "modelID": "deepseek/deepseek-v3.2-exp"
+      },
+      {
+        "providerID": "openrouter",
+        "modelID": "openai/gpt-oss-120b"
       }
     ],
     "plan": [
       {
-        "providerID": "groq",
-        "modelID": "openai/gpt-oss-120b"
+        "providerID": "openrouter",
+        "modelID": "deepseek/deepseek-v3.2"
       },
+      {
+        "providerID": "openrouter",
+        "modelID": "deepseek/deepseek-v3.2-exp"
+      },
+      {
+        "providerID": "openrouter",
+        "modelID": "openai/gpt-oss-120b"
+      }
+    ],
+    "explore": [
+      {
+        "providerID": "openrouter",
+        "modelID": "google/gemma-4-26b-a4b-it:free"
+      },
+      {
+        "providerID": "ollama",
+        "modelID": "qwen2.5-coder:7b"
+      },
+      {
+        "providerID": "openrouter",
+        "modelID": "google/gemma-4-31b-it:free"
+      }
+    ],
+    "general": [
+      {
+        "providerID": "openrouter",
+        "modelID": "google/gemma-4-26b-a4b-it:free"
+      },
+      {
+        "providerID": "openrouter",
+        "modelID": "google/gemma-4-31b-it:free"
+      },
+      {
+        "providerID": "openrouter",
+        "modelID": "nvidia/nemotron-3-ultra-550b-a55b:free"
+      }
+    ],
+    "test_runner": [
+      {
+        "providerID": "openrouter",
+        "modelID": "google/gemma-4-26b-a4b-it:free"
+      },
+      {
+        "providerID": "openrouter",
+        "modelID": "google/gemma-4-31b-it:free"
+      },
+      {
+        "providerID": "openrouter",
+        "modelID": "nvidia/nemotron-3-ultra-550b-a55b:free"
+      }
+    ],
+    "doc_writer": [
+      {
+        "providerID": "openrouter",
+        "modelID": "google/gemma-4-26b-a4b-it:free"
+      },
+      {
+        "providerID": "ollama",
+        "modelID": "gemma3:270m"
+      },
+      {
+        "providerID": "openrouter",
+        "modelID": "google/gemma-4-31b-it:free"
+      }
+    ],
+    "fast_researcher": [
+      {
+        "providerID": "openrouter",
+        "modelID": "thinkingmachines/inkling-small:free"
+      },
+      {
+        "providerID": "openrouter",
+        "modelID": "thinkingmachines/inkling:free"
+      },
+      {
+        "providerID": "openrouter",
+        "modelID": "nvidia/nemotron-3.5-lightning:free"
+      }
+    ],
+    "code_reviewer": [
       {
         "providerID": "openrouter",
         "modelID": "deepseek/deepseek-v3.2"
@@ -53,39 +153,40 @@
       {
         "providerID": "openrouter",
         "modelID": "deepseek/deepseek-v3.2-exp"
-      }
-    ],
-    "explore": [
-      {
-        "providerID": "google",
-        "modelID": "gemma-4-26b-a4b-it"
       },
       {
         "providerID": "openrouter",
-        "modelID": "google/gemma-4-31b-it:free"
-      },
-      {
-        "providerID": "groq",
-        "modelID": "openai/gpt-oss-20b"
+        "modelID": "openai/gpt-oss-120b"
       }
     ],
-    "general": [
+    "coder_heavy": [
       {
-        "providerID": "google",
-        "modelID": "gemma-4-26b-a4b-it"
+        "providerID": "openrouter",
+        "modelID": "deepseek/deepseek-v3.2"
       },
       {
         "providerID": "openrouter",
-        "modelID": "google/gemma-4-31b-it:free"
+        "modelID": "deepseek/deepseek-v3.2-exp"
       },
       {
-        "providerID": "groq",
-        "modelID": "openai/gpt-oss-20b"
+        "providerID": "openrouter",
+        "modelID": "openai/gpt-oss-120b"
       }
     ]
   },
   "fallbackMode": "cycle",
   "cooldownMs": 900000,
+  "retryPolicy": {
+    "maxRetries": 2,
+    "strategy": "exponential",
+    "baseDelayMs": 500,
+    "maxDelayMs": 5000,
+    "jitterEnabled": true,
+    "jitterFactor": 0.1,
+    "timeoutMs": 30000
+  },
+  "enableSubagentFallback": true,
+  "maxSubagentDepth": 10,
   "patterns": [
     "rate limit",
     "rate_limit",
@@ -99,6 +200,13 @@
     "402",
     "overloaded",
     "service unavailable",
-    "503"
+    "503",
+    "504",
+    "upstream idle timeout",
+    "idle timeout",
+    "gateway timeout",
+    "timeout",
+    "stream error",
+    "connection reset"
   ]
 }

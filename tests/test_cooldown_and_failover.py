@@ -59,6 +59,8 @@ class TestCooldownClassificationAndPersistence(unittest.TestCase):
             REASON_INSUFFICIENT_CREDITS,
         )
         self.assertEqual(classify_error_reason(503, "Model is currently overloaded"), REASON_SERVICE_UNAVAILABLE)
+        self.assertEqual(classify_error_reason(504, "Upstream idle timeout exceeded"), REASON_SERVICE_UNAVAILABLE)
+        self.assertEqual(classify_error_reason(None, "stream error: idle timeout"), REASON_SERVICE_UNAVAILABLE)
         self.assertEqual(classify_error_reason(401, "Invalid API Key"), REASON_AUTH_ERROR)
         self.assertEqual(classify_error_reason(400, "Unknown bad request"), REASON_OTHER)
 
@@ -334,6 +336,8 @@ class TestExporterFallbackPluginAndServiceFailover(unittest.TestCase):
 
             initial_cfg = json.loads(opencode_path.read_text(encoding="utf-8"))
             self.assertEqual(initial_cfg["agent"]["build"]["model"], "openrouter/google/gemma-4-31b:free")
+            self.assertIn("plugin", initial_cfg)
+            self.assertEqual(initial_cfg["plugin"], ["@azumag/opencode-rate-limit-fallback"])
 
             # Déclenchement d'une bascule (failover) sur l'agent 'build' via CLI
             parser = cli_main.build_parser()
@@ -362,6 +366,56 @@ class TestExporterFallbackPluginAndServiceFailover(unittest.TestCase):
 
             restored_cfg = json.loads(opencode_path.read_text(encoding="utf-8"))
             self.assertEqual(restored_cfg["agent"]["build"]["model"], "openrouter/google/gemma-4-31b:free")
+
+    @patch("src.service.detect_provider_credentials", return_value={})
+    @patch("src.service.get_ollama_models", return_value=[])
+    def test_export_syncs_to_global_opencode_dir(self, _mock_ollama: object, _mock_creds: object) -> None:
+        """Vérifie que rate-limit-fallback.json est bien synchronisé dans ~/.config/opencode si le dossier existe."""
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            (base / "data").mkdir()
+            (base / "config").mkdir()
+
+            models_payload = {
+                "last_updated": datetime.now(timezone.utc).isoformat(),
+                "models": [
+                    {
+                        "id": "google/gemma:free",
+                        "provider": "google",
+                        "tier": "free_tier",
+                        "cost_input_per_m": 0.0,
+                        "cost_output_per_m": 0.0,
+                        "context_window": 128000,
+                        "supports_tools": True,
+                        "complexity_score": 5,
+                    }
+                ],
+            }
+            agents_payload = {
+                "agents": [
+                    {
+                        "name": "build",
+                        "description": "Agent principal",
+                        "min_complexity": 4,
+                        "max_complexity": 5,
+                        "requires_tools": True,
+                        "prefer_free": True,
+                    }
+                ]
+            }
+            (base / "data" / "models.json").write_text(json.dumps(models_payload), encoding="utf-8")
+            (base / "config" / "agents_requirements.json").write_text(json.dumps(agents_payload), encoding="utf-8")
+
+            fake_home = base / "user_home"
+            fake_global_opencode = fake_home / ".config" / "opencode"
+            fake_global_opencode.mkdir(parents=True)
+
+            with patch("pathlib.Path.home", return_value=fake_home):
+                svc = ApplicationService(base)
+                res = svc.export_config()
+                self.assertTrue(res.ok)
+                self.assertTrue((fake_global_opencode / "rate-limit-fallback.json").is_file())
+                self.assertTrue((fake_global_opencode / "plugins" / "modelpool-fallback.mjs").is_file())
 
     @patch("src.service.detect_provider_credentials", return_value={})
     @patch("src.service.get_ollama_models", return_value=[])
