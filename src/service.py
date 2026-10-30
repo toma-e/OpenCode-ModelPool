@@ -26,6 +26,8 @@ except ImportError:
     msvcrt = None  # type: ignore[assignment]
 
 from src.budget import AgentBudgetReport, FleetBudgetReport, simulate_fleet_budget
+from src.diagnostics import build_fleet_diagnostics, check_catalogue_staleness
+from src.presets import BUILTIN_PRESETS, create_agent_from_preset, get_available_presets
 from src.cooldown import (
     CooldownEntry,
     create_cooldown_entry,
@@ -257,6 +259,7 @@ def serialize_report(report: FleetReport) -> dict[str, Any]:
                     "requires_vision": agent.requires_vision,
                     "requires_reasoning": agent.requires_reasoning,
                     "prefer_tier1": agent.prefer_tier1,
+                    "reliability_preference": agent.reliability_preference,
                 },
             }
         )
@@ -521,28 +524,14 @@ class ApplicationService:
             )
 
         budget = simulate_fleet_budget(adjusted_results, agents, execution_targets=execution_targets)
-        if not models:
-            diagnostics.append("Le catalogue de modèles est vide.")
-        if not agents:
-            diagnostics.append("Aucun agent n'est déclaré dans la configuration.")
-        if updated is None:
-            diagnostics.append("La date de mise à jour du catalogue est absente.")
-        else:
-            try:
-                # Normalisation du parsing ISO avec fallback si fuseau horaire
-                updated_dt = datetime.fromisoformat(updated)
-                now_dt = datetime.now(timezone.utc) if updated_dt.tzinfo else datetime.now()
-                days_old = (now_dt - updated_dt).days
-                if days_old > 14:
-                    diagnostics.append(
-                        f"Le catalogue date de plus de {days_old} jours ({updated[:10]}). "
-                        "Pensez à exécuter 'python3 main.py --sync'."
-                    )
-            except (ValueError, TypeError):
-                pass
-        unassigned = [result.agent_name for result in adjusted_results if result.model is None]
-        if unassigned:
-            diagnostics.append("Agents sans modèle : " + ", ".join(unassigned) + ".")
+        fleet_diags = build_fleet_diagnostics(
+            models=models,
+            agents=agents,
+            results=adjusted_results,
+            catalogue_updated_at=updated,
+            max_stale_days=14,
+        )
+        diagnostics.extend(fleet_diags)
         return FleetReport(
             models=models,
             agents=agents,
@@ -1009,6 +998,7 @@ class ApplicationService:
                     "requires_vision": validated_req.requires_vision,
                     "requires_reasoning": validated_req.requires_reasoning,
                     "prefer_tier1": validated_req.prefer_tier1,
+                    "reliability_preference": validated_req.reliability_preference,
                 }
                 if validated_req.min_context_window is not None:
                     new_dict["min_context_window"] = validated_req.min_context_window
@@ -1043,6 +1033,56 @@ class ApplicationService:
                 return OperationResult(False, f"Validation échouée : {error}")
             except Exception as error:
                 return OperationResult(False, f"Erreur lors de la mise à jour : {error}")
+
+    def get_presets(self) -> dict[str, dict[str, Any]]:
+        """Retourne les profils types d'agents disponibles sous forme de dictionnaires."""
+        return {
+            pid: {
+                "preset_id": p.preset_id,
+                "label": p.label,
+                "description": p.description,
+                "min_complexity": p.min_complexity,
+                "max_complexity": p.max_complexity,
+                "requires_tools": p.requires_tools,
+                "requires_reasoning": p.requires_reasoning,
+                "reliability_preference": p.reliability_preference,
+                "mode": p.mode,
+            }
+            for pid, p in get_available_presets().items()
+        }
+
+    def add_agent_from_preset(
+        self,
+        preset_id: str,
+        custom_name: Optional[str] = None,
+        allow_fallback: bool = True,
+    ) -> OperationResult:
+        """Ajoute un nouvel agent à la configuration à partir d'un preset prédéfini."""
+        with self._lock, self._file_lock():
+            try:
+                raw_data = _load_json(self.agents_path, "Exigences des agents")
+                agents_list = raw_data.get("agents")
+                if not isinstance(agents_list, list):
+                    return OperationResult(False, "Format de configuration invalide : 'agents' doit être une liste.")
+
+                agent_dict = create_agent_from_preset(preset_id, custom_name=custom_name)
+                final_name = agent_dict["name"]
+
+                for item in agents_list:
+                    if isinstance(item, dict) and item.get("name") == final_name:
+                        return OperationResult(False, f"Un agent nommé '{final_name}' existe déjà dans la configuration.")
+
+                agents_list.append(agent_dict)
+                create_backup(self.agents_path)
+                raw_data["agents"] = agents_list
+                write_json_atomic(self.agents_path, raw_data)
+
+                report = self._build_report_unlocked(allow_fallback)
+                return OperationResult(True, f"Agent '{final_name}' ajouté avec succès depuis le profil '{preset_id}'.", report)
+            except KeyError as error:
+                return OperationResult(False, str(error))
+            except Exception as error:
+                return OperationResult(False, f"Erreur lors de l'ajout de l'agent : {error}")
 
     def get_active_cooldowns(self) -> list[CooldownEntry]:
         """Retourne la liste des quarantaines actives (non expirées)."""
@@ -1248,6 +1288,18 @@ class ApplicationService:
                 "last_updated": catalogue_updated_at,
                 "models": models_payload,
             }
+
+    def is_catalogue_stale(self, max_days: int = 14) -> tuple[bool, Optional[int]]:
+        """Indique si le catalogue actif est absent ou date de plus de max_days jours."""
+        try:
+            if not self.models_path.exists():
+                return True, None
+            raw = _load_json(self.models_path, "Catalogue de modèles")
+            updated = raw.get("last_updated")
+            return check_catalogue_staleness(updated, max_days=max_days)
+        except Exception:
+            return True, None
+
 
 
 

@@ -12,6 +12,7 @@
       "requires_vision": false,
       "requires_reasoning": true,
       "prefer_tier1": true,
+      "reliability_preference": "balanced",
       "min_context_window": 64000,
       "mode": "primary",
       "estimated_tokens_input": 1500000,
@@ -72,5 +73,14 @@
       "estimated_tokens_output": 200000,
       "max_monthly_budget": 5.0
     }
+  ],
+  "provider_priority": [
+    "ollama",
+    "groq",
+    "mistralai",
+    "google",
+    "cerebras",
+    "anthropic",
+    "openrouter"
   ]
 }

@@ -46,6 +46,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Synchronise l'ensemble des fournisseurs configurés (OpenRouter, Ollama local, APIs directes).",
     )
+    parser.add_argument(
+        "--sync-if-stale",
+        nargs="?",
+        const=14,
+        type=int,
+        default=None,
+        metavar="DAYS",
+        help="Synchronise automatiquement le catalogue si sa date de mise à jour dépasse DAYS jours (défaut : 14).",
+    )
     parser.add_argument("--no-fallback", action="store_true", help="Désactive le surclassement automatique.")
     parser.add_argument(
         "--filter-keys",
@@ -153,6 +162,17 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="TARGET_ID",
         help="Lève la quarantaine de tous les modèles (ou uniquement de TARGET_ID) et les réhabilite.",
+    )
+    parser.add_argument(
+        "--list-presets",
+        action="store_true",
+        help="Affiche la liste des profils types d'agents prédéfinis pour OpenCode.",
+    )
+    parser.add_argument(
+        "--add-preset",
+        nargs="+",
+        metavar=("PRESET", "NOM"),
+        help="Ajoute un agent à partir d'un preset (ex: --add-preset code_reviewer [nom_agent]).",
     )
     parser.add_argument(
         "--serve",
@@ -303,6 +323,37 @@ def run(args: argparse.Namespace, base_dir: Path = BASE_DIR) -> int:
             render_results(res.report)
         return 0
 
+    if getattr(args, "list_presets", False):
+        presets = service.get_presets()
+        print(f"\n📦 Profils types d'agents prédéfinis ({len(presets)}) :\n")
+        print(f"{'Identifiant':<18} {'Rôle':<30} {'Complexité':<12} {'Outils':<8} {'Mode'}")
+        print("-" * 80)
+        for pid, p in presets.items():
+            comp_range = f"{p['min_complexity']}-{p['max_complexity']}"
+            tools_str = "Oui" if p["requires_tools"] else "Non"
+            print(f"{pid:<18} {p['label']:<30} {comp_range:<12} {tools_str:<8} {p['mode']}")
+            print(f"  └─ {p['description']}")
+        print("-" * 80)
+        print("Pour ajouter un preset : python3 main.py --add-preset <identifiant> [nom_agent]\n")
+        return 0
+
+    if getattr(args, "add_preset", None):
+        preset_args = args.add_preset
+        preset_id = preset_args[0]
+        custom_name = preset_args[1] if len(preset_args) > 1 else None
+        res = service.add_agent_from_preset(
+            preset_id=preset_id,
+            custom_name=custom_name,
+            allow_fallback=allow_fallback,
+        )
+        if not res.ok:
+            print(f"❌ {res.message}", file=sys.stderr)
+            return 1
+        print(f"✅ {res.message}")
+        if res.report:
+            render_results(res.report)
+        return 0
+
     if getattr(args, "failover", None):
         duration_sec = args.cooldown_minutes * 60 if getattr(args, "cooldown_minutes", None) else None
         export_target = args.export if args.export else "config/opencode.json"
@@ -367,6 +418,24 @@ def run(args: argparse.Namespace, base_dir: Path = BASE_DIR) -> int:
             print(f"❌ {synced.message}", file=sys.stderr)
             return 1
         print(f"✅ {synced.message}")
+
+    elif getattr(args, "sync_if_stale", None) is not None:
+        stale_threshold = args.sync_if_stale
+        is_stale, days_old = service.is_catalogue_stale(max_days=stale_threshold)
+        if is_stale:
+            stale_info = f"({days_old} jours écoulés > seuil {stale_threshold})" if days_old is not None else "(date absente ou fichier manquant)"
+            print(f"🔄 Catalogue périmé {stale_info} : synchronisation automatique...")
+            synced = service.sync_catalogue(
+                allow_fallback=allow_fallback,
+                multi_provider=False,
+                include_ollama=False,
+                filter_by_keys=filter_by_keys,
+            )
+            if not synced.ok:
+                LOGGER.error("Échec de synchronisation automatique : %s", synced.message)
+                print(f"❌ {synced.message}", file=sys.stderr)
+                return 1
+            print(f"✅ {synced.message}")
 
     elif args.serve is None and not service.models_path.exists():
         print("🔄 Catalogue de modèles absent : initialisation via OpenRouter...")

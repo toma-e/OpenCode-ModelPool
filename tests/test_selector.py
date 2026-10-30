@@ -869,6 +869,90 @@ class TestSelector(unittest.TestCase):
         self.assertIsNotNone(result.model)
         self.assertEqual(result.model.id, "google/gemma-4-26b-a4b-it:free")
 
+    def test_reliability_preference_prefer_stability(self) -> None:
+        """prefer_stability classe les modèles payants/locaux avant les modèles cloud gratuits même en lowest_cost."""
+        free_cloud_model = Model(
+            id="openrouter/free-coding-model:free",
+            provider="openrouter",
+            tier="free_tier",
+            cost_input_per_m=0.0,
+            cost_output_per_m=0.0,
+            context_window=64000,
+            supports_tools=True,
+            complexity_score=4,
+        )
+        paid_model = Model(
+            id="mistralai/mistral-small-latest",
+            provider="mistralai",
+            tier="pay_as_you_go",
+            cost_input_per_m=0.2,
+            cost_output_per_m=0.6,
+            context_window=64000,
+            supports_tools=True,
+            complexity_score=4,
+        )
+        local_model = Model(
+            id="ollama/qwen2.5-coder:7b",
+            provider="ollama",
+            tier="free_tier",
+            cost_input_per_m=0.0,
+            cost_output_per_m=0.0,
+            context_window=64000,
+            supports_tools=True,
+            complexity_score=4,
+        )
+
+        # 1. En balanced (défaut) : le modèle gratuit à 0.0$ passe avant le modèle payant
+        req_balanced = AgentRequirement(
+            name="build",
+            description="Agent",
+            min_complexity=4,
+            max_complexity=4,
+            requires_tools=True,
+            prefer_free=False,
+            reliability_preference="balanced",
+        )
+        ranked_balanced = rank_models_for_agent(req_balanced, [paid_model, free_cloud_model])
+        self.assertEqual(ranked_balanced[0].id, free_cloud_model.id)
+
+        # 2. En prefer_stability : le modèle payant stable passe avant le modèle cloud :free
+        req_stability = AgentRequirement(
+            name="build",
+            description="Agent",
+            min_complexity=4,
+            max_complexity=4,
+            requires_tools=True,
+            prefer_free=False,
+            reliability_preference="prefer_stability",
+        )
+        ranked_stability = rank_models_for_agent(req_stability, [paid_model, free_cloud_model])
+        self.assertEqual(ranked_stability[0].id, paid_model.id)
+
+        # 3. Le modèle local Ollama (0$ et local) n'a pas de pénalité de stabilité et passe avant le cloud :free
+        ranked_with_local = rank_models_for_agent(req_stability, [free_cloud_model, local_model])
+        self.assertEqual(ranked_with_local[0].id, local_model.id)
+
+    def test_reliability_preference_validation(self) -> None:
+        """Validation stricte des valeurs admises pour reliability_preference."""
+        valid_req = AgentRequirement.from_dict({
+            "name": "build",
+            "min_complexity": 4,
+            "max_complexity": 5,
+            "requires_tools": True,
+            "reliability_preference": "prefer_stability",
+        })
+        self.assertEqual(valid_req.reliability_preference, "prefer_stability")
+
+        with self.assertRaises(ValueError) as ctx:
+            AgentRequirement.from_dict({
+                "name": "build",
+                "min_complexity": 4,
+                "max_complexity": 5,
+                "requires_tools": True,
+                "reliability_preference": "super_safe",
+            })
+        self.assertIn("reliability_preference", str(ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

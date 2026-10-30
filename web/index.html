@@ -386,6 +386,25 @@
         <div id="priority_list" class="priority-list"></div>
       </section>
       <section id="cooldowns_section" class="card" style="display:none;border-color:#7a3e28;background:#261a18;margin-bottom:1rem;"></section>
+      <section id="presets_section" class="card" style="margin-bottom:1rem;background:#131c26;border-color:#2a3e52;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
+          <div>
+            <strong style="font-size:0.95rem;">Ajouter un agent spécialisé (Profils prédéfinis)</strong>
+            <span class="muted" style="font-size:0.82rem;margin-left:0.5rem;">(Codeur expert, relecteur, exploration, documentation, tests)</span>
+          </div>
+          <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
+            <select id="preset_select" aria-label="Choisir un profil d'agent">
+              <option value="coder_heavy">Codeur Expert (coder_heavy)</option>
+              <option value="code_reviewer">Relecteur & Sécurité (code_reviewer)</option>
+              <option value="fast_researcher">Explorateur Rapide (fast_researcher)</option>
+              <option value="doc_writer">Rédacteur Documentation (doc_writer)</option>
+              <option value="test_runner">Exécuteur de Tests (test_runner)</option>
+            </select>
+            <input type="text" id="preset_custom_name" placeholder="Nom optionnel" style="padding:0.35rem 0.5rem;font-size:0.85rem;background:var(--bg);border:1px solid var(--line);border-radius:0.3rem;color:var(--text);width:150px;">
+            <button id="add_preset_btn" class="btn-sm" type="button" style="background:#205438;border-color:#2e754f;">+ Ajouter l'agent</button>
+          </div>
+        </div>
+      </section>
       <section id="summary" class="summary"></section>
       <section id="assignments"></section>
     </div>
@@ -708,6 +727,7 @@
           : "";
         const c = agent.constraints || {};
         const strategy = c.sort_strategy || "lowest_cost";
+        const reliability = c.reliability_preference || "balanced";
         const allowFree = c.allow_free !== false;
         const preferFree = Boolean(c.prefer_free);
         const reqVision = Boolean(c.requires_vision);
@@ -719,6 +739,7 @@
         const visionTag = reqVision ? " · vision requise" : "";
         const reasoningTag = reqReasoning ? " · raisonnement requis" : "";
         const tier1Tag = preferTier1 ? " · Tier 1 prioritaire" : "";
+        const relTag = reliability === "prefer_stability" ? " · stabilité prioritaire" : (reliability === "prefer_free" ? " · gratuit prioritaire" : "");
 
         const modelBadges = agent.model
           ? [
@@ -753,7 +774,7 @@
 
         return `<article class="card">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.4rem;">
-            <div class="status ${escapeHtml(agent.status)}">${escapeHtml(statusLabel(agent.status))} · stratégie: ${escapeHtml(strategy)}${escapeHtml(tierTag)}${escapeHtml(visionTag)}${escapeHtml(reasoningTag)}${escapeHtml(tier1Tag)}</div>
+            <div class="status ${escapeHtml(agent.status)}">${escapeHtml(statusLabel(agent.status))} · stratégie: ${escapeHtml(strategy)}${escapeHtml(relTag)}${escapeHtml(tierTag)}${escapeHtml(visionTag)}${escapeHtml(reasoningTag)}${escapeHtml(tier1Tag)}</div>
             ${channelBadge}
           </div>
           <h2>${escapeHtml(agent.name)}</h2>
@@ -772,6 +793,15 @@
                 <option value="max_performance"${strategy === "max_performance" ? " selected" : ""}>Performance max (max_performance)</option>
                 <option value="max_context"${strategy === "max_context" ? " selected" : ""}>Contexte max (max_context)</option>
                 <option value="balanced"${strategy === "balanced" ? " selected" : ""}>Équilibré (balanced)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="reliability-${agentIdx}">Fiabilité :</label>
+              <select id="reliability-${agentIdx}">
+                <option value="balanced"${reliability === "balanced" ? " selected" : ""}>Équilibrée</option>
+                <option value="prefer_stability"${reliability === "prefer_stability" ? " selected" : ""}>Stabilité prioritaire</option>
+                <option value="prefer_free"${reliability === "prefer_free" ? " selected" : ""}>Gratuit d'abord</option>
               </select>
             </div>
 
@@ -824,6 +854,7 @@
 
     async function saveAgentRequirements(agentName, agentIdx) {
       const strategyEl = document.getElementById("strat-" + agentIdx);
+      const reliabilityEl = document.getElementById("reliability-" + agentIdx);
       const allowFreeEl = document.getElementById("allow_free-" + agentIdx);
       const preferFreeEl = document.getElementById("prefer_free-" + agentIdx);
       const reqVisionEl = document.getElementById("req_vision-" + agentIdx);
@@ -840,6 +871,7 @@
 
       const updates = {
         sort_strategy: strategyEl.value,
+        reliability_preference: reliabilityEl ? reliabilityEl.value : "balanced",
         allow_free: allow_free,
         prefer_free: prefer_free,
         requires_vision: reqVisionEl.checked,
@@ -919,6 +951,28 @@
       } catch (e) {
         showBanner(false, "Impossible de générer le diff : " + e);
       }
+    }
+
+    const addPresetBtn = document.getElementById("add_preset_btn");
+    const presetSelect = document.getElementById("preset_select");
+    const presetCustomName = document.getElementById("preset_custom_name");
+
+    if (addPresetBtn) {
+      addPresetBtn.addEventListener("click", async () => {
+        const presetId = presetSelect ? presetSelect.value : "";
+        const customName = presetCustomName && presetCustomName.value.trim() ? presetCustomName.value.trim() : null;
+        if (!presetId) return;
+        addPresetBtn.disabled = true;
+        try {
+          await call("/api/agent/add-preset", "POST", {
+            preset_id: presetId,
+            name: customName,
+          });
+          if (presetCustomName) presetCustomName.value = "";
+        } finally {
+          addPresetBtn.disabled = false;
+        }
+      });
     }
 
     // Gestion des Onglets

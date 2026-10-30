@@ -413,6 +413,64 @@ class TestService(unittest.TestCase):
             after_content = service.default_export_path.read_text(encoding="utf-8")
             self.assertEqual(before_content, after_content)
 
+    def test_is_catalogue_stale_and_reliability_preference_update(self) -> None:
+        """Vérifie is_catalogue_stale et la persistance de reliability_preference."""
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            write_valid_workspace(directory)
+            service = ApplicationService(directory)
+
+            # Test is_catalogue_stale
+            is_stale_14, days_14 = service.is_catalogue_stale(max_days=14)
+            self.assertTrue(is_stale_14)
+            self.assertIsNotNone(days_14)
+            self.assertGreaterEqual(days_14, 15)
+
+            is_stale_100, days_100 = service.is_catalogue_stale(max_days=100)
+            self.assertFalse(is_stale_100)
+            self.assertEqual(days_100, days_14)
+
+            # Test update_agent_requirement avec reliability_preference
+            up_res = service.update_agent_requirement(
+                "agent",
+                {"reliability_preference": "prefer_stability"},
+            )
+            self.assertTrue(up_res.ok)
+
+            report = service.build_report()
+            agent_req = next(a for a in report.agents if a.name == "agent")
+            self.assertEqual(agent_req.reliability_preference, "prefer_stability")
+
+    def test_add_agent_from_preset_and_get_presets(self) -> None:
+        """Vérifie l'ajout d'un agent depuis un preset et la liste des presets disponibles."""
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            write_valid_workspace(directory)
+            service = ApplicationService(directory)
+
+            # Test get_presets
+            presets = service.get_presets()
+            self.assertIn("code_reviewer", presets)
+            self.assertIn("coder_heavy", presets)
+
+            # Test add_agent_from_preset valide
+            add_res = service.add_agent_from_preset("code_reviewer", custom_name="auditor")
+            self.assertTrue(add_res.ok)
+            self.assertIn("auditor", add_res.message)
+
+            report = service.build_report()
+            names = [a.name for a in report.agents]
+            self.assertIn("auditor", names)
+
+            # Test doublon de nom -> échec
+            dup_res = service.add_agent_from_preset("code_reviewer", custom_name="auditor")
+            self.assertFalse(dup_res.ok)
+            self.assertIn("existe déjà", dup_res.message)
+
+            # Test preset inconnu -> échec
+            unknown_res = service.add_agent_from_preset("inconnu")
+            self.assertFalse(unknown_res.ok)
+
 
 if __name__ == "__main__":
     unittest.main()

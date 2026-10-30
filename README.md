@@ -78,7 +78,7 @@ opencode-modelpool/
    - Forçage manuel possible (`force_model`). Il reste volontairement prioritaire sur
      toutes les contraintes ; l'attribution et l'export indiquent explicitement les
      contraintes techniques ou budgétaires ainsi contournées.
-   - Priorisation absolue du niveau gratuit (`prefer_free = true`).
+   - Priorisation du niveau gratuit (`prefer_free = true`) ou arbitrage de stabilité (`reliability_preference = "prefer_stability"` pour préserver les agents critiques de la saturation des modèles gratuits).
    - **Surclassement économique automatique (`fallback`) :** si aucun modèle n'est disponible dans la plage exacte, surclassement vers le modèle compatible le plus économique.
 
 5. **Simulation Budgétaire & Quotas :**

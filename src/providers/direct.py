@@ -55,10 +55,26 @@ KNOWN_MODEL_PRICING: Dict[str, tuple[float, float]] = {
     "claude-3-opus-20240229": (15.0, 75.0),
     # Cerebras
     "llama3.1-8b": (0.10, 0.10),
+    "llama-3.1-8b": (0.10, 0.10),
     "llama-3.3-70b": (0.60, 0.60),
     "llama3.1-70b": (0.60, 0.60),
+    "llama-3.1-70b": (0.60, 0.60),
     "llama3.3-70b": (0.60, 0.60),
 }
+
+
+def get_known_model_pricing(raw_id: str, default: tuple[float, float] = (0.0, 0.0)) -> tuple[float, float]:
+    """Résout le tarif d'un modèle par correspondance exacte ou sans préfixe models/."""
+    if not raw_id:
+        return default
+    if raw_id in KNOWN_MODEL_PRICING:
+        return KNOWN_MODEL_PRICING[raw_id]
+
+    cleaned = raw_id.replace("models/", "").strip()
+    if cleaned in KNOWN_MODEL_PRICING:
+        return KNOWN_MODEL_PRICING[cleaned]
+
+    return default
 
 
 def _http_get_json(

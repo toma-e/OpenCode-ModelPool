@@ -69,12 +69,13 @@ Lorsqu'un nouvel agent prend en main ce projet, il doit :
 | Module / Fichier | Responsabilité Principale | Contraintes Particulières |
 |---|---|---|
 | [`src/selector.py`](src/selector.py) | Filtrage, tri, sélection et surclassement | **Fonctions pures uniquement**. Aucun appel I/O, réseau ou HTTP. |
+| [`src/diagnostics.py`](src/diagnostics.py) | Diagnostics d'intégrité et calcul de fraîcheur du catalogue | **Fonctions pures uniquement**. Aucun I/O. |
 | [`src/fetcher.py`](src/fetcher.py) | Récupération OpenRouter & scoring heuristique | Backup puis écriture atomique ; rétention des sauvegardes horodatées. |
 | [`src/budget.py`](src/budget.py) | Calcul des coûts au token & alertes de quotas | Seuil critique free-tier : `1_000_000` tokens/mois. |
 | [`src/exporter.py`](src/exporter.py) | Génération pure du JSON pour OpenCode | **Fonctions pures uniquement**. Aucun appel I/O. Schéma officiel OpenCode strict (`opencode.json`) + rapport d'audit (`modelpool-report.json`). |
 | [`src/service.py`](src/service.py) | Chargement, orchestration, export et sync | Seule couche I/O ; verrou pour les écritures concurrentes (`.modelpool.lock`). |
 | [`src/web.py`](src/web.py) | Interface HTTP locale | Bind `127.0.0.1` uniquement ; stdlib ; protections CSRF/Origin ; pas de logique métier. |
-| [`main.py`](main.py) | Interface CLI en ligne de commande | Supporte `--sync`, `--export [path]`, `--no-fallback`, `--serve [port]`, `--refresh-access`. |
+| [`main.py`](main.py) | Interface CLI en ligne de commande | Supporte `--sync`, `--sync-if-stale`, `--export [path]`, `--no-fallback`, `--serve [port]`, `--refresh-access`. |
 | [`src/providers/router.py`](src/providers/router.py) | Priorisation et routage des canaux d'exécution (Ollama, Direct, OpenRouter) | Fonctions pures de routage selon la disponibilité des clés et modèles validés. |
 | [`src/providers/detector.py`](src/providers/detector.py) | Détection sécurisée des identifiants et clés API | Inspection ordonnée (variables d'environnement, `.env`, auth OpenCode). |
 | [`src/providers/access.py`](src/providers/access.py) | Sondage dynamique des modèles accessibles par clé API | Découverte en direct avec gestion de cache (`data/provider_access.json`). |
@@ -109,15 +110,22 @@ Lorsqu'un nouvel agent prend en main ce projet, il doit :
   - **M2 (Routage & Sécurité d'Export)** : Métadonnées explicites d'offre sur `ExecutionTarget` ; validation du schéma OpenCode préalable à l'écriture disque, prévisualisation unifiée (`--diff`/`--preview`) et restauration d'urgence (`--rollback`) ; contrôle strict d'exécutabilité (`--check-ready`) ; réconciliation des stratégies de tri (`lowest_cost` financier strict vs `prefer_provider`).
   - **M3 (Fiabilisation Budgétaire, Cache & Sécurité)** : Distinction des sources de prix réelles, affichage "Non estimable" sans coût répertorié, disclaimers locaux 0$, avertissements de quota prévisionnels ; horodatage et TTL de cache (`max_cache_age_days = 14`), classification des erreurs HTTP et auth sécurisée Google (`x-goog-api-key`) ; durcissement HTTP Web (vérification stricte du schéma/port Origin, rejet des traversées de répertoires `..`).
   - **M4 & M5 (UX, Validation & Release)** : Interface Web interactive enrichie (panneau de diff unifié, boutons d'action séparés) ; protocoles de validation E2E (`docs/validation-opencode-v0.2.md`) et de benchmark comparatif (`docs/evaluations/comparative_benchmark_v0.2.md`) ; mise à jour `README.md` et `CHANGELOG.md` pour la release v0.2.0.
+- ✅ **Jalon 21 (V0.3 - Fiabilité Free-Tier, Diagnostics modulaires & Fraîcheur) :**
+  - **Fiabilité Free-Tier** : introduction de `reliability_preference` (`prefer_stability`, `balanced`, `prefer_free`) sur les exigences des agents pour pénaliser les modèles cloud gratuits saturés et prioriser les modèles payants/locaux pour les agents critiques.
+  - **Fraîcheur & Auto-sync** : flag CLI `--sync-if-stale [DAYS]` (défaut 14 jours) pour réactualiser automatiquement le catalogue si périmé.
+  - **Architecture & Modulaire** : extraction du module pur `src/diagnostics.py` (diagnostics d'intégrité et contrôle de fraîcheur) allégeant `ApplicationService`.
+  - **Pont tarifaire direct** : helper `get_known_model_pricing` pour résoudre les tarifs direct providers sans préfixes d'API.
+  - **Interface Web** : sélection et persistance de la préférence de fiabilité par agent via l'interface locale.
 ---
 
 ## 6. Prochaines Étapes Recommandées (Roadmap)
 
 Si le projet doit continuer d'évoluer, les tâches prioritaires suivantes sont identifiées :
 1. ✅ **Gestion multi-sources (Complété) :** Agrégation d'Ollama local et des 5 fournisseurs directs (Google, Mistral, Groq, Cerebras, Anthropic) avec routage automatique et priorité des canaux.
-2. **Automatisation de la veille de modèles :** Cron GitHub Actions (ou tâche planifiée) pour mettre à jour `data/models.json` chaque semaine depuis OpenRouter.
-3. **Fiabilisation du catalogue & exclusion des modèles non-LLM :** Filtrage automatique strict des modèles audio/musique (Lyria, etc.), TTS, transcription, embeddings purs et robotique pour empêcher toute attribution non pertinente aux agents de code.
-4. **Pénalité de fiabilité free-tier :** Pondération ou option de désactivation des modèles `:free` pour les agents critiques.
+2. ✅ **Pénalité de fiabilité free-tier (Complété Jalon 21) :** Option `reliability_preference` paramétrable par agent.
+3. ✅ **Contrôle de fraîcheur et synchronisation conditionnelle (Complété Jalon 21) :** Flag `--sync-if-stale`.
+4. **Automatisation de la veille de modèles :** Cron GitHub Actions (ou tâche planifiée) pour mettre à jour `data/models.json` chaque semaine depuis OpenRouter.
+5. **Presets de rôles d'agents OpenCode :** Bibliothèque de profils types d'agents pré-configurés (`@review`, `@security`, `@docs`).
 
 ---
 

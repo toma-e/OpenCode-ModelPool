@@ -99,6 +99,7 @@ Chaque agent peut définir :
 - `estimated_tokens_input` (int, optionnel)
 - `estimated_tokens_output` (int, optionnel)
 - `max_monthly_budget` (float, optionnel)
+- `reliability_preference` (str, optionnel : "prefer_stability", "balanced", "prefer_free")
 
 ---
 

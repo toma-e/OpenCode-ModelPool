@@ -228,6 +228,55 @@ class TestMain(unittest.TestCase):
                 ret_rb = main.run(args_rb, directory)
                 self.assertEqual(ret_rb, 0)
 
+    def test_sync_if_stale_flag(self) -> None:
+        """Vérifie le déclenchement conditionnel de --sync-if-stale."""
+        parser = main.build_parser()
+        args_default = parser.parse_args(["--sync-if-stale"])
+        self.assertEqual(args_default.sync_if_stale, 14)
+
+        args_custom = parser.parse_args(["--sync-if-stale", "7"])
+        self.assertEqual(args_custom.sync_if_stale, 7)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            self._write_valid_files(directory)
+
+            from src.service import OperationResult
+            # Cas 1 : Catalogue non périmé -> aucune synchronisation déclenchée
+            with patch("src.service.ApplicationService.is_catalogue_stale", return_value=(False, 3)), \
+                 patch("src.service.ApplicationService.sync_catalogue") as mock_sync:
+                ret = main.run(args_default, directory)
+                self.assertEqual(ret, 0)
+                mock_sync.assert_not_called()
+
+            # Cas 2 : Catalogue périmé -> synchronisation déclenchée
+            with patch("src.service.ApplicationService.is_catalogue_stale", return_value=(True, 20)), \
+                 patch("src.service.ApplicationService.sync_catalogue", return_value=OperationResult(True, "OK")) as mock_sync:
+                ret = main.run(args_default, directory)
+                self.assertEqual(ret, 0)
+                mock_sync.assert_called_once()
+
+    def test_presets_cli_flags(self) -> None:
+        """Vérifie les drapeaux CLI --list-presets et --add-preset."""
+        parser = main.build_parser()
+        args_list = parser.parse_args(["--list-presets"])
+        self.assertTrue(args_list.list_presets)
+
+        args_add = parser.parse_args(["--add-preset", "code_reviewer", "mon_auditeur"])
+        self.assertEqual(args_add.add_preset, ["code_reviewer", "mon_auditeur"])
+
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            self._write_valid_files(directory)
+
+            # Test --list-presets
+            ret_list = main.run(args_list, directory)
+            self.assertEqual(ret_list, 0)
+
+            # Test --add-preset
+            ret_add = main.run(args_add, directory)
+            self.assertEqual(ret_add, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -154,6 +154,7 @@ class AgentRequirement:
     requires_vision: bool = False
     requires_reasoning: bool = False
     prefer_tier1: bool = True
+    reliability_preference: str = "balanced"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any], context: str = "agent") -> AgentRequirement:
@@ -204,6 +205,11 @@ class AgentRequirement:
         requires_vision = _bool(data.get("requires_vision", False), "requires_vision", context)
         requires_reasoning = _bool(data.get("requires_reasoning", False), "requires_reasoning", context)
         prefer_tier1 = _bool(data.get("prefer_tier1", True), "prefer_tier1", context)
+        reliability_pref = data.get("reliability_preference", "balanced")
+        valid_reliability = {"prefer_stability", "balanced", "prefer_free"}
+        if not isinstance(reliability_pref, str) or reliability_pref not in valid_reliability:
+            valid_list = ", ".join(sorted(valid_reliability))
+            raise ValueError(f"{context}: 'reliability_preference' doit être l'un de : {valid_list}.")
         return cls(
             name=name,
             description=description,
@@ -224,6 +230,7 @@ class AgentRequirement:
             requires_vision=requires_vision,
             requires_reasoning=requires_reasoning,
             prefer_tier1=prefer_tier1,
+            reliability_preference=reliability_pref,
         )
 
 
@@ -389,6 +396,16 @@ def rank_models_for_agent(
         rank = channel_rank.get(model.id, 10**6) if channel_rank else 0
         effective_cost = channel_costs.get(model.id, model.total_cost_per_m) if channel_costs else model.total_cost_per_m
         free_penalty = 0 if req.prefer_free and (model.is_free or effective_cost == 0.0) else int(req.prefer_free)
+        # Détection des modèles gratuits cloud (soumis aux limitations strictes RPM/RPD et saturations)
+        # Les modèles locaux Ollama (0$) sont hébergés localement et ne subissent pas ces quotas partagés.
+        is_cloud_free = (model.is_free or effective_cost == 0.0) and model.provider.lower() != "ollama" and not model.id.lower().startswith("ollama/")
+        if req.reliability_preference == "prefer_stability":
+            stability_penalty = 1 if is_cloud_free else 0
+        elif req.reliability_preference == "prefer_free":
+            stability_penalty = 0 if is_cloud_free else 1
+        else:
+            stability_penalty = 0
+
         # Priorité aux fournisseurs reconnus de référence (Tier 1) pour éviter les modèles de niche instables
         is_tier1 = model.provider.lower() in TIER1_PROVIDERS or model.provider.lower().lstrip("~") in TIER1_PROVIDERS
         tier1_penalty = 0 if (not req.prefer_tier1 or is_tier1) else 1
@@ -397,32 +414,33 @@ def rank_models_for_agent(
         if strategy == "prefer_provider":
             # Priorité stricte au canal d'exécution retenu
             comp = model.complexity_score - req.max_complexity if fallback else -model.complexity_score
-            return (rank, free_penalty, effective_cost, tier1_penalty, comp, -model.context_window, model.id)
+            return (rank, stability_penalty, free_penalty, effective_cost, tier1_penalty, comp, -model.context_window, model.id)
 
         if strategy == "max_performance":
-            return (free_penalty, tier1_penalty, -model.complexity_score, rank, effective_cost, -model.context_window, model.id)
+            return (stability_penalty, free_penalty, tier1_penalty, -model.complexity_score, rank, effective_cost, -model.context_window, model.id)
 
         if strategy == "max_context":
             comp = model.complexity_score - req.max_complexity if fallback else -model.complexity_score
-            return (free_penalty, tier1_penalty, -model.context_window, rank, effective_cost, comp, model.id)
+            return (stability_penalty, free_penalty, tier1_penalty, -model.context_window, rank, effective_cost, comp, model.id)
 
         if strategy == "balanced":
             cost_smoothed = effective_cost + 0.05
             context_bonus = min(model.context_window / 100_000, 5.0)
             score = (model.complexity_score * 2.0 + context_bonus) / cost_smoothed
             comp = model.complexity_score - req.max_complexity if fallback else -model.complexity_score
-            return (free_penalty, tier1_penalty, -score, rank, effective_cost, comp, model.id)
+            return (stability_penalty, free_penalty, tier1_penalty, -score, rank, effective_cost, comp, model.id)
 
         # Par défaut : "lowest_cost"
-        # 1. Pénalité gratuit si prefer_free
-        # 2. Coût total effectif le plus bas (garantie économique primordiale)
-        # 3. Rang de canal (départage à coût égal : ex: Ollama local vs OpenRouter gratuit)
-        # 4. Préférence Tier 1 (en cas de coût équivalent)
-        # 5. Complexité la plus proche en fallback, ou la plus haute en exact
-        # 6. Fenêtre de contexte la plus large
-        # 7. Bris d'égalité déterministe sur l'id
+        # 1. Pénalité de stabilité si prefer_stability (ou prefer_free)
+        # 2. Pénalité gratuit si prefer_free
+        # 3. Coût total effectif le plus bas (garantie économique primordiale)
+        # 4. Rang de canal (départage à coût égal : ex: Ollama local vs OpenRouter gratuit)
+        # 5. Préférence Tier 1 (en cas de coût équivalent)
+        # 6. Complexité la plus proche en fallback, ou la plus haute en exact
+        # 7. Fenêtre de contexte la plus large
+        # 8. Bris d'égalité déterministe sur l'id
         complexity = model.complexity_score - req.max_complexity if fallback else -model.complexity_score
-        return (free_penalty, effective_cost, rank, tier1_penalty, complexity, -model.context_window, model.id)
+        return (stability_penalty, free_penalty, effective_cost, rank, tier1_penalty, complexity, -model.context_window, model.id)
 
     if exact:
         return sorted(exact, key=key)
@@ -498,7 +516,12 @@ def resolve_model_for_agent(
     exact = rank_models_for_agent(
         req, parsed_models, channel_rank=channel_rank, channel_costs=channel_costs, excluded_models=excluded_models
     )
-    strategy_suffix = f" (stratégie: {req.sort_strategy})" if req.sort_strategy != "lowest_cost" else ""
+    strategy_parts: list[str] = []
+    if req.sort_strategy != "lowest_cost":
+        strategy_parts.append(f"stratégie: {req.sort_strategy}")
+    if req.reliability_preference != "balanced":
+        strategy_parts.append(f"fiabilité: {req.reliability_preference}")
+    strategy_suffix = f" ({', '.join(strategy_parts)})" if strategy_parts else ""
     if exact:
         return SelectionResult(req.name, exact[0], False, exact, f"Correspondance exacte avec les exigences{strategy_suffix}.")
     if allow_fallback:

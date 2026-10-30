@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generated_at": "2026-10-27T19:01:09.274828+00:00",
+  "generated_at": "2026-10-30T17:44:36.933323+00:00",
   "metadata": {
     "generator": "OpenCode-ModelPool",
     "total_agents": 4,
@@ -107,8 +107,8 @@
       "selection_reason": "Correspondance exacte avec les exigences.",
       "fallback_chain": [
         "groq/openai/gpt-oss-120b",
-        "openrouter/nvidia/nemotron-3-super-120b-a12b:free",
-        "openrouter/nvidia/nemotron-3-super-120b-a12b"
+        "openrouter/deepseek/deepseek-v3.2",
+        "openrouter/deepseek/deepseek-v3.2-exp"
       ]
     },
     "plan": {
@@ -141,8 +141,8 @@
       "selection_reason": "Correspondance exacte avec les exigences.",
       "fallback_chain": [
         "groq/openai/gpt-oss-120b",
-        "openrouter/nvidia/nemotron-3-super-120b-a12b:free",
-        "openrouter/nvidia/nemotron-3-super-120b-a12b"
+        "openrouter/deepseek/deepseek-v3.2",
+        "openrouter/deepseek/deepseek-v3.2-exp"
       ]
     },
     "explore": {

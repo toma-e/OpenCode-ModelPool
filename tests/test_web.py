@@ -203,7 +203,7 @@ class TestWeb(unittest.TestCase):
         # 1. Mise à jour valide d'un agent existant
         update_data = {
             "agent_name": "agent",
-            "updates": {"prefer_tier1": True, "sort_strategy": "lowest_cost"},
+            "updates": {"prefer_tier1": True, "sort_strategy": "lowest_cost", "reliability_preference": "prefer_stability"},
             "fallback": True,
         }
         request = urllib.request.Request(
@@ -292,6 +292,29 @@ class TestWeb(unittest.TestCase):
         self.assertIn("supports_tools", first_model)
         self.assertIn("is_executable", first_model)
         self.assertIn("execution_target", first_model)
+
+    def test_get_presets_and_post_add_preset(self) -> None:
+        """Vérifie GET /api/presets et POST /api/agent/add-preset."""
+        # 1. GET /api/presets
+        status, data = self._get("/api/presets")
+        self.assertEqual(status, 200)
+        parsed = json.loads(data.decode("utf-8"))
+        self.assertTrue(parsed.get("ok"))
+        self.assertIn("presets", parsed)
+        self.assertIn("code_reviewer", parsed["presets"])
+
+        # 2. POST /api/agent/add-preset valide
+        post_status, post_data = self._post("/api/agent/add-preset", {
+            "preset_id": "code_reviewer",
+            "name": "rev_agent",
+        })
+        self.assertEqual(post_status, 200)
+        self.assertTrue(post_data.get("ok"))
+        self.assertIn("rev_agent", post_data.get("message", ""))
+
+        # 3. POST avec preset manquant -> 400
+        err_status, err_data = self._post("/api/agent/add-preset", {})
+        self.assertEqual(err_status, 400)
 
 
 if __name__ == "__main__":

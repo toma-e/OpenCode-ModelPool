@@ -205,9 +205,10 @@ def resolve_model_execution_target(
                 formatted_direct_id = f"{channel.opencode_prefix}/{native_id}"
                 if formatted_direct_id.lower() in excluded_norm:
                     continue
-                from src.providers.direct import KNOWN_MODEL_PRICING
-                if native_id in KNOWN_MODEL_PRICING:
-                    cost_in, cost_out = KNOWN_MODEL_PRICING[native_id]
+                from src.providers.direct import KNOWN_MODEL_PRICING, get_known_model_pricing
+                pricing = get_known_model_pricing(native_id, (0.0, 0.0))
+                if pricing != (0.0, 0.0):
+                    cost_in, cost_out = pricing
                     pricing_source = "direct_api_pricing"
                 elif reference_model.cost_input_per_m > 0 or reference_model.cost_output_per_m > 0:
                     cost_in, cost_out = reference_model.cost_input_per_m, reference_model.cost_output_per_m

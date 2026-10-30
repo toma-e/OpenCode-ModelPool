@@ -108,6 +108,9 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/priority":
             self._send_json(200, {"ok": True, "priority": self.service.get_provider_priority()})
             return
+        if parsed.path == "/api/presets":
+            self._send_json(200, {"ok": True, "presets": self.service.get_presets()})
+            return
         if parsed.path == "/api/models":
             try:
                 data = self.service.get_models_catalog()
@@ -218,6 +221,25 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
                     self._send_json(400, {"ok": False, "message": "Champs 'agent_name' (str) et 'updates' (dict) obligatoires."})
                 else:
                     self._send_operation(self.service.update_agent_requirement(agent_name, updates, allow_fallback=fallback))
+            return
+        if parsed.path == "/api/agent/add-preset":
+            if not isinstance(body, dict):
+                self._send_json(400, {"ok": False, "message": "Corps JSON attendu."})
+                return
+            preset_id = body.get("preset_id")
+            if not isinstance(preset_id, str) or not preset_id.strip():
+                self._send_json(400, {"ok": False, "message": "Champ 'preset_id' obligatoire."})
+                return
+            custom_name = body.get("name")
+            if custom_name is not None and not isinstance(custom_name, str):
+                custom_name = None
+            self._send_operation(
+                self.service.add_agent_from_preset(
+                    preset_id=preset_id.strip(),
+                    custom_name=custom_name,
+                    allow_fallback=fallback,
+                )
+            )
             return
         if parsed.path == "/api/failover":
             if not isinstance(body, dict):

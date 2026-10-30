@@ -7,11 +7,11 @@
     },
     {
       "providerID": "openrouter",
-      "modelID": "nvidia/nemotron-3-super-120b-a12b:free"
+      "modelID": "deepseek/deepseek-v3.2"
     },
     {
       "providerID": "openrouter",
-      "modelID": "nvidia/nemotron-3-super-120b-a12b"
+      "modelID": "deepseek/deepseek-v3.2-exp"
     },
     {
       "providerID": "google",
@@ -34,11 +34,11 @@
       },
       {
         "providerID": "openrouter",
-        "modelID": "nvidia/nemotron-3-super-120b-a12b:free"
+        "modelID": "deepseek/deepseek-v3.2"
       },
       {
         "providerID": "openrouter",
-        "modelID": "nvidia/nemotron-3-super-120b-a12b"
+        "modelID": "deepseek/deepseek-v3.2-exp"
       }
     ],
     "plan": [
@@ -48,11 +48,11 @@
       },
       {
         "providerID": "openrouter",
-        "modelID": "nvidia/nemotron-3-super-120b-a12b:free"
+        "modelID": "deepseek/deepseek-v3.2"
       },
       {
         "providerID": "openrouter",
-        "modelID": "nvidia/nemotron-3-super-120b-a12b"
+        "modelID": "deepseek/deepseek-v3.2-exp"
       }
     ],
     "explore": [
