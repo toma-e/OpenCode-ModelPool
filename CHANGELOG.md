@@ -16,11 +16,11 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
 - **Synchronisation Conditionnelle de Fraîcheur (`--sync-if-stale`)** :
   - Nouveau drapeau CLI `python3 main.py --sync-if-stale [DAYS]` (défaut : 14 jours) réactualisant automatiquement le catalogue si la date `last_updated` est dépassée.
 - **Bibliothèque de Profils Types d'Agents (Presets)** :
-  - Module pur [`src/presets.py`](file:///home/thomas/code/projets/OpenCode-ModelPool/src/presets.py) fournissant 5 profils prédéfinis prêts à l'emploi : `coder_heavy`, `code_reviewer`, `fast_researcher`, `doc_writer`, `test_runner`.
+  - Module pur [`src/presets.py`](src/presets.py) fournissant 5 profils prédéfinis prêts à l'emploi : `coder_heavy`, `code_reviewer`, `fast_researcher`, `doc_writer`, `test_runner`.
   - Commandes CLI `python3 main.py --list-presets` et `python3 main.py --add-preset <identifiant> [nom_agent]`.
   - Panneau d'ajout rapide d'agents par preset dans l'interface Web (`POST /api/agent/add-preset`).
 - **Découplage Modulaire de l'Architecture (`src/diagnostics.py`)** :
-  - Extraction des fonctions pures de diagnostic d'intégrité et de contrôle temporel de catalogue dans [`src/diagnostics.py`](file:///home/thomas/code/projets/OpenCode-ModelPool/src/diagnostics.py), allégeant substantiellement `ApplicationService`.
+  - Extraction des fonctions pures de diagnostic d'intégrité et de contrôle temporel de catalogue dans [`src/diagnostics.py`](src/diagnostics.py), allégeant substantiellement `ApplicationService`.
 - **Résolution Normalisée des Tarifs Direct Providers** :
   - Fonction `get_known_model_pricing` dans `src/providers/direct.py` pour résoudre les identifiants sans préfixe `models/` (notamment Google Gemini et Cerebras Llama 3.1/3.3).
 

@@ -109,29 +109,32 @@ Pour attribuer les modèles et exporter la configuration pour OpenCode :
 python3 main.py --export
 ```
 
-#### 🔗 Liaison avec votre environnement OpenCode
+#### 🔗 Intégration Élégante & Clé en Main dans OpenCode (`--integrate`)
 
-OpenCode recherche sa configuration à deux emplacements standards :
-1. **Au niveau utilisateur (global) :** `~/.config/opencode/opencode.json`
-2. **Au niveau d'un projet spécifique :** `.opencode/opencode.json` ou `opencode.json` à la racine de votre projet.
+Pour intégrer ModelPool dans OpenCode en **une seule commande** (configuration optimisée, commandes slash In-TUI, plugin de repli et serveur MCP agentique) :
 
-Vous pouvez lier OpenCode-ModelPool à OpenCode de trois manières :
+```bash
+# Intégration dans la configuration globale de l'utilisateur (~/.config/opencode)
+python3 main.py --integrate
 
-- **Option 1 : Export direct dans la configuration globale d'OpenCode**
-  ```bash
-  python3 main.py --export ~/.config/opencode/opencode.json
-  ```
-- **Option 2 : Export direct dans le projet de votre choix**
-  ```bash
-  python3 main.py --export /chemin/vers/mon-projet/.opencode/opencode.json
-  ```
-- **Option 3 : Liaison automatique via lien symbolique (Symlink)**
-  Conservez l'export dans `config/opencode.json` de OpenCode-ModelPool et créez un lien symbolique :
-  ```bash
-  mkdir -p ~/.config/opencode
-  ln -sf "$(pwd)/config/opencode.json" ~/.config/opencode/opencode.json
-  ```
-  *(Chaque ré-export ou mise à jour via l'interface web sera immédiatement pris en compte par OpenCode).*
+# Ou intégration dans un projet spécifique
+python3 main.py --integrate --project /chemin/vers/mon-projet
+
+# Mode lien symbolique (toute mise à jour dans ModelPool est instantanément répercutée)
+python3 main.py --integrate --symlink
+
+# Mode surveillance continue (détecte les modifications et ré-exporte automatiquement)
+python3 main.py --integrate --watch
+```
+
+Cette commande effectue automatiquement :
+1. **La préservation stricte de vos réglages existants** (`permission`, providers personnalisés, plugins existants).
+2. **L'injection des commandes slash OpenCode** utilisables directement dans l'interface de chat OpenCode :
+   - `/modelpool` : Affiche l'état d'affectation des agents, les coûts et alertes.
+   - `/modelpool-sync` : Déclenche la synchronisation et rafraîchit la configuration.
+   - `/modelpool-failover` : Force le basculement vers le modèle de secours en cas de saturation.
+3. **L'enregistrement du serveur MCP ModelPool** (`mcp.modelpool`) : permet aux agents OpenCode d'interroger leur propre statut, budget et modèles disponibles via des outils standardisés.
+4. **L'installation du plugin OpenCode** (`plugins/modelpool.mjs`) : écoute les sessions, surveille la fraîcheur du catalogue et gère le repli à chaud sur erreur 429/503 avec relance automatique sans interruption.
 
 #### 🛡️ Prévisualisation & Sécurité d'Export
 Avant d'écrire sur votre configuration active, vous pouvez inspecter le diff unifié et valider le schéma :
@@ -186,6 +189,11 @@ Consultez LANCEURS.md pour plus de détails.
 
 | Option | Description |
 |---|---|
+| `--integrate` | Intègre automatiquement ModelPool dans OpenCode (config, commandes slash, plugin et serveur MCP). |
+| `--project PATH` | Cible un projet OpenCode spécifique au lieu de la configuration globale. |
+| `--symlink` | Crée un lien symbolique vers la configuration du dépôt pour une réactivité immédiate. |
+| `--watch` | Surveille les modifications de configuration et synchronise OpenCode en continu. |
+| `--mcp` | Démarre le serveur Model Context Protocol (MCP) en mode stdio pour OpenCode. |
 | `--export [PATH]` | Génère le fichier de configuration OpenCode (défaut : `config/opencode.json`). |
 | `--diff [PATH]`, `--preview` | Prévisualise le diff unifié de la configuration OpenCode sans modifier le disque. |
 | `--rollback [PATH]` | Restaure la configuration OpenCode depuis la dernière sauvegarde horodatée ou `.bak`. |

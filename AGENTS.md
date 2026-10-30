@@ -81,6 +81,7 @@ Lorsqu'un nouvel agent prend en main ce projet, il doit :
 | [`src/providers/access.py`](src/providers/access.py) | Sondage dynamique des modèles accessibles par clé API | Découverte en direct avec gestion de cache (`data/provider_access.json`). |
 | [`src/providers/direct.py`](src/providers/direct.py) | Catalogues et spécifications des fournisseurs directs | Définitions statiques des modèles (Google, Mistral, Groq, Cerebras, Anthropic). |
 | [`src/providers/ollama.py`](src/providers/ollama.py) | Détection et interrogation du service local Ollama | Découverte locale sur port 11434 sans dépendance tierce. |
+| [`src/mcp_server.py`](src/mcp_server.py) | Serveur Model Context Protocol (MCP) natif stdio | Protocole MCP 2024-11-05 pur stdlib pour l'interaction agentique OpenCode. |
 
 ---
 
@@ -116,6 +117,12 @@ Lorsqu'un nouvel agent prend en main ce projet, il doit :
   - **Architecture & Modulaire** : extraction du module pur `src/diagnostics.py` (diagnostics d'intégrité et contrôle de fraîcheur) allégeant `ApplicationService`.
   - **Pont tarifaire direct** : helper `get_known_model_pricing` pour résoudre les tarifs direct providers sans préfixes d'API.
   - **Interface Web** : sélection et persistance de la préférence de fiabilité par agent via l'interface locale.
+- ✅ **Jalon 22 (Intégration Élégante OpenCode) :**
+  - **Déploiement clé en main (`--integrate`)** : commande unifiée pour lier OpenCode en 1 clic (global ou projet, copie directe ou symlink), préservant rigoureusement les permissions, providers et configurations existantes.
+  - **Commandes Slash In-TUI** : injection automatique des commandes `/modelpool`, `/modelpool-sync`, `/modelpool-failover` utilisables directement dans OpenCode.
+  - **Serveur MCP Agentique (`src/mcp_server.py`)** : serveur stdio JSON-RPC natif fournissant 4 outils (`modelpool_status`, `modelpool_switch_strategy`, `modelpool_report_issue`, `modelpool_list_models`) pour consultation et ajustement autonome par les agents.
+  - **Plugin de repli et surveillance** : hook `session.created` pour contrôle de fraîcheur non-bloquant en tâche de fond et interception 429/quota/503.
+  - **Mode Surveillance (`--watch`)** : synchronisation continue d'OpenCode lors des modifications de catalogue ou d'exigences.
 ---
 
 ## 6. Prochaines Étapes Recommandées (Roadmap)

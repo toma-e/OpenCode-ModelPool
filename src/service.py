@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import contextlib
 import json
+import sys
 import threading
+import time
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any, Callable, Iterator, Optional
 
 from datetime import datetime, timezone
 
@@ -780,6 +782,9 @@ class ApplicationService:
         report_output_path: Optional[Path] = None,
         filter_by_keys: bool = False,
         custom_priority: Optional[list[str]] = None,
+        enable_commands: bool = False,
+        mcp_servers: Optional[dict[str, Any]] = None,
+        local_plugin_path: Optional[str] = None,
     ) -> OperationResult:
         """Exporte la configuration OpenCode et le rapport d'audit sous verrou d'écriture."""
         with self._lock, self._file_lock():
@@ -808,6 +813,9 @@ class ApplicationService:
                     report.agents,
                     base_config=effective_base,
                     default_provider_prefix=default_provider_prefix,
+                    enable_commands=enable_commands,
+                    mcp_servers=mcp_servers,
+                    local_plugin_path=local_plugin_path,
                 )
 
                 # Validation stricte du schéma avant toute écriture disque (MP-206)
@@ -852,6 +860,7 @@ class ApplicationService:
                     export_path=str(target_path.resolve()),
                 )
                 plugin_path.write_text(plugin_js, encoding="utf-8")
+                (plugin_dir / "modelpool.mjs").write_text(plugin_js, encoding="utf-8")
 
                 # Synchronisation vers l'environnement OpenCode global (~/.config/opencode) si existant
                 try:
@@ -861,6 +870,7 @@ class ApplicationService:
                         global_plugins_dir = global_opencode_dir / "plugins"
                         global_plugins_dir.mkdir(parents=True, exist_ok=True)
                         (global_plugins_dir / "modelpool-fallback.mjs").write_text(plugin_js, encoding="utf-8")
+                        (global_plugins_dir / "modelpool.mjs").write_text(plugin_js, encoding="utf-8")
                 except OSError:
                     pass
 
@@ -966,6 +976,257 @@ class ApplicationService:
                 )
             except OSError as error:
                 return OperationResult(False, f"Échec de la restauration : {error}")
+
+    def _find_windows_opencode_dir(self) -> Optional[Path]:
+        """Détecte l'emplacement d'OpenCode sous Windows depuis un environnement WSL."""
+        c_users = Path("/mnt/c/Users")
+        if not c_users.is_dir():
+            return None
+        for user_dir in c_users.iterdir():
+            if user_dir.is_dir() and user_dir.name not in ("All Users", "Default", "Default User", "Public"):
+                candidate = user_dir / ".config" / "opencode"
+                if candidate.is_dir():
+                    return candidate
+        return None
+
+    def integrate_with_opencode(
+        self,
+        target: str = "global",
+        project_path: str | Path | None = None,
+        use_symlink: bool = False,
+        enable_mcp: bool = True,
+        enable_commands: bool = True,
+        enable_fallback_plugin: bool = True,
+        allow_fallback: bool = True,
+        filter_by_keys: bool = False,
+        custom_priority: Optional[list[str]] = None,
+    ) -> OperationResult:
+        """Intègre ModelPool dans OpenCode de manière élégante et clé en main.
+
+        1. Résout le dossier cible (~/.config/opencode ou <projet>/.opencode).
+        2. Préserve la configuration existante (permissions, providers, etc.).
+        3. Enregistre les commandes slash (/modelpool, /modelpool-sync, /modelpool-failover).
+        4. Enregistre le serveur MCP local pointant vers main.py --mcp si enable_mcp=True.
+        5. Installe les plugins (modelpool.mjs) et rate-limit-fallback.json.
+        6. Applique la configuration sous forme de fichier direct ou de lien symbolique.
+        """
+        import os
+        import shutil
+
+        with self._lock, self._file_lock():
+            try:
+                # 1. Résolution du dossier cible
+                if target == "windows":
+                    win_dir = self._find_windows_opencode_dir()
+                    if not win_dir:
+                        return OperationResult(False, "Dossier OpenCode sous Windows (/mnt/c/Users/*/.config/opencode) introuvable.")
+                    target_dir = win_dir
+                elif target == "project":
+                    if project_path:
+                        raw_proj = Path(project_path).expanduser().resolve()
+                        if raw_proj.name.endswith(".json") or raw_proj.name.endswith(".jsonc"):
+                            target_dir = raw_proj.parent
+                        elif raw_proj.name == ".opencode":
+                            target_dir = raw_proj
+                        else:
+                            target_dir = raw_proj / ".opencode"
+                    else:
+                        target_dir = (Path.cwd() / ".opencode").resolve()
+                else:
+                    target_dir = (Path.home() / ".config" / "opencode").resolve()
+
+                target_dir.mkdir(parents=True, exist_ok=True)
+                config_target_path = target_dir / "opencode.json"
+
+                # 2. Lecture et préservation de la configuration existante
+                existing_base: dict[str, Any] = {}
+                if config_target_path.exists():
+                    try:
+                        raw_content = config_target_path.read_text(encoding="utf-8")
+                        existing_base = parse_json_or_jsonc(raw_content)
+                    except Exception:
+                        existing_base = self.load_base_opencode_config() or {}
+                else:
+                    existing_base = self.load_base_opencode_config() or {}
+
+                # 3. Préparation du serveur MCP si activé
+                main_script = (self.base_dir / "main.py").resolve()
+                mcp_servers: Optional[dict[str, Any]] = None
+                if enable_mcp:
+                    if str(target_dir).startswith("/mnt/c/"):
+                        distro = os.environ.get("WSL_DISTRO_NAME", "Ubuntu")
+                        mcp_cmd = ["wsl.exe", "-d", distro, "python3", str(main_script), "--mcp"]
+                    elif shutil.which("modelpool"):
+                        mcp_cmd = ["modelpool", "--mcp"]
+                    else:
+                        mcp_cmd = [sys.executable, str(main_script), "--mcp"]
+                    mcp_servers = {
+                        "modelpool": {
+                            "type": "local",
+                            "command": mcp_cmd,
+                            "enabled": True,
+                        }
+                    }
+
+                local_plugin = "./plugins/modelpool.mjs" if enable_fallback_plugin else None
+
+                # 4. Déploiement des commandes Markdown dans commands/
+                if enable_commands:
+                    cmd_dir = target_dir / "commands"
+                    cmd_dir.mkdir(parents=True, exist_ok=True)
+                    (cmd_dir / "modelpool.md").write_text(
+                        "---\ndescription: Statut ModelPool (modèles affectés, coûts et alertes)\n---\nAffiche le statut actuel de ModelPool en listant les modèles affectés à build, plan, explore et general ainsi que les alertes actives.\n",
+                        encoding="utf-8",
+                    )
+                    (cmd_dir / "modelpool-sync.md").write_text(
+                        "---\ndescription: Synchronisation du catalogue ModelPool et rafraîchissement d'OpenCode\n---\nExécute la synchronisation du catalogue ModelPool (--sync-if-stale) et ré-exporte la configuration des modèles.\n",
+                        encoding="utf-8",
+                    )
+                    (cmd_dir / "modelpool-failover.md").write_text(
+                        "---\ndescription: Bascule un agent sur son modèle de repli en cas de quota ou saturation\n---\nBascule l'agent $ARGUMENTS sur son modèle de secours ModelPool.\n",
+                        encoding="utf-8",
+                    )
+
+                # 5. Export vers la cible
+                if use_symlink:
+                    repo_export = self.default_export_path
+                    self.export_config(
+                        path=repo_export,
+                        allow_fallback=allow_fallback,
+                        base_config=existing_base,
+                        filter_by_keys=filter_by_keys,
+                        custom_priority=custom_priority,
+                        enable_commands=enable_commands,
+                        mcp_servers=mcp_servers,
+                        local_plugin_path=local_plugin,
+                    )
+                    # Copie des fichiers annexes dans le dossier cible
+                    plugins_dir = target_dir / "plugins"
+                    plugins_dir.mkdir(parents=True, exist_ok=True)
+                    src_plugin = self.base_dir / "config" / "plugins" / "modelpool.mjs"
+                    if src_plugin.exists():
+                        shutil.copy2(src_plugin, plugins_dir / "modelpool.mjs")
+                        shutil.copy2(src_plugin, plugins_dir / "modelpool-fallback.mjs")
+                    src_rate = self.base_dir / "config" / "rate-limit-fallback.json"
+                    if src_rate.exists():
+                        shutil.copy2(src_rate, target_dir / "rate-limit-fallback.json")
+                    src_report = self.base_dir / "config" / "modelpool-report.json"
+                    if src_report.exists():
+                        shutil.copy2(src_report, target_dir / "modelpool-report.json")
+
+                    if config_target_path.is_symlink() or config_target_path.exists():
+                        create_backup(config_target_path)
+                        config_target_path.unlink()
+                    config_target_path.symlink_to(repo_export.resolve())
+                else:
+                    self.export_config(
+                        path=config_target_path,
+                        allow_fallback=allow_fallback,
+                        base_config=existing_base,
+                        filter_by_keys=filter_by_keys,
+                        custom_priority=custom_priority,
+                        enable_commands=enable_commands,
+                        mcp_servers=mcp_servers,
+                        local_plugin_path=local_plugin,
+                    )
+
+                # 6. Synchronisation optionnelle avec l'environnement Windows si cible globale
+                win_synced_msg = ""
+                if target == "global":
+                    windows_dir = self._find_windows_opencode_dir()
+                    if windows_dir and windows_dir.resolve() != target_dir.resolve():
+                        try:
+                            distro = os.environ.get("WSL_DISTRO_NAME", "Ubuntu")
+                            win_mcp = {
+                                "modelpool": {
+                                    "type": "local",
+                                    "command": ["wsl.exe", "-d", distro, "python3", str(main_script), "--mcp"],
+                                    "enabled": True,
+                                }
+                            } if enable_mcp else None
+                            win_cfg_file = windows_dir / "opencode.json"
+                            win_base = parse_json_or_jsonc(win_cfg_file.read_text(encoding="utf-8")) if win_cfg_file.exists() else existing_base
+                            self.export_config(
+                                path=win_cfg_file,
+                                allow_fallback=allow_fallback,
+                                base_config=win_base,
+                                filter_by_keys=filter_by_keys,
+                                custom_priority=custom_priority,
+                                enable_commands=enable_commands,
+                                mcp_servers=win_mcp,
+                                local_plugin_path=local_plugin,
+                            )
+                            # Déploiement des commandes Markdown dans Windows
+                            win_cmds = windows_dir / "commands"
+                            win_cmds.mkdir(parents=True, exist_ok=True)
+                            (win_cmds / "modelpool.md").write_text(
+                                "---\ndescription: Statut ModelPool (modèles affectés, coûts et alertes)\n---\nAffiche le statut actuel de ModelPool en listant les modèles affectés à build, plan, explore et general ainsi que les alertes actives.\n",
+                                encoding="utf-8",
+                            )
+                            (win_cmds / "modelpool-sync.md").write_text(
+                                "---\ndescription: Synchronisation du catalogue ModelPool et rafraîchissement d'OpenCode\n---\nExécute la synchronisation du catalogue ModelPool (--sync-if-stale) et ré-exporte la configuration des modèles.\n",
+                                encoding="utf-8",
+                            )
+                            (win_cmds / "modelpool-failover.md").write_text(
+                                "---\ndescription: Bascule un agent sur son modèle de repli en cas de quota ou saturation\n---\nBascule l'agent $ARGUMENTS sur son modèle de secours ModelPool.\n",
+                                encoding="utf-8",
+                            )
+                            # Plugins Windows
+                            win_plugs = windows_dir / "plugins"
+                            win_plugs.mkdir(parents=True, exist_ok=True)
+                            if (target_dir / "plugins" / "modelpool.mjs").exists():
+                                shutil.copy2(target_dir / "plugins" / "modelpool.mjs", win_plugs / "modelpool.mjs")
+                                shutil.copy2(target_dir / "plugins" / "modelpool.mjs", win_plugs / "modelpool-fallback.mjs")
+                            if (target_dir / "rate-limit-fallback.json").exists():
+                                shutil.copy2(target_dir / "rate-limit-fallback.json", windows_dir / "rate-limit-fallback.json")
+                            win_synced_msg = f" + synchronisé avec OpenCode Windows ({windows_dir})"
+                        except Exception:
+                            pass
+
+                report = self._build_report_unlocked(
+                    allow_fallback=allow_fallback,
+                    filter_by_keys=filter_by_keys,
+                    custom_priority=custom_priority,
+                )
+                link_type = "lien symbolique" if use_symlink else "copie directe"
+                msg = f"Intégration OpenCode réussie dans {config_target_path} ({link_type}){win_synced_msg}."
+                return OperationResult(True, msg, report=report)
+            except Exception as error:
+                return OperationResult(False, f"Échec de l'intégration OpenCode : {error}")
+
+    def watch_and_sync(
+        self,
+        export_path: str | Path | None = None,
+        interval_seconds: float = 2.0,
+        stop_event: Optional[threading.Event] = None,
+        on_change: Optional[Callable[[str], None]] = None,
+    ) -> None:
+        """Surveille les modifications de configuration et synchronise OpenCode en continu."""
+        watched_files = [
+            self.agents_path,
+            self.models_path,
+            self.cooldown_path,
+        ]
+        last_mtimes: dict[Path, float] = {}
+        for p in watched_files:
+            if p.exists():
+                last_mtimes[p] = p.stat().st_mtime
+
+        while stop_event is None or not stop_event.is_set():
+            time.sleep(interval_seconds)
+            changed = False
+            for p in watched_files:
+                if p.exists():
+                    current_mtime = p.stat().st_mtime
+                    if p not in last_mtimes or current_mtime > last_mtimes[p]:
+                        last_mtimes[p] = current_mtime
+                        changed = True
+            if changed:
+                res = self.export_config(path=export_path)
+                if on_change:
+                    on_change(res.message)
+            if stop_event and stop_event.is_set():
+                break
 
     def update_agent_requirement(
         self,

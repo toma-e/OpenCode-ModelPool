@@ -13,7 +13,7 @@ from src.service import ApplicationService, FleetReport, load_data
 LOGGER = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_SERVE_PORT = 8765
-__all__ = ["BASE_DIR", "build_parser", "load_data", "main", "render_results", "run"]
+__all__ = ["BASE_DIR", "build_parser", "cli_entrypoint", "load_data", "main", "render_results", "run"]
 
 
 def _valid_port(value: str) -> int:
@@ -175,6 +175,51 @@ def build_parser() -> argparse.ArgumentParser:
         help="Ajoute un agent à partir d'un preset (ex: --add-preset code_reviewer [nom_agent]).",
     )
     parser.add_argument(
+        "--integrate",
+        action="store_true",
+        help="Intègre automatiquement ModelPool dans OpenCode (configuration, plugin de repli, commandes slash et serveur MCP).",
+    )
+    parser.add_argument(
+        "--global",
+        dest="integrate_global",
+        action="store_true",
+        default=True,
+        help="Cible l'environnement utilisateur global OpenCode (~/.config/opencode) [défaut].",
+    )
+    parser.add_argument(
+        "--windows",
+        action="store_true",
+        help="Cible l'installation OpenCode sous Windows (/mnt/c/Users/*/.config/opencode) depuis WSL.",
+    )
+    parser.add_argument(
+        "--project",
+        dest="integrate_project",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="Cible un projet OpenCode spécifique (ex: /chemin/vers/mon-projet/.opencode).",
+    )
+    parser.add_argument(
+        "--symlink",
+        action="store_true",
+        help="Utilise un lien symbolique vers la configuration du dépôt au lieu d'une copie directe.",
+    )
+    parser.add_argument(
+        "--no-mcp",
+        action="store_true",
+        help="Désactive l'enregistrement du serveur MCP ModelPool dans opencode.json.",
+    )
+    parser.add_argument(
+        "--watch",
+        action="store_true",
+        help="Surveille les modifications de configuration et synchronise OpenCode en continu.",
+    )
+    parser.add_argument(
+        "--mcp",
+        action="store_true",
+        help="Démarre le serveur Model Context Protocol (MCP) en mode stdio pour OpenCode.",
+    )
+    parser.add_argument(
         "--serve",
         nargs="?",
         const=DEFAULT_SERVE_PORT,
@@ -240,6 +285,63 @@ def run(args: argparse.Namespace, base_dir: Path = BASE_DIR) -> int:
     custom_priority: list[str] | None = None
     if getattr(args, "provider_priority", None):
         custom_priority = [p.strip().lower() for p in args.provider_priority.split(",") if p.strip()]
+
+    if getattr(args, "mcp", False):
+        from src.mcp_server import run_mcp_server
+        run_mcp_server(service)
+        return 0
+
+    if getattr(args, "integrate", False):
+        if getattr(args, "windows", False):
+            target_mode = "windows"
+        elif getattr(args, "integrate_project", None):
+            target_mode = "project"
+        else:
+            target_mode = "global"
+        res = service.integrate_with_opencode(
+            target=target_mode,
+            project_path=args.integrate_project,
+            use_symlink=getattr(args, "symlink", False),
+            enable_mcp=not getattr(args, "no_mcp", False),
+            enable_commands=True,
+            enable_fallback_plugin=True,
+            allow_fallback=allow_fallback,
+            filter_by_keys=filter_by_keys,
+            custom_priority=custom_priority,
+        )
+        if not res.ok:
+            print(f"❌ {res.message}", file=sys.stderr)
+            return 1
+        print(f"🚀 {res.message}")
+        if res.report:
+            render_results(res.report)
+        if getattr(args, "watch", False):
+            target_cfg = (
+                args.integrate_project
+                if args.integrate_project
+                else (Path.home() / ".config" / "opencode" / "opencode.json")
+            )
+            print(f"\n👀 Mode surveillance activé pour {target_cfg} (Ctrl+C pour arrêter)...")
+            try:
+                service.watch_and_sync(
+                    export_path=target_cfg,
+                    on_change=lambda msg: print(f"🔄 [Watch] Configuration ré-exportée : {msg}"),
+                )
+            except KeyboardInterrupt:
+                print("\n🛑 Surveillance interrompue.")
+        return 0
+
+    if getattr(args, "watch", False):
+        target_cfg = args.export if args.export else "config/opencode.json"
+        print(f"\n👀 Mode surveillance activé pour {target_cfg} (Ctrl+C pour arrêter)...")
+        try:
+            service.watch_and_sync(
+                export_path=target_cfg,
+                on_change=lambda msg: print(f"🔄 [Watch] Configuration ré-exportée : {msg}"),
+            )
+        except KeyboardInterrupt:
+            print("\n🛑 Surveillance interrompue.")
+        return 0
 
     if getattr(args, "status_keys", False):
         creds = service.get_providers_status()
@@ -508,6 +610,11 @@ def run(args: argparse.Namespace, base_dir: Path = BASE_DIR) -> int:
 def main(argv: Sequence[str] | None = None) -> int:
     """Point d'entrée CLI testable ; renvoie 0 en cas de succès."""
     return run(build_parser().parse_args(argv))
+
+
+def cli_entrypoint() -> None:
+    """Point d'entrée console_scripts (ex: pip install .)."""
+    raise SystemExit(main())
 
 
 if __name__ == "__main__":

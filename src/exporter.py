@@ -22,6 +22,23 @@ KNOWN_DIRECT_PROVIDERS = frozenset({
     "ollama", "mistral", "groq", "google", "anthropic", "cerebras"
 })
 
+# Commandes slash OpenCode déclarées nativement dans opencode.json
+DEFAULT_OPENCODE_COMMANDS: Dict[str, Dict[str, Any]] = {
+    "modelpool": {
+        "description": "Statut ModelPool (modèles affectés, coûts et alertes)",
+        "template": "Affiche le statut actuel de ModelPool en listant les modèles affectés à build, plan, explore et general ainsi que les alertes actives.",
+    },
+    "modelpool-sync": {
+        "description": "Synchronisation du catalogue ModelPool et rafraîchissement d'OpenCode",
+        "template": "Exécute la synchronisation du catalogue ModelPool (--sync-if-stale) et ré-exporte la configuration des modèles.",
+    },
+    "modelpool-failover": {
+        "description": "Bascule un agent sur son modèle de repli en cas de quota ou saturation",
+        "template": "Bascule l'agent $ARGUMENTS sur son modèle de secours ModelPool.",
+    },
+}
+
+
 
 def format_opencode_model_id(
     model_id: str,
@@ -357,6 +374,9 @@ def build_opencode_config(
     base_config: Optional[Dict[str, Any]] = None,
     default_provider_prefix: str = "openrouter",
     enable_fallback_plugin: bool = True,
+    enable_commands: bool = False,
+    mcp_servers: Optional[Dict[str, Any]] = None,
+    local_plugin_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Construit le dictionnaire de configuration strictement conforme au schéma OpenCode.
 
@@ -369,6 +389,9 @@ def build_opencode_config(
         base_config: Configuration OpenCode de base optionnelle à enrichir (ex: permissions, providers).
         default_provider_prefix: Préfixe du fournisseur OpenCode pour router les modèles (défaut 'openrouter').
         enable_fallback_plugin: Active le plugin de repli automatique sur erreur (@azumag/opencode-rate-limit-fallback).
+        enable_commands: Déclare les commandes slash OpenCode (/modelpool, /modelpool-sync, /modelpool-failover).
+        mcp_servers: Serveurs Model Context Protocol (MCP) à déclarer sous la clé 'mcp'.
+        local_plugin_path: Chemin relatif ou absolu d'un plugin local à inclure dans 'plugins'.
 
     Returns:
         Dictionnaire conforme au schéma officiel OpenCode.
@@ -451,6 +474,30 @@ def build_opencode_config(
                 final_config["plugin"].append(fallback_plugin_pkg)
         else:
             final_config["plugin"] = [fallback_plugin_pkg]
+
+    # Enregistrement d'un plugin local personnalisé (ex: ./plugins/modelpool.mjs)
+    if local_plugin_path:
+        target_plugin_key = "plugins" if "plugins" in final_config else "plugin"
+        curr_plugins = list(final_config.get(target_plugin_key, [])) if isinstance(final_config.get(target_plugin_key), list) else []
+        if local_plugin_path not in curr_plugins and not any(
+            isinstance(p, str) and p.endswith(local_plugin_path.lstrip("./")) for p in curr_plugins
+        ):
+            curr_plugins.append(local_plugin_path)
+        final_config[target_plugin_key] = curr_plugins
+
+    # Enregistrement des commandes slash OpenCode
+    if enable_commands:
+        existing_commands = dict(final_config.get("command", {})) if isinstance(final_config.get("command"), dict) else {}
+        for cmd_name, cmd_body in DEFAULT_OPENCODE_COMMANDS.items():
+            if cmd_name not in existing_commands:
+                existing_commands[cmd_name] = dict(cmd_body)
+        final_config["command"] = existing_commands
+
+    # Enregistrement des serveurs MCP
+    if mcp_servers:
+        existing_mcp = dict(final_config.get("mcp", {})) if isinstance(final_config.get("mcp"), dict) else {}
+        existing_mcp.update(mcp_servers)
+        final_config["mcp"] = existing_mcp
 
     return final_config
 
@@ -686,6 +733,30 @@ function notifyModelPoolQuarantine(failedTarget, errorReason) {{
   }}
 }}
 
+let checkedStale = false;
+function checkStaleCatalog() {{
+  if (checkedStale || !CONFIG.projectDir) return;
+  checkedStale = true;
+  try {{
+    const mainScript = path.join(CONFIG.projectDir, "main.py");
+    const args = [
+      mainScript,
+      "--sync-if-stale",
+      "14",
+      "--export",
+      CONFIG.exportPath || "config/opencode.json",
+    ];
+    const child = spawn("python3", args, {{
+      cwd: CONFIG.projectDir,
+      stdio: "ignore",
+      detached: true,
+    }});
+    child.unref();
+  }} catch (_err) {{
+    // Ne jamais bloquer la session OpenCode si l'appel d'arrière-plan échoue
+  }}
+}}
+
 export const ModelPoolFallbackPlugin = async ({{ client }}) => {{
   const cooldownUntil = new Map();
   const activeHandling = new Set();
@@ -777,6 +848,9 @@ export const ModelPoolFallbackPlugin = async ({{ client }}) => {{
   return {{
     event: async ({{ event }}) => {{
       if (!event || !event.type) return;
+      if (event.type === "session.created" || event.type === "session.start") {{
+        checkStaleCatalog();
+      }}
       const props = event.properties || event.data || event || {{}};
       const sessionID = props.sessionID || props.id || props.session?.id || event.sessionID || event.session?.id;
       const agent = props.agent || event.agent;

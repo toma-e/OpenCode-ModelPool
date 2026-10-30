@@ -1,6 +1,25 @@
-# Lanceurs pour l'Interface Web Locale
+# Scripts Lanceurs & Intégration OpenCode
 
-Ce dossier contient des scripts pour démarrer et arrêter facilement l'interface web locale de OpenCode-ModelPool.
+Ce dossier contient des scripts pour démarrer l'interface web et intégrer facilement OpenCode-ModelPool dans OpenCode.
+
+## 🔗 Intégration en 1 clic dans OpenCode
+
+### Windows (PowerShell)
+Exécutez dans PowerShell :
+```powershell
+.\integrate-opencode.ps1
+```
+Configure automatiquement OpenCode sous Windows et sous WSL (commandes slash `/modelpool`, serveur MCP et plugin de repli).
+
+### Linux / macOS / WSL Direct
+Exécutez dans un terminal :
+```bash
+./integrate-opencode.sh
+```
+
+---
+
+## 🌐 Interface Web Locale
 
 ## Windows (via WSL)
 

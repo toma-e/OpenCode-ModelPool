@@ -20,6 +20,10 @@ classifiers = [
 ]
 dependencies = []
 
+[project.scripts]
+modelpool = "main:cli_entrypoint"
+opencode-modelpool = "main:cli_entrypoint"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
