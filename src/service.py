@@ -399,10 +399,11 @@ class ApplicationService:
                 f"Quarantaine active ({c.reason_label}) sur '{c.target_id}' — réhabilitation dans ~{rem_min} min."
             )
 
-        route_cache: dict[str, ExecutionTarget] = {}
+        route_cache: dict[tuple[str, str], ExecutionTarget] = {}
 
-        def _route(model: Model) -> ExecutionTarget:
-            cached = route_cache.get(model.id)
+        def _route(model: Model, agent_req: Optional[AgentRequirement] = None) -> ExecutionTarget:
+            cache_key = (model.id, agent_req.name if agent_req else "")
+            cached = route_cache.get(cache_key)
             if cached is None:
                 cached = resolve_model_execution_target(
                     reference_model=model,
@@ -411,8 +412,9 @@ class ApplicationService:
                     ollama_models=ollama_models,
                     direct_access=direct_access,
                     excluded_targets=excluded_targets,
+                    agent_requirement=agent_req,
                 )
-                route_cache[model.id] = cached
+                route_cache[cache_key] = cached
             return cached
 
         normalized_priority = [PROVIDER_ALIASES.get(p.lower(), p.lower()) for p in priority]
@@ -468,10 +470,12 @@ class ApplicationService:
         # Résolution des canaux d'exécution selon l'ordre de priorité des clés
         execution_targets: list[Optional[ExecutionTarget]] = []
         adjusted_results: list[SelectionResult] = []
+        agent_by_name = {a.name: a for a in agents}
 
         for res in results:
+            agent = agent_by_name.get(res.agent_name)
             if res.model:
-                target = _route(res.model)
+                target = _route(res.model, agent)
                 execution_targets.append(target)
                 # Si le modèle est dérouté sur Ollama local, ajuster le coût à 0.0 pour le budget
                 effective_model = res.model
@@ -507,9 +511,10 @@ class ApplicationService:
         for res, target in zip(results, execution_targets):
             if res.model is None or target is None:
                 continue
+            agent = agent_by_name.get(res.agent_name)
             candidate_targets: list[tuple[str, str]] = []
             for candidate in res.candidates[1:]:
-                cand_target = _route(candidate)
+                cand_target = _route(candidate, agent)
                 if is_model_in_cooldown(
                     candidate.id,
                     cand_target.formatted_model_id,
@@ -798,6 +803,14 @@ class ApplicationService:
                     base_config if base_config is not None else self.load_base_opencode_config()
                 )
                 target_path = self.resolve_export_path(path)
+                effective_local_plugin = local_plugin_path
+                if effective_local_plugin and effective_local_plugin.startswith("./"):
+                    try:
+                        global_cfg_dir = (Path.home() / ".config" / "opencode").resolve()
+                        if target_path.resolve().parent == global_cfg_dir:
+                            effective_local_plugin = str(global_cfg_dir / effective_local_plugin.lstrip("./"))
+                    except OSError:
+                        pass
                 # L'identifiant exporté est celui du canal retenu (ex: mistral/..., google/...)
                 export_results = [
                     replace(res, model=replace(res.model, id=target.formatted_model_id))
@@ -815,7 +828,7 @@ class ApplicationService:
                     default_provider_prefix=default_provider_prefix,
                     enable_commands=enable_commands,
                     mcp_servers=mcp_servers,
-                    local_plugin_path=local_plugin_path,
+                    local_plugin_path=effective_local_plugin,
                 )
 
                 # Validation stricte du schéma avant toute écriture disque (MP-206)
@@ -1068,7 +1081,13 @@ class ApplicationService:
                         }
                     }
 
-                local_plugin = "./plugins/modelpool.mjs" if enable_fallback_plugin else None
+                is_global_target = target == "global" or str(target_dir).startswith(str(Path.home() / ".config" / "opencode"))
+                if is_global_target and enable_fallback_plugin:
+                    local_plugin = str((target_dir / "plugins" / "modelpool.mjs").resolve())
+                elif enable_fallback_plugin:
+                    local_plugin = "./plugins/modelpool.mjs"
+                else:
+                    local_plugin = None
 
                 # 4. Déploiement des commandes Markdown dans commands/
                 if enable_commands:

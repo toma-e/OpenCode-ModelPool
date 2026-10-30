@@ -345,6 +345,82 @@ class TestRouter(unittest.TestCase):
         self.assertEqual(target_simple.channel_provider, "openrouter")
         self.assertEqual(target_simple.formatted_model_id, "openrouter/some-custom-model")
 
+    def test_canonicalize_and_match_opencode_direct_models(self) -> None:
+        """Vérifie la normalisation et la résolution d'alias des modèles directs OpenCode."""
+        mistral_available = [
+            "codestral-latest",
+            "mistral-large-4-0",
+            "mistral-large-4",
+            "ministral-14b-latest",
+        ]
+        # mistralai/mistral-large-4-0 doit privilégier mistral-large-4 pour la compatibilité OpenCode
+        matched = match_direct_model_id("mistralai/mistral-large-4-0", mistral_available, opencode_prefix="mistral")
+        self.assertEqual(matched, "mistral-large-4")
+
+        # ministral-14b-latest doit être canonisé en ministral-14b-2512
+        matched_mini = match_direct_model_id("mistralai/ministral-14b-latest", mistral_available, opencode_prefix="mistral")
+        self.assertEqual(matched_mini, "ministral-14b-2512")
+
+    def test_resolve_model_execution_target_groq_tpm_constraint(self) -> None:
+        """Vérifie qu'un agent exigeant un large contexte (>8k) n'est pas dérouté sur Groq à cause du TPM."""
+        from src.selector import AgentRequirement
+
+        ref_gpt_oss = Model(
+            id="openai/gpt-oss-120b",
+            provider="openai",
+            tier="pay_as_you_go",
+            cost_input_per_m=0.15,
+            cost_output_per_m=0.6,
+            context_window=131072,
+            supports_tools=True,
+            complexity_score=4,
+        )
+        creds = {
+            "groq": ProviderCredentials("groq", True, "env", "gsk-***"),
+            "openrouter": ProviderCredentials("openrouter", True, "env", "sk-***"),
+        }
+        direct_access = {"groq": {"openai/gpt-oss-120b"}}
+
+        # Agent build avec un large contexte de 64k tokens
+        build_agent = AgentRequirement.from_dict({
+            "name": "build",
+            "description": "Agent de code",
+            "min_complexity": 4,
+            "max_complexity": 5,
+            "requires_tools": True,
+            "min_context_window": 64000,
+        })
+
+        # Avec la contrainte d'agent build, Groq doit être ignoré au profit d'OpenRouter
+        target_build = resolve_model_execution_target(
+            reference_model=ref_gpt_oss,
+            provider_priority=["groq", "openrouter"],
+            credentials=creds,
+            direct_access=direct_access,
+            agent_requirement=build_agent,
+        )
+        self.assertEqual(target_build.channel_provider, "openrouter")
+        self.assertEqual(target_build.formatted_model_id, "openrouter/openai/gpt-oss-120b")
+
+        # Petit agent explore avec 4000 tokens de contexte : Groq est autorisé
+        explore_agent = AgentRequirement.from_dict({
+            "name": "explore",
+            "description": "Agent explore",
+            "min_complexity": 2,
+            "max_complexity": 3,
+            "requires_tools": False,
+            "min_context_window": 4000,
+        })
+        target_explore = resolve_model_execution_target(
+            reference_model=ref_gpt_oss,
+            provider_priority=["groq", "openrouter"],
+            credentials=creds,
+            direct_access=direct_access,
+            agent_requirement=explore_agent,
+        )
+        self.assertEqual(target_explore.channel_provider, "groq")
+        self.assertEqual(target_explore.formatted_model_id, "groq/openai/gpt-oss-120b")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -475,13 +475,17 @@ def build_opencode_config(
         else:
             final_config["plugin"] = [fallback_plugin_pkg]
 
-    # Enregistrement d'un plugin local personnalisé (ex: ./plugins/modelpool.mjs)
+    # Enregistrement d'un plugin local personnalisé (ex: ./plugins/modelpool.mjs ou chemin absolu)
     if local_plugin_path:
         target_plugin_key = "plugins" if "plugins" in final_config else "plugin"
         curr_plugins = list(final_config.get(target_plugin_key, [])) if isinstance(final_config.get(target_plugin_key), list) else []
-        if local_plugin_path not in curr_plugins and not any(
-            isinstance(p, str) and p.endswith(local_plugin_path.lstrip("./")) for p in curr_plugins
-        ):
+        # Nettoyage des anciennes références relatives à modelpool.mjs si un chemin absolu est fourni
+        if str(local_plugin_path).startswith("/"):
+            curr_plugins = [
+                p for p in curr_plugins
+                if not (isinstance(p, str) and p.strip() in ("./plugins/modelpool.mjs", "plugins/modelpool.mjs"))
+            ]
+        if local_plugin_path not in curr_plugins:
             curr_plugins.append(local_plugin_path)
         final_config[target_plugin_key] = curr_plugins
 

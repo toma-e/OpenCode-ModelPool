@@ -471,6 +471,50 @@ class TestService(unittest.TestCase):
             unknown_res = service.add_agent_from_preset("inconnu")
             self.assertFalse(unknown_res.ok)
 
+    def test_export_global_target_uses_absolute_plugin_path(self) -> None:
+        """Vérifie que l'export vers la config globale OpenCode convertit ./plugins/... en chemin absolu."""
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fake_home = tmp_path / "home"
+            fake_home.mkdir(parents=True)
+            global_dir = fake_home / ".config" / "opencode"
+            global_dir.mkdir(parents=True)
+
+            # Préparer un service
+            models_dir = tmp_path / "data"
+            models_dir.mkdir(parents=True)
+            (models_dir / "models.json").write_text(
+                json.dumps({"models": [{"id": "m1", "provider": "p1", "tier": "free_tier", "cost_input_per_m": 0, "cost_output_per_m": 0, "context_window": 8000, "supports_tools": True, "complexity_score": 3}]}),
+                encoding="utf-8",
+            )
+            cfg_dir = tmp_path / "config"
+            cfg_dir.mkdir(parents=True)
+            (cfg_dir / "agents_requirements.json").write_text(
+                json.dumps({"agents": [{
+                    "name": "build",
+                    "min_complexity": 3,
+                    "max_complexity": 3,
+                    "requires_tools": True,
+                    "prefer_free": False,
+                    "allow_free": True,
+                    "sort_strategy": "lowest_cost",
+                }]}),
+                encoding="utf-8",
+            )
+
+            service = ApplicationService(base_dir=tmp_path)
+            with patch("pathlib.Path.home", return_value=fake_home):
+                target_json = global_dir / "opencode.json"
+                res = service.export_config(path=target_json, local_plugin_path="./plugins/modelpool.mjs")
+                self.assertTrue(res.ok)
+                saved_cfg = json.loads(target_json.read_text(encoding="utf-8"))
+                plugins = saved_cfg.get("plugin") or saved_cfg.get("plugins") or []
+                # Le plugin doit être sous forme de chemin absolu
+                expected_abs = str(global_dir / "plugins" / "modelpool.mjs")
+                self.assertIn(expected_abs, plugins)
+                self.assertNotIn("./plugins/modelpool.mjs", plugins)
+
 
 if __name__ == "__main__":
     unittest.main()
