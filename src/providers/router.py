@@ -11,6 +11,7 @@ du fournisseur pour la clé détectée.
 
 from __future__ import annotations
 
+import functools
 import re
 from dataclasses import dataclass
 from typing import Callable, Collection, Dict, Mapping, Optional, Sequence
@@ -85,6 +86,7 @@ DIRECT_CHANNELS: Dict[str, _DirectChannel] = {
 }
 
 
+@functools.lru_cache(maxsize=2048)
 def normalize_model_basename(model_id: str) -> str:
     """Extrait le nom canonique épuré d'un modèle pour comparaison multi-fournisseurs.
 
