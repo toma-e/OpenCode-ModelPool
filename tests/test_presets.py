@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from src.presets import BUILTIN_PRESETS, create_agent_from_preset, get_available_presets
+from src.presets import create_agent_from_preset, get_available_presets
 from src.selector import AgentRequirement
 
 
