@@ -19,7 +19,6 @@ from src.cooldown import (
     REASON_QUOTA_EXCEEDED,
     REASON_RATE_LIMIT,
     REASON_SERVICE_UNAVAILABLE,
-    CooldownEntry,
     classify_error_reason,
     create_cooldown_entry,
     is_model_in_cooldown,

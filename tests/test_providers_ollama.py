@@ -5,7 +5,6 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from src.providers.ollama import (
-    fetch_ollama_tags,
     get_ollama_models,
     parse_ollama_model,
 )
