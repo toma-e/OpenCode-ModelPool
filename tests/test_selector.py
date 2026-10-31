@@ -5,6 +5,7 @@ import unittest
 from src.selector import (
     AgentRequirement,
     Model,
+    _is_non_llm_model_by_id_cached,
     common_constraint_violations,
     is_model_compatible,
     is_non_llm_model,
@@ -952,6 +953,27 @@ class TestSelector(unittest.TestCase):
                 "reliability_preference": "super_safe",
             })
         self.assertIn("reliability_preference", str(ctx.exception))
+
+    def test_is_non_llm_model_caching_performance(self) -> None:
+        """⚡ Vérifie que la détection non-LLM par ID utilise le cache mémoïsé LRU efficacement."""
+        _is_non_llm_model_by_id_cached.cache_clear()
+        initial_info = _is_non_llm_model_by_id_cached.cache_info()
+        self.assertEqual(initial_info.hits, 0)
+        self.assertEqual(initial_info.misses, 0)
+
+        # Premier appel -> miss
+        res1 = is_non_llm_model("google/gemini-2.5-flash")
+        self.assertFalse(res1)
+        self.assertEqual(_is_non_llm_model_by_id_cached.cache_info().misses, 1)
+
+        # Deuxième appel -> hit
+        res2 = is_non_llm_model("google/gemini-2.5-flash")
+        self.assertFalse(res2)
+        self.assertEqual(_is_non_llm_model_by_id_cached.cache_info().hits, 1)
+
+        # Appel avec modalities explicites -> ne bypass pas la cohérence
+        res3 = is_non_llm_model("google/gemini-2.5-flash", output_modalities=["audio"])
+        self.assertTrue(res3)
 
 
 if __name__ == "__main__":
