@@ -22,6 +22,9 @@ class TestProviderDetector(unittest.TestCase):
         self.assertIsNone(mask_key(None))
         self.assertIsNone(mask_key(""))
         self.assertEqual(mask_key("short"), "****")
+        self.assertEqual(mask_key("123456"), "****")
+        self.assertEqual(mask_key("123456789"), "12...89")
+        self.assertEqual(mask_key("mis_12345678"), "mi...78")
         self.assertEqual(mask_key("sk-ant-api03-123456789"), "sk-a...6789")
 
     def test_parse_dotenv_file(self) -> None:
@@ -63,7 +66,7 @@ class TestProviderDetector(unittest.TestCase):
             )
             self.assertTrue(creds["mistralai"].is_available)
             self.assertEqual(creds["mistralai"].source, "env")
-            self.assertEqual(creds["mistralai"].masked_key, "mis_...5678")
+            self.assertEqual(creds["mistralai"].masked_key, "mi...78")
 
             # Ollama joignable
             self.assertTrue(creds["ollama"].is_available)
