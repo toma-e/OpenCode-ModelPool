@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generated_at": "2026-10-30T18:17:47.485758+00:00",
+  "generated_at": "2026-10-31T18:02:07.015676+00:00",
   "metadata": {
     "generator": "OpenCode-ModelPool",
     "total_agents": 9,
@@ -179,11 +179,11 @@
         "supports_reasoning": true
       },
       "selection_status": "exact",
-      "selection_reason": "Correspondance exacte avec les exigences.",
+      "selection_reason": "Correspondance exacte avec les exigences (fiabilité: prefer_free).",
       "fallback_chain": [
+        "mistral/mistral-large-4",
         "openrouter/deepseek/deepseek-v3.2",
-        "openrouter/deepseek/deepseek-v3.2-exp",
-        "openrouter/openai/gpt-oss-120b"
+        "openrouter/deepseek/deepseek-v3.2-exp"
       ]
     },
     "plan": {
@@ -213,11 +213,11 @@
         "supports_reasoning": true
       },
       "selection_status": "exact",
-      "selection_reason": "Correspondance exacte avec les exigences.",
+      "selection_reason": "Correspondance exacte avec les exigences (fiabilité: prefer_free).",
       "fallback_chain": [
+        "mistral/mistral-large-4",
         "openrouter/deepseek/deepseek-v3.2",
-        "openrouter/deepseek/deepseek-v3.2-exp",
-        "openrouter/openai/gpt-oss-120b"
+        "openrouter/deepseek/deepseek-v3.2-exp"
       ]
     },
     "explore": {
@@ -247,11 +247,11 @@
         "supports_reasoning": true
       },
       "selection_status": "exact",
-      "selection_reason": "Correspondance exacte avec les exigences.",
+      "selection_reason": "Correspondance exacte avec les exigences (fiabilité: prefer_free).",
       "fallback_chain": [
-        "openrouter/google/gemma-4-26b-a4b-it:free",
-        "ollama/qwen2.5-coder:7b",
-        "openrouter/google/gemma-4-31b-it:free"
+        "google/gemma-4-26b-a4b-it",
+        "openrouter/google/gemma-4-31b-it:free",
+        "mistral/ministral-3b-2512"
       ]
     },
     "general": {
@@ -281,11 +281,11 @@
         "supports_reasoning": true
       },
       "selection_status": "exact",
-      "selection_reason": "Correspondance exacte avec les exigences.",
+      "selection_reason": "Correspondance exacte avec les exigences (fiabilité: prefer_free).",
       "fallback_chain": [
-        "openrouter/google/gemma-4-26b-a4b-it:free",
+        "google/gemma-4-26b-a4b-it",
         "openrouter/google/gemma-4-31b-it:free",
-        "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
+        "mistral/mistral-large-4"
       ]
     },
     "test_runner": {
@@ -315,11 +315,11 @@
         "supports_reasoning": true
       },
       "selection_status": "exact",
-      "selection_reason": "Correspondance exacte avec les exigences.",
+      "selection_reason": "Correspondance exacte avec les exigences (fiabilité: prefer_free).",
       "fallback_chain": [
-        "openrouter/google/gemma-4-26b-a4b-it:free",
+        "google/gemma-4-26b-a4b-it",
         "openrouter/google/gemma-4-31b-it:free",
-        "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
+        "mistral/ministral-8b-2512"
       ]
     },
     "doc_writer": {
@@ -349,11 +349,11 @@
         "supports_reasoning": true
       },
       "selection_status": "exact",
-      "selection_reason": "Correspondance exacte avec les exigences.",
+      "selection_reason": "Correspondance exacte avec les exigences (fiabilité: prefer_free).",
       "fallback_chain": [
-        "openrouter/google/gemma-4-26b-a4b-it:free",
-        "ollama/gemma3:270m",
-        "openrouter/google/gemma-4-31b-it:free"
+        "google/gemma-4-26b-a4b-it",
+        "openrouter/google/gemma-4-31b-it:free",
+        "mistral/ministral-8b-latest"
       ]
     },
     "fast_researcher": {
@@ -385,9 +385,9 @@
       "selection_status": "exact",
       "selection_reason": "Correspondance exacte avec les exigences (fiabilité: prefer_free).",
       "fallback_chain": [
+        "google/gemma-4-26b-a4b-it",
         "openrouter/thinkingmachines/inkling-small:free",
-        "openrouter/thinkingmachines/inkling:free",
-        "openrouter/nvidia/nemotron-3.5-lightning:free"
+        "mistral/ministral-3b-2512"
       ]
     },
     "code_reviewer": {
@@ -417,11 +417,11 @@
         "supports_reasoning": true
       },
       "selection_status": "exact",
-      "selection_reason": "Correspondance exacte avec les exigences.",
+      "selection_reason": "Correspondance exacte avec les exigences (fiabilité: prefer_free).",
       "fallback_chain": [
+        "mistral/mistral-large-4",
         "openrouter/deepseek/deepseek-v3.2",
-        "openrouter/deepseek/deepseek-v3.2-exp",
-        "openrouter/openai/gpt-oss-120b"
+        "openrouter/deepseek/deepseek-v3.2-exp"
       ]
     },
     "coder_heavy": {
@@ -451,11 +451,11 @@
         "supports_reasoning": true
       },
       "selection_status": "exact",
-      "selection_reason": "Correspondance exacte avec les exigences.",
+      "selection_reason": "Correspondance exacte avec les exigences (fiabilité: prefer_free).",
       "fallback_chain": [
+        "mistral/mistral-large-4",
         "openrouter/deepseek/deepseek-v3.2",
-        "openrouter/deepseek/deepseek-v3.2-exp",
-        "openrouter/openai/gpt-oss-120b"
+        "openrouter/deepseek/deepseek-v3.2-exp"
       ]
     }
   }

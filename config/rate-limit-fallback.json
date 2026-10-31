@@ -2,6 +2,10 @@
   "enabled": true,
   "fallbackModels": [
     {
+      "providerID": "mistral",
+      "modelID": "mistral-large-4"
+    },
+    {
       "providerID": "openrouter",
       "modelID": "deepseek/deepseek-v3.2"
     },
@@ -10,167 +14,155 @@
       "modelID": "deepseek/deepseek-v3.2-exp"
     },
     {
-      "providerID": "openrouter",
-      "modelID": "openai/gpt-oss-120b"
-    },
-    {
-      "providerID": "openrouter",
-      "modelID": "google/gemma-4-26b-a4b-it:free"
-    },
-    {
-      "providerID": "ollama",
-      "modelID": "qwen2.5-coder:7b"
+      "providerID": "google",
+      "modelID": "gemma-4-26b-a4b-it"
     },
     {
       "providerID": "openrouter",
       "modelID": "google/gemma-4-31b-it:free"
     },
     {
-      "providerID": "openrouter",
-      "modelID": "nvidia/nemotron-3-ultra-550b-a55b:free"
+      "providerID": "mistral",
+      "modelID": "ministral-3b-2512"
     },
     {
-      "providerID": "ollama",
-      "modelID": "gemma3:270m"
+      "providerID": "mistral",
+      "modelID": "ministral-8b-2512"
+    },
+    {
+      "providerID": "mistral",
+      "modelID": "ministral-8b-latest"
     },
     {
       "providerID": "openrouter",
       "modelID": "thinkingmachines/inkling-small:free"
-    },
-    {
-      "providerID": "openrouter",
-      "modelID": "thinkingmachines/inkling:free"
-    },
-    {
-      "providerID": "openrouter",
-      "modelID": "nvidia/nemotron-3.5-lightning:free"
     }
   ],
   "agentFallbackModels": {
     "build": [
       {
+        "providerID": "mistral",
+        "modelID": "mistral-large-4"
+      },
+      {
         "providerID": "openrouter",
         "modelID": "deepseek/deepseek-v3.2"
       },
       {
         "providerID": "openrouter",
         "modelID": "deepseek/deepseek-v3.2-exp"
-      },
-      {
-        "providerID": "openrouter",
-        "modelID": "openai/gpt-oss-120b"
       }
     ],
     "plan": [
       {
+        "providerID": "mistral",
+        "modelID": "mistral-large-4"
+      },
+      {
         "providerID": "openrouter",
         "modelID": "deepseek/deepseek-v3.2"
       },
       {
         "providerID": "openrouter",
         "modelID": "deepseek/deepseek-v3.2-exp"
-      },
-      {
-        "providerID": "openrouter",
-        "modelID": "openai/gpt-oss-120b"
       }
     ],
     "explore": [
       {
-        "providerID": "openrouter",
-        "modelID": "google/gemma-4-26b-a4b-it:free"
-      },
-      {
-        "providerID": "ollama",
-        "modelID": "qwen2.5-coder:7b"
+        "providerID": "google",
+        "modelID": "gemma-4-26b-a4b-it"
       },
       {
         "providerID": "openrouter",
         "modelID": "google/gemma-4-31b-it:free"
+      },
+      {
+        "providerID": "mistral",
+        "modelID": "ministral-3b-2512"
       }
     ],
     "general": [
       {
-        "providerID": "openrouter",
-        "modelID": "google/gemma-4-26b-a4b-it:free"
+        "providerID": "google",
+        "modelID": "gemma-4-26b-a4b-it"
       },
       {
         "providerID": "openrouter",
         "modelID": "google/gemma-4-31b-it:free"
       },
       {
-        "providerID": "openrouter",
-        "modelID": "nvidia/nemotron-3-ultra-550b-a55b:free"
+        "providerID": "mistral",
+        "modelID": "mistral-large-4"
       }
     ],
     "test_runner": [
       {
-        "providerID": "openrouter",
-        "modelID": "google/gemma-4-26b-a4b-it:free"
+        "providerID": "google",
+        "modelID": "gemma-4-26b-a4b-it"
       },
       {
         "providerID": "openrouter",
         "modelID": "google/gemma-4-31b-it:free"
       },
       {
-        "providerID": "openrouter",
-        "modelID": "nvidia/nemotron-3-ultra-550b-a55b:free"
+        "providerID": "mistral",
+        "modelID": "ministral-8b-2512"
       }
     ],
     "doc_writer": [
       {
-        "providerID": "openrouter",
-        "modelID": "google/gemma-4-26b-a4b-it:free"
-      },
-      {
-        "providerID": "ollama",
-        "modelID": "gemma3:270m"
+        "providerID": "google",
+        "modelID": "gemma-4-26b-a4b-it"
       },
       {
         "providerID": "openrouter",
         "modelID": "google/gemma-4-31b-it:free"
+      },
+      {
+        "providerID": "mistral",
+        "modelID": "ministral-8b-latest"
       }
     ],
     "fast_researcher": [
+      {
+        "providerID": "google",
+        "modelID": "gemma-4-26b-a4b-it"
+      },
       {
         "providerID": "openrouter",
         "modelID": "thinkingmachines/inkling-small:free"
       },
       {
-        "providerID": "openrouter",
-        "modelID": "thinkingmachines/inkling:free"
-      },
-      {
-        "providerID": "openrouter",
-        "modelID": "nvidia/nemotron-3.5-lightning:free"
+        "providerID": "mistral",
+        "modelID": "ministral-3b-2512"
       }
     ],
     "code_reviewer": [
       {
+        "providerID": "mistral",
+        "modelID": "mistral-large-4"
+      },
+      {
         "providerID": "openrouter",
         "modelID": "deepseek/deepseek-v3.2"
       },
       {
         "providerID": "openrouter",
         "modelID": "deepseek/deepseek-v3.2-exp"
-      },
-      {
-        "providerID": "openrouter",
-        "modelID": "openai/gpt-oss-120b"
       }
     ],
     "coder_heavy": [
       {
+        "providerID": "mistral",
+        "modelID": "mistral-large-4"
+      },
+      {
         "providerID": "openrouter",
         "modelID": "deepseek/deepseek-v3.2"
       },
       {
         "providerID": "openrouter",
         "modelID": "deepseek/deepseek-v3.2-exp"
-      },
-      {
-        "providerID": "openrouter",
-        "modelID": "openai/gpt-oss-120b"
       }
     ]
   },

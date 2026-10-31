@@ -152,6 +152,24 @@ class TestWeb(unittest.TestCase):
         self.assertTrue(payload["is_valid"])
         self.assertIn("diff", payload)
 
+    def test_post_export_global_target(self) -> None:
+        """Vérifie que l'alias 'global' est accepté par POST /api/export sans écraser ~/.config."""
+        with patch.object(self.service, "export_config", return_value=self.service.export_config(path=self.directory / "fake_global.json")) as mock_export:
+            status, payload = self._post("/api/export", {"path": "global"})
+            self.assertEqual(status, 200)
+            self.assertTrue(payload["ok"])
+            mock_export.assert_called_once()
+            called_path = mock_export.call_args[1].get("path")
+            self.assertTrue(str(called_path).endswith(str(Path(".config") / "opencode" / "opencode.json")))
+
+    def test_post_integrate_endpoint(self) -> None:
+        """Vérifie l'endpoint POST /api/integrate vers un répertoire projet temporaire."""
+        target_dir = self.directory / "opencode_proj"
+        status, payload = self._post("/api/integrate", {"target": "project", "project_path": str(target_dir), "use_symlink": False})
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["ok"])
+        self.assertIn("Intégration OpenCode", payload["message"])
+
     def test_post_rejects_missing_json_content_type(self) -> None:
         request = urllib.request.Request(
             self.base + "/api/export",

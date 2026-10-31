@@ -153,8 +153,30 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
             self._send_operation(self.service.set_provider_priority(body["priority"], allow_fallback=fallback, filter_by_keys=filter_keys))
             return
         if parsed.path == "/api/diff":
+            target_path = None
+            if isinstance(body, dict) and "path" in body and isinstance(body["path"], str):
+                requested = body["path"].strip()
+                if ".." in requested:
+                    self._send_json(400, {"ok": False, "message": "Chemin non autorisé (traversée interdite)."})
+                    return
+                if requested in ("global", "~/.config/opencode", "~/.config/opencode/opencode.json"):
+                    target_path = Path.home() / ".config" / "opencode" / "opencode.json"
+                else:
+                    resolved = self.service.resolve_export_path(requested)
+                    project_root = self.service.base_dir.resolve()
+                    opencode_dir = (Path.home() / ".config" / "opencode").resolve()
+                    try:
+                        resolved.resolve().relative_to(project_root)
+                    except ValueError:
+                        try:
+                            resolved.resolve().relative_to(opencode_dir)
+                        except ValueError:
+                            self._send_json(403, {"ok": False, "message": "Chemin interdit en dehors du projet ou de ~/.config/opencode/."})
+                            return
+                    target_path = requested
             try:
                 diff_res = self.service.preview_export(
+                    path=target_path,
                     allow_fallback=fallback,
                     filter_by_keys=filter_keys,
                     custom_priority=custom_priority,
@@ -175,21 +197,46 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
                 if ".." in requested:
                     self._send_json(400, {"ok": False, "message": "Chemin d'export non autorisé (traversée interdite)."})
                     return
-                resolved = self.service.resolve_export_path(requested)
-                project_root = self.service.base_dir.resolve()
-                opencode_dir = (Path.home() / ".config" / "opencode").resolve()
-                try:
-                    resolved.resolve().relative_to(project_root)
-                except ValueError:
+                if requested in ("global", "~/.config/opencode", "~/.config/opencode/opencode.json"):
+                    export_path = str(Path.home() / ".config" / "opencode" / "opencode.json")
+                else:
+                    resolved = self.service.resolve_export_path(requested)
+                    project_root = self.service.base_dir.resolve()
+                    opencode_dir = (Path.home() / ".config" / "opencode").resolve()
                     try:
-                        resolved.resolve().relative_to(opencode_dir)
+                        resolved.resolve().relative_to(project_root)
                     except ValueError:
-                        self._send_json(403, {"ok": False, "message": "Export interdit en dehors du projet ou de ~/.config/opencode/."})
-                        return
-                export_path = requested
+                        try:
+                            resolved.resolve().relative_to(opencode_dir)
+                        except ValueError:
+                            self._send_json(403, {"ok": False, "message": "Export interdit en dehors du projet ou de ~/.config/opencode/."})
+                            return
+                    export_path = requested
             self._send_operation(
                 self.service.export_config(
                     path=export_path,
+                    allow_fallback=fallback,
+                    filter_by_keys=filter_keys,
+                    custom_priority=custom_priority,
+                )
+            )
+            return
+        if parsed.path == "/api/integrate":
+            target = "global"
+            use_symlink = True
+            project_path = None
+            if isinstance(body, dict):
+                if "target" in body and isinstance(body["target"], str):
+                    target = body["target"].strip()
+                if "project_path" in body and isinstance(body["project_path"], str):
+                    project_path = body["project_path"].strip()
+                if "use_symlink" in body and isinstance(body["use_symlink"], bool):
+                    use_symlink = body["use_symlink"]
+            self._send_operation(
+                self.service.integrate_with_opencode(
+                    target=target,
+                    project_path=project_path,
+                    use_symlink=use_symlink,
                     allow_fallback=fallback,
                     filter_by_keys=filter_keys,
                     custom_priority=custom_priority,

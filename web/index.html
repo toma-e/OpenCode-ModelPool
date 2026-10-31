@@ -348,7 +348,12 @@
       <button id="sync_or" type="button" title="Télécharge le catalogue public OpenRouter">Sync OpenRouter</button>
       <button id="sync_all" class="primary" type="button" title="Synchronise OpenRouter, Ollama et APIs directes">Sync Tous</button>
       <button id="preview_diff" type="button" title="Prévisualise le diff unifié OpenCode avant écriture">Prévisualiser</button>
-      <button id="export" type="button" title="Exporte vers config/opencode.json">Exporter</button>
+      <select id="export_target" title="Destination de l'exportation OpenCode" style="background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:0.35rem 0.5rem;font-size:0.85rem;">
+        <option value="global" selected>OpenCode Global (~/.config/opencode)</option>
+        <option value="project">Projet local (config/opencode.json)</option>
+      </select>
+      <button id="export" class="primary" type="button" title="Exporte la configuration vers la destination sélectionnée">Exporter</button>
+      <button id="integrate" type="button" title="Lie OpenCode à ModelPool (commandes, plugins et configuration synchronisée)">Intégrer OpenCode</button>
     </div>
   </header>
   <div id="banner" role="status"></div>
@@ -509,7 +514,13 @@
     const providersBar = document.getElementById("providers_bar");
     const fallbackInput = document.getElementById("fallback");
     const filterKeysInput = document.getElementById("filter_keys");
-    const buttons = ["refresh_access", "recalculate", "sync_or", "sync_all", "preview_diff", "export"].map((id) => document.getElementById(id));
+    const buttons = ["refresh_access", "recalculate", "sync_or", "sync_all", "preview_diff", "export", "integrate"].map((id) => document.getElementById(id));
+    const exportTargetSelect = document.getElementById("export_target");
+
+    function getExportPath() {
+      if (!exportTargetSelect) return "global";
+      return exportTargetSelect.value === "project" ? "config/opencode.json" : "global";
+    }
 
     function fallbackEnabled() {
       return fallbackInput.checked;
@@ -932,6 +943,7 @@
             fallback: fallbackEnabled(),
             filter_keys: filterKeysEnabled(),
             priority: currentPriority,
+            path: getExportPath(),
           }),
         });
         const data = await res.json();
@@ -1311,7 +1323,11 @@
     document.getElementById("sync_or").addEventListener("click", () => call("/api/sync", "POST", { multi_provider: false }));
     document.getElementById("sync_all").addEventListener("click", () => call("/api/sync", "POST", { multi_provider: true }));
     document.getElementById("preview_diff").addEventListener("click", showDiff);
-    document.getElementById("export").addEventListener("click", () => call("/api/export", "POST"));
+    document.getElementById("export").addEventListener("click", () => call("/api/export", "POST", { path: getExportPath() }));
+    document.getElementById("integrate").addEventListener("click", () => {
+      const isSymlink = confirm("Voulez-vous intégrer ModelPool à OpenCode avec un lien symbolique (symlink) ?\n\n- OK : Lien symbolique (recommandé, toute modification est immédiatement répercutée)\n- Annuler : Copie directe de fichier");
+      call("/api/integrate", "POST", { target: "global", use_symlink: isSymlink });
+    });
     filterKeysInput.addEventListener("change", () => call("/api/recalculate", "POST"));
     fallbackInput.addEventListener("change", () => call("/api/recalculate", "POST"));
 
