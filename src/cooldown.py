@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
-from src.providers.router import PROVIDER_ALIASES, normalize_model_basename
+from src.providers.router import PROVIDER_ALIASES
 
 COOLDOWN_SCHEMA_VERSION = 1
 
