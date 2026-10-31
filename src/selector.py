@@ -46,7 +46,7 @@ def _bool(value: Any, field: str, context: str) -> bool:
 def _int(value: Any, field: str, context: str, minimum: int = 0) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
         raise ValueError(f"{context}: '{field}' doit être un entier supérieur ou égal à {minimum}.")
-    return value
+    return int(value)
 
 
 def _number(value: Any, field: str, context: str, minimum: float = 0.0) -> float:

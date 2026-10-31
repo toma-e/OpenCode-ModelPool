@@ -6,8 +6,6 @@ import unittest
 
 from src.providers.detector import ProviderCredentials
 from src.providers.router import (
-    DEFAULT_PROVIDER_PRIORITY,
-    ExecutionTarget,
     match_direct_model_id,
     normalize_model_basename,
     resolve_model_execution_target,

@@ -7,7 +7,7 @@ sans effet de bord ni I/O.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 from src.selector import AgentRequirement
