@@ -232,6 +232,30 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
                     project_path = body["project_path"].strip()
                 if "use_symlink" in body and isinstance(body["use_symlink"], bool):
                     use_symlink = body["use_symlink"]
+
+            # Contrôle de sécurité : validation stricte de la cible pour éviter les injections
+            if target not in {"global", "project", "windows"}:
+                self._send_json(400, {"ok": False, "message": f"Cible d'intégration '{target}' invalide."})
+                return
+
+            # Contrôle de sécurité : prévention de traversée de répertoire et restriction du périmètre
+            if target == "project" and project_path:
+                if ".." in project_path:
+                    self._send_json(400, {"ok": False, "message": "Chemin de projet non autorisé (traversée interdite)."})
+                    return
+                # Vérifier que le chemin résolu reste dans le périmètre du projet ou d'un sous-dossier autorisé
+                resolved_proj = (
+                    Path(project_path).expanduser().resolve()
+                    if Path(project_path).is_absolute()
+                    else (self.service.base_dir / project_path).resolve()
+                )
+                project_root = self.service.base_dir.resolve()
+                try:
+                    resolved_proj.relative_to(project_root)
+                except ValueError:
+                    self._send_json(403, {"ok": False, "message": "Intégration projet interdite en dehors du projet."})
+                    return
+
             self._send_operation(
                 self.service.integrate_with_opencode(
                     target=target,

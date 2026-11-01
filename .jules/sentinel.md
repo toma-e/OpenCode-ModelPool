@@ -1,0 +1,4 @@
+## 2026-11-01 - Path Traversal Prevention on Web Integration Endpoints
+**Vulnerability:** The HTTP API endpoint `POST /api/integrate` accepted unvalidated `target` and `project_path` payload values, creating directory traversal risk and arbitrary file write / symlink creation outside authorized project boundaries.
+**Learning:** When new API endpoints are added that invoke service operations handling filesystem paths, endpoint-level input validation must mirror or exceed filesystem boundary constraints previously established in endpoints like `/api/export` and `/api/diff`.
+**Prevention:** Strictly validate input arguments against whitelists (e.g., target names), explicitly reject path traversal markers (`..`), and enforce relative-to containment against the project root before passing filesystem paths to execution services.
