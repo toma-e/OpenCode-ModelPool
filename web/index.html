@@ -358,19 +358,19 @@
   </header>
   <div id="banner" role="status"></div>
   <main>
-    <nav class="tabs-nav">
-      <button type="button" id="tab_btn_agents" class="tab-btn active">
+    <nav class="tabs-nav" role="tablist" aria-label="Navigation principale">
+      <button type="button" id="tab_btn_agents" class="tab-btn active" role="tab" aria-selected="true" aria-controls="tab_content_agents" tabindex="0">
         <span>Attribution des Agents</span>
         <span id="tab_badge_agents" class="tab-badge">4</span>
       </button>
-      <button type="button" id="tab_btn_models" class="tab-btn">
+      <button type="button" id="tab_btn_models" class="tab-btn" role="tab" aria-selected="false" aria-controls="tab_content_models" tabindex="-1">
         <span>Catalogue de Modèles</span>
         <span id="tab_badge_models" class="tab-badge">...</span>
       </button>
     </nav>
 
     <!-- Onglet 1 : Gestion des Agents -->
-    <div id="tab_content_agents" class="tab-content active">
+    <div id="tab_content_agents" class="tab-content active" role="tabpanel" aria-labelledby="tab_btn_agents" tabindex="0">
       <section id="diff_section" class="card" style="display:none;margin-bottom:1rem;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
           <h2 style="margin:0;">Prévisualisation des modifications OpenCode (Diff unifié)</h2>
@@ -415,10 +415,10 @@
     </div>
 
     <!-- Onglet 2 : Catalogue de Modèles -->
-    <div id="tab_content_models" class="tab-content">
+    <div id="tab_content_models" class="tab-content" role="tabpanel" aria-labelledby="tab_btn_models" tabindex="0">
       <section class="models-toolbar">
         <div class="models-search-row">
-          <input type="text" id="model_search" class="models-search-input" placeholder="Rechercher par ID ou fournisseur (ex: claude, gemini, qwen, mistral)...">
+          <input type="text" id="model_search" class="models-search-input" placeholder="Rechercher par ID ou fournisseur (ex: claude, gemini, qwen, mistral)..." aria-label="Rechercher par identifiant ou fournisseur">
           <div style="display:flex;gap:0.5rem;align-items:center;">
             <label for="model_sort" style="white-space:nowrap;">Trier par :</label>
             <select id="model_sort">
@@ -996,23 +996,44 @@
     const tabBadgeModels = document.getElementById("tab_badge_models");
 
     function switchTab(tabName) {
-      if (tabName === "models") {
-        tabBtnAgents.classList.remove("active");
-        tabBtnModels.classList.add("active");
-        tabContentAgents.classList.remove("active");
-        tabContentModels.classList.add("active");
-        window.location.hash = "models";
-        if (catalogModels.length === 0) {
-          loadModelsCatalog();
-        }
-      } else {
-        tabBtnModels.classList.remove("active");
-        tabBtnAgents.classList.add("active");
-        tabContentModels.classList.remove("active");
-        tabContentAgents.classList.add("active");
-        window.location.hash = "agents";
+      const isModels = tabName === "models";
+      tabBtnAgents.classList.toggle("active", !isModels);
+      tabBtnAgents.setAttribute("aria-selected", !isModels ? "true" : "false");
+      tabBtnAgents.tabIndex = !isModels ? 0 : -1;
+      tabContentAgents.classList.toggle("active", !isModels);
+
+      tabBtnModels.classList.toggle("active", isModels);
+      tabBtnModels.setAttribute("aria-selected", isModels ? "true" : "false");
+      tabBtnModels.tabIndex = isModels ? 0 : -1;
+      tabContentModels.classList.toggle("active", isModels);
+
+      window.location.hash = isModels ? "models" : "agents";
+      if (isModels && catalogModels.length === 0) {
+        loadModelsCatalog();
       }
     }
+
+    const tabsList = [tabBtnAgents, tabBtnModels];
+    tabsList.forEach((tabEl) => {
+      tabEl.addEventListener("keydown", (e) => {
+        let targetIdx = -1;
+        const curIdx = tabsList.indexOf(tabEl);
+        if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+          targetIdx = (curIdx + 1) % tabsList.length;
+        } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+          targetIdx = (curIdx - 1 + tabsList.length) % tabsList.length;
+        } else if (e.key === "Home") {
+          targetIdx = 0;
+        } else if (e.key === "End") {
+          targetIdx = tabsList.length - 1;
+        }
+        if (targetIdx !== -1) {
+          e.preventDefault();
+          tabsList[targetIdx].focus();
+          tabsList[targetIdx].click();
+        }
+      });
+    });
 
     tabBtnAgents.addEventListener("click", () => switchTab("agents"));
     tabBtnModels.addEventListener("click", () => switchTab("models"));
