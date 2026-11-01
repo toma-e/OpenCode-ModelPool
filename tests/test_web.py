@@ -170,6 +170,26 @@ class TestWeb(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertIn("Intégration OpenCode", payload["message"])
 
+    def test_post_integrate_security_validations(self) -> None:
+        """Vérifie que POST /api/integrate rejette les cibles inconnues et les traversées de répertoire."""
+        # 1. Cible non autorisée
+        status, payload = self._post("/api/integrate", {"target": "malicious_target"})
+        self.assertEqual(status, 400)
+        self.assertFalse(payload["ok"])
+        self.assertIn("invalide", payload["message"].lower())
+
+        # 2. Traversée de répertoire (..) dans project_path
+        status, payload = self._post("/api/integrate", {"target": "project", "project_path": "../escape"})
+        self.assertEqual(status, 400)
+        self.assertFalse(payload["ok"])
+        self.assertIn("traversée interdite", payload["message"].lower())
+
+        # 3. Chemin absolu hors du projet
+        status, payload = self._post("/api/integrate", {"target": "project", "project_path": "/var/run/opencode"})
+        self.assertEqual(status, 403)
+        self.assertFalse(payload["ok"])
+        self.assertIn("interdite en dehors du projet", payload["message"].lower())
+
     def test_post_rejects_missing_json_content_type(self) -> None:
         request = urllib.request.Request(
             self.base + "/api/export",
