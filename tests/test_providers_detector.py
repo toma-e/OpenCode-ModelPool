@@ -10,6 +10,7 @@ from unittest.mock import patch
 from src.providers.detector import (
     detect_provider_credentials,
     get_available_provider_names,
+    is_ollama_reachable,
     load_opencode_auth_keys,
     mask_key,
     parse_dotenv_file,
