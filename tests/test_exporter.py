@@ -1,9 +1,6 @@
 """Tests unitaires pour le module d'export OpenCode exporter.py."""
 
-import json
-import tempfile
 import unittest
-from pathlib import Path
 
 from src.exporter import (
     build_modelpool_report_data,
@@ -205,8 +202,6 @@ class TestExporter(unittest.TestCase):
 
     def test_format_opencode_model_id_preserves_custom_provider(self) -> None:
         """Vérifie que les identifiants de modèles de fournisseurs locaux déclarés ne sont pas forcés vers openrouter."""
-        from src.exporter import format_opencode_model_id
-
         base_config = {
             "provider": {
                 "ollama": {"name": "Ollama Local"},
@@ -231,6 +226,90 @@ class TestExporter(unittest.TestCase):
         self.assertEqual(
             format_opencode_model_id("openrouter/openai/gpt-4o", base_config=base_config),
             "openrouter/openai/gpt-4o",
+        )
+
+    def test_format_opencode_model_id_edge_cases(self) -> None:
+        """Teste les cas limites et conditions aux limites de format_opencode_model_id."""
+        # 1. Modèle vide ou None-like falsy
+        self.assertEqual(format_opencode_model_id(""), "")
+
+        # 2. Modèle sans barre oblique (token unique)
+        self.assertEqual(format_opencode_model_id("gpt-4o"), "openrouter/gpt-4o")
+        self.assertEqual(format_opencode_model_id("free"), "openrouter/free")
+
+        # 3. Préfixe par défaut personnalisé ou vide
+        self.assertEqual(
+            format_opencode_model_id("gpt-4o", default_prefix="my-gateway"),
+            "my-gateway/gpt-4o",
+        )
+        self.assertEqual(
+            format_opencode_model_id("openai/gpt-4o", default_prefix="my-gateway"),
+            "my-gateway/openai/gpt-4o",
+        )
+        self.assertEqual(
+            format_opencode_model_id("gpt-4o", default_prefix=""),
+            "gpt-4o",
+        )
+        self.assertEqual(
+            format_opencode_model_id("openai/gpt-4o", default_prefix=""),
+            "openai/gpt-4o",
+        )
+
+        # 4. Modèle avec sous-chemins multiples (> 1 slash)
+        self.assertEqual(
+            format_opencode_model_id("community/org/model-v1"),
+            "openrouter/community/org/model-v1",
+        )
+
+        # 5. Tous les fournisseurs directs connus (KNOWN_DIRECT_PROVIDERS)
+        known_direct = ["ollama", "mistral", "groq", "google", "anthropic", "cerebras"]
+        for provider in known_direct:
+            model_id = f"{provider}/fast-model"
+            self.assertEqual(
+                format_opencode_model_id(model_id),
+                model_id,
+                f"Le fournisseur direct '{provider}' devrait être préservé sans altération.",
+            )
+            # Doit être préservé quel que soit le default_prefix
+            self.assertEqual(
+                format_opencode_model_id(model_id, default_prefix="custom-prefix"),
+                model_id,
+            )
+
+        # 6. Variations et structures de base_config
+        # base_config sans clé "provider"
+        self.assertEqual(
+            format_opencode_model_id("custom/model", base_config={}),
+            "openrouter/custom/model",
+        )
+        # base_config avec "provider" non dictionnaire (None, list, string)
+        self.assertEqual(
+            format_opencode_model_id("custom/model", base_config={"provider": None}),
+            "openrouter/custom/model",
+        )
+        self.assertEqual(
+            format_opencode_model_id("custom/model", base_config={"provider": ["ollama"]}),
+            "openrouter/custom/model",
+        )
+        # base_config avec provider personnalisé mais premier segment différent
+        base_with_provider = {"provider": {"custom-prov": {"name": "Custom"}}}
+        self.assertEqual(
+            format_opencode_model_id("other-prov/model", base_config=base_with_provider),
+            "openrouter/other-prov/model",
+        )
+        self.assertEqual(
+            format_opencode_model_id("custom-prov/model", base_config=base_with_provider),
+            "custom-prov/model",
+        )
+
+        # 7. Modèle déjà préfixé par default_prefix (idempotence)
+        self.assertEqual(
+            format_opencode_model_id("openrouter/deepseek/deepseek-chat"),
+            "openrouter/deepseek/deepseek-chat",
+        )
+        self.assertEqual(
+            format_opencode_model_id("custom/deepseek/deepseek-chat", default_prefix="custom"),
+            "custom/deepseek/deepseek-chat",
         )
 
     def test_build_opencode_config_and_report_pure_data(self) -> None:
