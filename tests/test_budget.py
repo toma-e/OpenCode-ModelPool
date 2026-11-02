@@ -159,6 +159,175 @@ class TestBudget(unittest.TestCase):
         fleet = simulate_fleet_budget([res], [req], execution_targets=[target])
         self.assertFalse(fleet.is_total_estimable)
 
+        # Cible None dans execution_targets
+        fleet_with_none_target = simulate_fleet_budget([res], [req], execution_targets=[None])
+        self.assertTrue(fleet_with_none_target.is_total_estimable)
+
+    def test_simulate_agent_budget_no_model(self) -> None:
+        """Agent sans modèle attribué (model=None)."""
+        req = AgentRequirement(
+            name="unassigned_agent",
+            description="",
+            min_complexity=1,
+            max_complexity=2,
+            requires_tools=False,
+            prefer_free=False,
+            estimated_tokens_input=150_000,
+            estimated_tokens_output=50_000,
+            max_monthly_budget=5.0,
+        )
+        report = simulate_agent_budget(req, None)
+        self.assertEqual(report.agent_name, "unassigned_agent")
+        self.assertEqual(report.model_id, "aucun")
+        self.assertEqual(report.tier, "non_attribué")
+        self.assertEqual(report.monthly_input_cost, 0.0)
+        self.assertEqual(report.monthly_output_cost, 0.0)
+        self.assertEqual(report.monthly_total_cost, 0.0)
+        self.assertEqual(report.max_budget, 5.0)
+        self.assertFalse(report.budget_exceeded)
+        self.assertIn("Aucun modèle attribué", report.quota_warning or "")
+        self.assertEqual(report.disclaimer, "Aucun modèle configuré.")
+
+    def test_simulate_agent_budget_zero_cost_payg_not_estimable(self) -> None:
+        """Modèle pay-as-you-go avec target sans coût effectif (effective_cost=0) marqué non estimable."""
+        from src.providers.router import ExecutionTarget
+        target = ExecutionTarget(
+            channel_provider="openrouter",
+            formatted_model_id="custom/unpriced-payg",
+            effective_cost_input_per_m=0.0,
+            effective_cost_output_per_m=0.0,
+            is_local=False,
+            description_label="OpenRouter",
+            access_verified=True,
+            pricing_source="catalog",
+        )
+        req = AgentRequirement(
+            name="test_agent",
+            description="",
+            min_complexity=1,
+            max_complexity=2,
+            requires_tools=False,
+            prefer_free=False,
+            estimated_tokens_input=100_000,
+            estimated_tokens_output=50_000,
+        )
+        report = simulate_agent_budget(req, self.paid_model, execution_target=target)
+        self.assertFalse(report.is_estimable)
+        self.assertIn("Prévision estimative non contractuelle (tarifs API hors taxes).", report.disclaimer)
+
+    def test_simulate_agent_budget_custom_execution_target_pricing(self) -> None:
+        """Cible d'exécution non locale avec tarifs effectifs spécifiques."""
+        from src.providers.router import ExecutionTarget
+        target = ExecutionTarget(
+            channel_provider="google",
+            formatted_model_id="google/gemini-2.0-flash",
+            effective_cost_input_per_m=0.10,
+            effective_cost_output_per_m=0.40,
+            is_local=False,
+            description_label="Google AI Studio",
+            access_verified=True,
+            pricing_source="direct_api",
+        )
+        req = AgentRequirement(
+            name="target_agent",
+            description="",
+            min_complexity=1,
+            max_complexity=2,
+            requires_tools=False,
+            prefer_free=False,
+            estimated_tokens_input=1_000_000,
+            estimated_tokens_output=500_000,
+        )
+        # 1M tokens in * 0.10 = 0.10, 500k tokens out * 0.40 = 0.20 -> total = 0.30
+        report = simulate_agent_budget(req, self.paid_model, execution_target=target)
+        self.assertEqual(report.channel_provider, "google")
+        self.assertEqual(report.pricing_source, "direct_api")
+        self.assertAlmostEqual(report.monthly_input_cost, 0.10)
+        self.assertAlmostEqual(report.monthly_output_cost, 0.20)
+        self.assertAlmostEqual(report.monthly_total_cost, 0.30)
+        self.assertTrue(report.is_estimable)
+        self.assertFalse(report.is_local)
+        self.assertIn("tarifs API hors taxes", report.disclaimer)
+
+    def test_simulate_agent_budget_threshold_boundaries(self) -> None:
+        """Vérifie les conditions limites (frontières) de quota_warning et de budget_exceeded."""
+        # Seuil de quota gratuit = 1_000_000 tokens
+        # Exactement 1_000_000 tokens: pas d'avertissement de quota
+        req_exact = AgentRequirement(
+            name="exact_agent",
+            description="",
+            min_complexity=1,
+            max_complexity=2,
+            requires_tools=False,
+            prefer_free=True,
+            estimated_tokens_input=800_000,
+            estimated_tokens_output=200_000,
+        )
+        report_exact = simulate_agent_budget(req_exact, self.free_model)
+        self.assertIsNone(report_exact.quota_warning)
+
+        # 1_000_001 tokens: déclenchement de l'avertissement
+        req_over = AgentRequirement(
+            name="over_agent",
+            description="",
+            min_complexity=1,
+            max_complexity=2,
+            requires_tools=False,
+            prefer_free=True,
+            estimated_tokens_input=800_001,
+            estimated_tokens_output=200_000,
+        )
+        report_over = simulate_agent_budget(req_over, self.free_model)
+        self.assertIsNotNone(report_over.quota_warning)
+
+        # Frontière de budget: coût exact = 0.45, max_budget = 0.45 -> False
+        req_cap_exact = AgentRequirement(
+            name="capped_exact",
+            description="",
+            min_complexity=1,
+            max_complexity=2,
+            requires_tools=False,
+            prefer_free=False,
+            estimated_tokens_input=1_000_000,
+            estimated_tokens_output=500_000,
+            max_monthly_budget=0.45,
+        )
+        report_cap_exact = simulate_agent_budget(req_cap_exact, self.paid_model)
+        self.assertEqual(report_cap_exact.monthly_total_cost, 0.45)
+        self.assertFalse(report_cap_exact.budget_exceeded)
+
+    def test_fleet_budget_report_warnings_property(self) -> None:
+        """Vérifie has_budget_warnings sur FleetBudgetReport."""
+        req_normal = AgentRequirement(
+            name="normal",
+            description="",
+            min_complexity=1,
+            max_complexity=2,
+            requires_tools=False,
+            prefer_free=False,
+            estimated_tokens_input=100_000,
+            estimated_tokens_output=50_000,
+        )
+        res_normal = SelectionResult("normal", self.paid_model, False, [self.paid_model], "ok")
+        fleet_ok = simulate_fleet_budget([res_normal], [req_normal])
+        self.assertFalse(fleet_ok.has_budget_warnings)
+
+        # Avec un avertissement de budget dépassé
+        req_capped = AgentRequirement(
+            name="capped",
+            description="",
+            min_complexity=1,
+            max_complexity=2,
+            requires_tools=False,
+            prefer_free=False,
+            estimated_tokens_input=1_000_000,
+            estimated_tokens_output=500_000,
+            max_monthly_budget=0.10,
+        )
+        res_capped = SelectionResult("capped", self.paid_model, False, [self.paid_model], "ok")
+        fleet_warn = simulate_fleet_budget([res_capped], [req_capped])
+        self.assertTrue(fleet_warn.has_budget_warnings)
+
 
 if __name__ == "__main__":
     unittest.main()
