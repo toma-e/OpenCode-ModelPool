@@ -360,6 +360,46 @@ class TestWeb(unittest.TestCase):
         err_status, err_data = self._post("/api/agent/add-preset", {})
         self.assertEqual(err_status, 400)
 
+    def test_handle_error_does_not_raise(self) -> None:
+        """Vérifie que handle_error ne lève aucune exception et gère les erreurs silencieusement."""
+        server = self.httpd
+        dummy_request = None  # type: ignore[arg-type]
+        dummy_address = ("127.0.0.1", 12345)
+
+        # 1. Appel nominal sans exception active
+        with patch.object(type(server).__bases__[0], "handle_error"):
+            try:
+                server.handle_error(dummy_request, dummy_address)
+            except Exception as exc:
+                self.fail(f"handle_error a levé une exception inattendue : {exc}")
+
+        # 2. Appel lors d'un BrokenPipeError
+        with patch.object(type(server).__bases__[0], "handle_error"):
+            try:
+                try:
+                    raise BrokenPipeError("Broken pipe")
+                except BrokenPipeError:
+                    server.handle_error(dummy_request, dummy_address)
+            except Exception as exc:
+                self.fail(f"handle_error a levé une exception lors d'un BrokenPipeError : {exc}")
+
+        # 3. Appel lors d'un ConnectionResetError
+        with patch.object(type(server).__bases__[0], "handle_error"):
+            try:
+                try:
+                    raise ConnectionResetError("Connection reset by peer")
+                except ConnectionResetError:
+                    server.handle_error(dummy_request, dummy_address)
+            except Exception as exc:
+                self.fail(f"handle_error a levé une exception lors d'un ConnectionResetError : {exc}")
+
+        # 4. Appel avec divers arguments (None, objets factices)
+        with patch.object(type(server).__bases__[0], "handle_error"):
+            try:
+                server.handle_error(object(), "invalid_address")
+            except Exception as exc:
+                self.fail(f"handle_error a levé une exception avec des arguments génériques : {exc}")
+
 
 if __name__ == "__main__":
     unittest.main()
