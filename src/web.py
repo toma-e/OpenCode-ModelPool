@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Optional
 from urllib.parse import parse_qs, urlparse
 
 from src.service import ApplicationService, OperationResult, serialize_report
@@ -158,7 +158,7 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
             self._send_operation(self.service.set_provider_priority(body["priority"], allow_fallback=fallback, filter_by_keys=filter_keys))
             return
         if parsed.path == "/api/diff":
-            target_path = None
+            target_path: Optional[str | Path] = None
             if isinstance(body, dict) and "path" in body and isinstance(body["path"], str):
                 requested = body["path"].strip()
                 if ".." in requested:
@@ -321,10 +321,11 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
             if not isinstance(body, dict):
                 self._send_json(400, {"ok": False, "message": "Corps JSON attendu."})
                 return
-            target = body.get("target") or body.get("agent_name") or body.get("model_id")
-            if not isinstance(target, str) or not target.strip():
+            target_raw = body.get("target") or body.get("agent_name") or body.get("model_id")
+            if not isinstance(target_raw, str) or not target_raw.strip():
                 self._send_json(400, {"ok": False, "message": "Champ 'target' (ou 'agent_name') obligatoire."})
                 return
+            target = target_raw.strip()
             reason = str(body.get("reason") or "rate_limit").strip()
             auto_export = bool(body.get("auto_export", True))
             self._send_operation(
