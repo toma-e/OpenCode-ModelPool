@@ -178,7 +178,7 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
                         except ValueError:
                             self._send_json(403, {"ok": False, "message": "Chemin interdit en dehors du projet ou de ~/.config/opencode/."})
                             return
-                    target_path = requested
+                    target_path = Path(requested)
             try:
                 diff_res = self.service.preview_export(
                     path=target_path,
@@ -321,7 +321,8 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
             if not isinstance(body, dict):
                 self._send_json(400, {"ok": False, "message": "Corps JSON attendu."})
                 return
-            target = body.get("target") or body.get("agent_name") or body.get("model_id")
+            raw_target = body.get("target") or body.get("agent_name") or body.get("model_id")
+            target = str(raw_target) if raw_target is not None else ""
             if not isinstance(target, str) or not target.strip():
                 self._send_json(400, {"ok": False, "message": "Champ 'target' (ou 'agent_name') obligatoire."})
                 return

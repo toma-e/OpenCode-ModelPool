@@ -472,13 +472,13 @@ class ApplicationService:
         for res in results:
             agent = agent_by_name.get(res.agent_name)
             if res.model:
-                target = _route(res.model, agent)
-                execution_targets.append(target)
+                routed_target = _route(res.model, agent)
+                execution_targets.append(routed_target)
                 # Si le modèle est dérouté sur Ollama local, ajuster le coût à 0.0 pour le budget
                 effective_model = res.model
-                if target.is_local:
+                if routed_target.is_local:
                     effective_model = Model(
-                        id=target.formatted_model_id,
+                        id=routed_target.formatted_model_id,
                         provider="ollama",
                         tier="free_tier",
                         cost_input_per_m=0.0,
@@ -505,9 +505,11 @@ class ApplicationService:
         # Chaîne de repli hybride par agent (limites de débit / quotas) :
         # Passe 1 : canaux distincts en priorité ; Passe 2 : modèles distincts sur même canal si besoin.
         fallback_chains: dict[str, list[str]] = {}
-        for res, target in zip(results, execution_targets):
-            if res.model is None or target is None:
+        for res, maybe_target in zip(results, execution_targets):
+            if res.model is None or maybe_target is None:
                 continue
+            active_target: ExecutionTarget = maybe_target
+            assert isinstance(active_target, ExecutionTarget)
             agent = agent_by_name.get(res.agent_name)
             candidate_targets: list[tuple[str, str]] = []
             for candidate in res.candidates[1:]:
@@ -521,8 +523,8 @@ class ApplicationService:
                     continue
                 candidate_targets.append((cand_target.formatted_model_id, cand_target.channel_provider))
             fallback_chains[res.agent_name] = build_hybrid_fallback_chain(
-                primary_formatted_id=target.formatted_model_id,
-                primary_channel=target.channel_provider,
+                primary_formatted_id=active_target.formatted_model_id,
+                primary_channel=active_target.channel_provider,
                 candidate_targets=candidate_targets,
                 max_length=3,
             )
@@ -1584,7 +1586,8 @@ class ApplicationService:
                 return True, None
             raw = _load_json(self.models_path, "Catalogue de modèles")
             updated = raw.get("last_updated")
-            return check_catalogue_staleness(updated, max_days=max_days)
+            updated_str = updated if isinstance(updated, str) else None
+            return check_catalogue_staleness(updated_str, max_days=max_days)
         except Exception:
             return True, None
 
