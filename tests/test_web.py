@@ -12,7 +12,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.service import ApplicationService
-from src.web import LISTEN_HOST, create_server
+from src.web import (
+    LISTEN_HOST,
+    LocalInterfaceHandler,
+    ModelPoolServer,
+    create_server,
+    serve_local_interface,
+)
 from tests.test_service import write_valid_workspace
 
 
@@ -359,6 +365,96 @@ class TestWeb(unittest.TestCase):
         # 3. POST avec preset manquant -> 400
         err_status, err_data = self._post("/api/agent/add-preset", {})
         self.assertEqual(err_status, 400)
+
+    def test_create_server_defaults_and_binding(self) -> None:
+        """Vérifie les arguments par défaut de create_server et le couplage du handler."""
+        with patch("src.web.ModelPoolServer") as mock_server_cls:
+            mock_server_instance = mock_server_cls.return_value
+            server = create_server(self.service)
+
+            self.assertIs(server, mock_server_instance)
+            mock_server_cls.assert_called_once()
+            args, _ = mock_server_cls.call_args
+            server_address, handler_cls = args
+
+            # Adresse et port par défaut (LISTEN_HOST=127.0.0.1, port 8765)
+            self.assertEqual(server_address, (LISTEN_HOST, 8765))
+
+            # Vérification de la liaison handler -> service et fallback
+            self.assertTrue(issubclass(handler_cls, LocalInterfaceHandler))
+            self.assertIs(handler_cls.service, self.service)
+            self.assertTrue(handler_cls.allow_fallback)
+
+    def test_create_server_custom_port_and_fallback(self) -> None:
+        """Vérifie create_server avec un port personnalisé et allow_fallback=False."""
+        with patch("src.web.ModelPoolServer") as mock_server_cls:
+            mock_server_instance = mock_server_cls.return_value
+            server = create_server(self.service, port=9000, allow_fallback=False)
+
+            self.assertIs(server, mock_server_instance)
+            mock_server_cls.assert_called_once()
+            args, _ = mock_server_cls.call_args
+            server_address, handler_cls = args
+
+            self.assertEqual(server_address, (LISTEN_HOST, 9000))
+            self.assertIs(handler_cls.service, self.service)
+            self.assertFalse(handler_cls.allow_fallback)
+
+    def test_create_server_live_ephemeral_port(self) -> None:
+        """Vérifie la création réelle d'un ModelPoolServer sur port éphémère (port 0)."""
+        server = create_server(self.service, port=0, allow_fallback=True)
+        try:
+            self.assertIsInstance(server, ModelPoolServer)
+            host, port = server.server_address[:2]
+            self.assertEqual(host, LISTEN_HOST)
+            self.assertGreater(port, 0)
+        finally:
+            server.server_close()
+
+    def test_model_pool_server_handle_error(self) -> None:
+        """Vérifie que ModelPoolServer ignore les déconnexions client et propage les autres erreurs."""
+        from unittest.mock import MagicMock
+
+        server = create_server(self.service, port=0)
+        dummy_req = MagicMock()
+        try:
+            with patch("http.server.ThreadingHTTPServer.handle_error") as mock_super_handle_error:
+                # 1. BrokenPipeError ignoré
+                with patch("sys.exc_info", return_value=(BrokenPipeError, BrokenPipeError(), None)):
+                    server.handle_error(dummy_req, ("127.0.0.1", 12345))
+                    mock_super_handle_error.assert_not_called()
+
+                # 2. ConnectionResetError ignoré
+                with patch("sys.exc_info", return_value=(ConnectionResetError, ConnectionResetError(), None)):
+                    server.handle_error(dummy_req, ("127.0.0.1", 12345))
+                    mock_super_handle_error.assert_not_called()
+
+                # 3. Exception ordinaire déléguée à super().handle_error
+                generic_exc = RuntimeError("unexpected error")
+                with patch("sys.exc_info", return_value=(RuntimeError, generic_exc, None)):
+                    server.handle_error(dummy_req, ("127.0.0.1", 12345))
+                    mock_super_handle_error.assert_called_once_with(dummy_req, ("127.0.0.1", 12345))
+        finally:
+            server.server_close()
+
+    def test_serve_local_interface_clean_shutdown(self) -> None:
+        """Vérifie que serve_local_interface gère KeyboardInterrupt proprement sans lever d'exception."""
+        import io
+        from contextlib import redirect_stdout
+
+        with patch("src.web.create_server") as mock_create:
+            mock_server = mock_create.return_value
+            mock_server.__enter__.return_value = mock_server
+            mock_server.serve_forever.side_effect = KeyboardInterrupt()
+
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                serve_local_interface(self.service, port=9000, allow_fallback=False)
+
+            mock_create.assert_called_once_with(self.service, port=9000, allow_fallback=False)
+            mock_server.serve_forever.assert_called_once()
+            output = buf.getvalue()
+            self.assertIn("Arrêt du serveur local", output)
 
 
 if __name__ == "__main__":
