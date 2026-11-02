@@ -46,6 +46,18 @@ class TestWeb(unittest.TestCase):
         with urllib.request.urlopen(self.base + path, timeout=5) as response:
             return response.status, response.read()
 
+    def _head(self, path: str, headers: dict[str, str] | None = None) -> tuple[int, dict[str, str], bytes]:
+        req_headers = headers or {}
+        request = urllib.request.Request(self.base + path, method="HEAD", headers=req_headers)
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                return response.status, dict(response.headers), response.read()
+        except urllib.error.HTTPError as error:
+            raw = error.read()
+            resp_headers = dict(error.headers)
+            error.close()
+            return error.code, resp_headers, raw
+
     def _post(self, path: str, payload: dict[str, object] | None = None) -> tuple[int, dict[str, object]]:
         body = json.dumps(payload or {}).encode("utf-8")
         request = urllib.request.Request(
@@ -359,6 +371,46 @@ class TestWeb(unittest.TestCase):
         # 3. POST avec preset manquant -> 400
         err_status, err_data = self._post("/api/agent/add-preset", {})
         self.assertEqual(err_status, 400)
+
+    def test_head_static_files(self) -> None:
+        """Vérifie que HEAD sur / et /index.html renvoie 200, les en-têtes corrects et un corps vide."""
+        for path in ("/", "/index.html"):
+            status, headers, body = self._head(path)
+            self.assertEqual(status, 200)
+            self.assertEqual(body, b"")
+            self.assertEqual(headers.get("Content-Type"), "text/html; charset=utf-8")
+            self.assertEqual(headers.get("Cache-Control"), "no-store")
+            self.assertEqual(headers.get("X-Frame-Options"), "DENY")
+            self.assertEqual(headers.get("X-Content-Type-Options"), "nosniff")
+            self.assertIn("Content-Length", headers)
+            self.assertGreater(int(headers["Content-Length"]), 0)
+
+    def test_head_api_endpoints(self) -> None:
+        """Vérifie que HEAD sur /api/report et /api/models renvoie 200, Content-Type JSON, en-têtes de sécurité et corps vide."""
+        for path in ("/api/report", "/api/models"):
+            status, headers, body = self._head(path)
+            self.assertEqual(status, 200)
+            self.assertEqual(body, b"")
+            self.assertEqual(headers.get("Content-Type"), "application/json; charset=utf-8")
+            self.assertEqual(headers.get("Cache-Control"), "no-store")
+            self.assertEqual(headers.get("X-Frame-Options"), "DENY")
+            self.assertEqual(headers.get("X-Content-Type-Options"), "nosniff")
+
+    def test_head_unknown_path_returns_404(self) -> None:
+        """Vérifie que HEAD sur un chemin inexistant renvoie 404 avec en-têtes de sécurité et corps vide."""
+        status, headers, body = self._head("/api/unknown-endpoint")
+        self.assertEqual(status, 404)
+        self.assertEqual(body, b"")
+        self.assertEqual(headers.get("X-Frame-Options"), "DENY")
+        self.assertEqual(headers.get("X-Content-Type-Options"), "nosniff")
+
+    def test_head_rejects_untrusted_host_header(self) -> None:
+        """Vérifie que HEAD avec un en-tête Host suspect est rejeté avec 403 et corps vide."""
+        status, headers, body = self._head("/api/report", headers={"Host": "evil.com:8765"})
+        self.assertEqual(status, 403)
+        self.assertEqual(body, b"")
+        self.assertEqual(headers.get("X-Frame-Options"), "DENY")
+        self.assertEqual(headers.get("X-Content-Type-Options"), "nosniff")
 
 
 if __name__ == "__main__":
