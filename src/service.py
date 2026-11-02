@@ -818,7 +818,7 @@ class ApplicationService:
                     else res
                     for res, target in zip(
                         report.results,
-                        list(report.execution_targets) + [None] * len(report.results),
+                        report.execution_targets + [None] * len(report.results),
                     )
                 ]
                 config_data = build_opencode_config(
@@ -922,7 +922,7 @@ class ApplicationService:
                 else res
                 for res, target in zip(
                     report.results,
-                    list(report.execution_targets) + [None] * len(report.results),
+                    report.execution_targets + [None] * len(report.results),
                 )
             ]
             config_data = build_opencode_config(

@@ -246,7 +246,7 @@ class ModelPoolMCPServer:
             "",
             "Attributions par agent :",
         ]
-        for res, target in zip(report.results, list(report.execution_targets) + [None] * len(report.results)):
+        for res, target in zip(report.results, report.execution_targets + [None] * len(report.results)):
             target_str = target.description_label if target else "Direct"
             model_id = res.model.id if res.model else "Aucun modèle"
             status_tag = "[FALLBACK]" if res.is_fallback else "[EXACT]"
