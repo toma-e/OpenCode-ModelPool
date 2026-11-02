@@ -54,6 +54,21 @@ class TestRouter(unittest.TestCase):
         self.assertEqual(normalize_model_basename("ollama/qwen2.5-coder:7b"), "qwen2.5-coder-7b")
         self.assertEqual(normalize_model_basename("google/gemini-2.0-flash-exp:free"), "gemini-2.0-flash-exp")
 
+    def test_normalize_model_basename_caching_and_performance(self) -> None:
+        """⚡ Performance test (Bolt): Vérifie que normalize_model_basename bénéficie du cache LRU."""
+        # Vérifie que la fonction est bien décorée avec functools.lru_cache
+        self.assertTrue(hasattr(normalize_model_basename, "cache_info"))
+
+        # Premier appel : cache miss (ou hit si déjà appelé)
+        res1 = normalize_model_basename("anthropic/claude-3-5-sonnet-20241022")
+        self.assertEqual(res1, "claude-3-5-sonnet")
+
+        hits_before = normalize_model_basename.cache_info().hits
+        # Deuxième appel identique : doit être un cache hit immédiat
+        res2 = normalize_model_basename("anthropic/claude-3-5-sonnet-20241022")
+        self.assertEqual(res2, "claude-3-5-sonnet")
+        self.assertGreaterEqual(normalize_model_basename.cache_info().hits, hits_before + 1)
+
     def test_priority_routes_to_ollama_when_available(self) -> None:
         creds = {
             "ollama": ProviderCredentials(provider="ollama", is_available=True, source="ollama"),
