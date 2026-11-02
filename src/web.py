@@ -158,7 +158,7 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
             self._send_operation(self.service.set_provider_priority(body["priority"], allow_fallback=fallback, filter_by_keys=filter_keys))
             return
         if parsed.path == "/api/diff":
-            target_path = None
+            target_path: str | Path | None = None
             if isinstance(body, dict) and "path" in body and isinstance(body["path"], str):
                 requested = body["path"].strip()
                 if ".." in requested:
@@ -321,10 +321,11 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
             if not isinstance(body, dict):
                 self._send_json(400, {"ok": False, "message": "Corps JSON attendu."})
                 return
-            target = body.get("target") or body.get("agent_name") or body.get("model_id")
-            if not isinstance(target, str) or not target.strip():
+            raw_target = body.get("target") or body.get("agent_name") or body.get("model_id")
+            if not isinstance(raw_target, str) or not raw_target.strip():
                 self._send_json(400, {"ok": False, "message": "Champ 'target' (ou 'agent_name') obligatoire."})
                 return
+            target = raw_target.strip()
             reason = str(body.get("reason") or "rate_limit").strip()
             auto_export = bool(body.get("auto_export", True))
             self._send_operation(
