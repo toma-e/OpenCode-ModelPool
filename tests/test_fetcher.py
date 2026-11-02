@@ -225,6 +225,29 @@ class TestFetcher(unittest.TestCase):
                     write_json_atomic(target, {"keep": False})
             self.assertEqual(json.loads(target.read_text(encoding="utf-8")), {"keep": True})
 
+    def test_write_json_atomic_cleans_up_temp_file_on_dump_failure(self) -> None:
+        """Vérifie que le fichier temporaire est bien supprimé lorsque la sérialisation JSON échoue."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            target = Path(tmp_dir) / "models.json"
+            with patch("src.fetcher.json.dump", side_effect=TypeError("Objet non sérialisable")):
+                with self.assertRaises(TypeError):
+                    write_json_atomic(target, {"unserializable": object()})
+            # Aucun fichier temporaire ne doit subsister dans le dossier
+            temp_files = list(Path(tmp_dir).glob(".*.tmp")) + list(Path(tmp_dir).glob("*.tmp"))
+            self.assertEqual(temp_files, [])
+
+    def test_write_json_atomic_cleans_up_temp_file_on_replace_failure(self) -> None:
+        """Vérifie que le fichier temporaire est supprimé si le remplacement atomique os.replace échoue."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            target = Path(tmp_dir) / "models.json"
+            with patch("src.fetcher.os.replace", side_effect=OSError("Remplacement impossible")):
+                with self.assertRaises(OSError):
+                    write_json_atomic(target, {"valid": "payload"})
+            # Vérifier qu'aucun fichier temporaire n'a été laissé
+            temp_files = list(Path(tmp_dir).glob(".*.tmp")) + list(Path(tmp_dir).glob("*.tmp"))
+            self.assertEqual(temp_files, [])
+            self.assertFalse(target.exists())
+
     def test_prune_timestamped_backups_keeps_newest_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             backup_dir = Path(tmp_dir) / "backups"
