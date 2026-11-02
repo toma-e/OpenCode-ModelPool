@@ -219,7 +219,13 @@ class TestWeb(unittest.TestCase):
             headers = dict(response.headers)
             self.assertEqual(headers.get("X-Frame-Options"), "DENY")
             self.assertEqual(headers.get("X-Content-Type-Options"), "nosniff")
-            self.assertIn("frame-ancestors 'none'", headers.get("Content-Security-Policy", ""))
+            self.assertEqual(headers.get("X-Permitted-Cross-Domain-Policies"), "none")
+            self.assertEqual(headers.get("Referrer-Policy"), "no-referrer")
+            csp = headers.get("Content-Security-Policy", "")
+            self.assertIn("frame-ancestors 'none'", csp)
+            self.assertIn("object-src 'none'", csp)
+            self.assertIn("base-uri 'none'", csp)
+            self.assertIn("form-action 'self'", csp)
 
     def test_post_recalculate_returns_report(self) -> None:
         """Vérifie que POST /api/recalculate renvoie un rapport complet."""

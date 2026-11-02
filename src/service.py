@@ -13,7 +13,7 @@ import threading
 import time
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
-from typing import Any, Callable, Iterator, Optional
+from typing import Any, Callable, Dict, Iterator, Mapping, Optional
 
 from datetime import datetime, timezone
 
