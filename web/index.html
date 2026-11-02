@@ -476,12 +476,13 @@
             <input type="checkbox" id="filter_reasoning">
             <span>Raisonnement</span>
           </label>
+          <button type="button" id="btn_reset_filters" class="btn-sm" style="background:#23405f;border-color:var(--line);" title="Réinitialise la recherche et l'ensemble des filtres">Réinitialiser les filtres</button>
         </div>
       </section>
 
       <div class="pagination-bar">
         <div>
-          <span id="models_count_label" style="font-weight:600;">Chargement des modèles...</span>
+          <span id="models_count_label" style="font-weight:600;" aria-live="polite">Chargement des modèles...</span>
         </div>
         <div class="pagination-controls">
           <button type="button" id="page_prev" class="btn-sm" disabled>&larr; Précédent</button>
@@ -1193,7 +1194,14 @@
       pageNextBottomBtn.disabled = currentPage >= totalPages;
 
       if (pageItems.length === 0) {
-        modelsGrid.innerHTML = '<div style="grid-column: 1 / -1; padding: 2rem; text-align: center; color: var(--muted); background: var(--panel); border: 1px dashed var(--line); border-radius: 0.6rem;">Aucun modèle ne correspond aux filtres sélectionnés.</div>';
+        modelsGrid.innerHTML = '<div style="grid-column: 1 / -1; padding: 2rem; text-align: center; color: var(--muted); background: var(--panel); border: 1px dashed var(--line); border-radius: 0.6rem;">' +
+          '<p style="margin: 0 0 0.75rem; font-size: 0.95rem;">Aucun modèle ne correspond aux filtres sélectionnés.</p>' +
+          '<button type="button" id="btn_reset_filters_empty" class="btn-sm" style="background:#1f6feb;border-color:#1f6feb;">Réinitialiser tous les filtres</button>' +
+          '</div>';
+        const emptyResetBtn = document.getElementById("btn_reset_filters_empty");
+        if (emptyResetBtn) {
+          emptyResetBtn.addEventListener("click", resetFilters);
+        }
         return;
       }
 
@@ -1310,6 +1318,32 @@
         showBanner(false, "Échec de l'assignation : " + err);
       }
     }
+
+    function resetFilters() {
+      modelSearchInput.value = "";
+      filterProviderSelect.value = "all";
+      filterTierSelect.value = "all";
+      filterComplexitySelect.value = "all";
+      modelSortSelect.value = "cost_asc";
+      filterReadyInput.checked = false;
+      filterToolsInput.checked = false;
+      filterVisionInput.checked = false;
+      filterReasoningInput.checked = false;
+      applyFiltersAndSort();
+      modelSearchInput.focus();
+    }
+
+    const resetFiltersBtn = document.getElementById("btn_reset_filters");
+    if (resetFiltersBtn) {
+      resetFiltersBtn.addEventListener("click", resetFilters);
+    }
+
+    modelSearchInput.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && modelSearchInput.value) {
+        modelSearchInput.value = "";
+        applyFiltersAndSort();
+      }
+    });
 
     [modelSearchInput, modelSortSelect, filterProviderSelect, filterTierSelect, filterComplexitySelect, filterReadyInput, filterToolsInput, filterVisionInput, filterReasoningInput].forEach((el) => {
       if (el) {
