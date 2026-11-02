@@ -382,7 +382,7 @@ def resolve_model_execution_target(
                 formatted_direct_id = f"{channel.opencode_prefix}/{canon_id}"
                 if formatted_direct_id.lower() in excluded_norm:
                     continue
-                from src.providers.direct import KNOWN_MODEL_PRICING, get_known_model_pricing
+                from src.providers.direct import get_known_model_pricing
                 pricing = get_known_model_pricing(canon_id, (0.0, 0.0))
                 if pricing != (0.0, 0.0):
                     cost_in, cost_out = pricing
