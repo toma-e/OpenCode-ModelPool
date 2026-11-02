@@ -49,10 +49,15 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
         return True
 
     def _send_security_headers(self) -> None:
-        """Injecte les en-têtes HTTP de sécurité défensifs contre le Clickjacking et le sniffing MIME."""
+        """Injecte les en-têtes HTTP de sécurité défensifs contre le Clickjacking, le MIME-sniffing et les fuites d'origine."""
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
-        self.send_header("Content-Security-Policy", "frame-ancestors 'none'; default-src 'self' 'unsafe-inline';")
+        self.send_header("X-Permitted-Cross-Domain-Policies", "none")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header(
+            "Content-Security-Policy",
+            "frame-ancestors 'none'; default-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'self';",
+        )
 
     def do_HEAD(self) -> None:
         if not self._has_safe_host():
