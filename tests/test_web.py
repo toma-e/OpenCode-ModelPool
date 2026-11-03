@@ -12,7 +12,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.service import ApplicationService
-from src.web import LISTEN_HOST, create_server
+from src.web import (
+    LISTEN_HOST,
+    LocalInterfaceHandler,
+    ModelPoolServer,
+    create_server,
+    serve_local_interface,
+)
 from tests.test_service import write_valid_workspace
 
 
@@ -45,6 +51,18 @@ class TestWeb(unittest.TestCase):
     def _get(self, path: str) -> tuple[int, bytes]:
         with urllib.request.urlopen(self.base + path, timeout=5) as response:
             return response.status, response.read()
+
+    def _head(self, path: str, headers: dict[str, str] | None = None) -> tuple[int, dict[str, str], bytes]:
+        req_headers = headers or {}
+        request = urllib.request.Request(self.base + path, method="HEAD", headers=req_headers)
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                return response.status, dict(response.headers), response.read()
+        except urllib.error.HTTPError as error:
+            raw = error.read()
+            resp_headers = dict(error.headers)
+            error.close()
+            return error.code, resp_headers, raw
 
     def _post(self, path: str, payload: dict[str, object] | None = None) -> tuple[int, dict[str, object]]:
         body = json.dumps(payload or {}).encode("utf-8")
@@ -410,6 +428,133 @@ class TestWeb(unittest.TestCase):
         self.assertIn('id="close_diff_btn"', html)
         self.assertIn('aria-label="Fermer la prévisualisation du diff"', html)
         self.assertIn('tabindex="0" role="region" aria-label="Contenu du diff unifié"', html)
+
+    def test_head_static_files(self) -> None:
+        """Vérifie que HEAD sur / et /index.html renvoie 200, les en-têtes corrects et un corps vide."""
+        for path in ("/", "/index.html"):
+            status, headers, body = self._head(path)
+            self.assertEqual(status, 200)
+            self.assertEqual(body, b"")
+            self.assertEqual(headers.get("Content-Type"), "text/html; charset=utf-8")
+            self.assertEqual(headers.get("Cache-Control"), "no-store")
+            self.assertEqual(headers.get("X-Frame-Options"), "DENY")
+            self.assertEqual(headers.get("X-Content-Type-Options"), "nosniff")
+            self.assertIn("Content-Length", headers)
+            self.assertGreater(int(headers["Content-Length"]), 0)
+
+    def test_head_api_endpoints(self) -> None:
+        """Vérifie que HEAD sur /api/report et /api/models renvoie 200, Content-Type JSON, en-têtes de sécurité et corps vide."""
+        for path in ("/api/report", "/api/models"):
+            status, headers, body = self._head(path)
+            self.assertEqual(status, 200)
+            self.assertEqual(body, b"")
+            self.assertEqual(headers.get("Content-Type"), "application/json; charset=utf-8")
+            self.assertEqual(headers.get("Cache-Control"), "no-store")
+            self.assertEqual(headers.get("X-Frame-Options"), "DENY")
+            self.assertEqual(headers.get("X-Content-Type-Options"), "nosniff")
+
+    def test_head_unknown_path_returns_404(self) -> None:
+        """Vérifie que HEAD sur un chemin inexistant renvoie 404 avec en-têtes de sécurité et corps vide."""
+        status, headers, body = self._head("/api/unknown-endpoint")
+        self.assertEqual(status, 404)
+        self.assertEqual(body, b"")
+        self.assertEqual(headers.get("X-Frame-Options"), "DENY")
+        self.assertEqual(headers.get("X-Content-Type-Options"), "nosniff")
+
+    def test_head_rejects_untrusted_host_header(self) -> None:
+        """Vérifie que HEAD avec un en-tête Host suspect est rejeté avec 403 et corps vide."""
+        status, headers, body = self._head("/api/report", headers={"Host": "evil.com:8765"})
+        self.assertEqual(status, 403)
+        self.assertEqual(body, b"")
+        self.assertEqual(headers.get("X-Frame-Options"), "DENY")
+        self.assertEqual(headers.get("X-Content-Type-Options"), "nosniff")
+
+    def test_create_server_defaults_and_binding(self) -> None:
+        """Vérifie les arguments par défaut de create_server et le couplage du handler."""
+        with patch("src.web.ModelPoolServer") as mock_server_cls:
+            mock_server_instance = mock_server_cls.return_value
+            server = create_server(self.service)
+
+            self.assertIs(server, mock_server_instance)
+            mock_server_cls.assert_called_once()
+            args, _ = mock_server_cls.call_args
+            server_address, handler_cls = args
+
+            self.assertEqual(server_address, (LISTEN_HOST, 8765))
+            self.assertTrue(issubclass(handler_cls, LocalInterfaceHandler))
+            self.assertIs(handler_cls.service, self.service)
+            self.assertTrue(handler_cls.allow_fallback)
+
+    def test_create_server_custom_port_and_fallback(self) -> None:
+        """Vérifie create_server avec un port personnalisé et allow_fallback=False."""
+        with patch("src.web.ModelPoolServer") as mock_server_cls:
+            mock_server_instance = mock_server_cls.return_value
+            server = create_server(self.service, port=9000, allow_fallback=False)
+
+            self.assertIs(server, mock_server_instance)
+            mock_server_cls.assert_called_once()
+            args, _ = mock_server_cls.call_args
+            server_address, handler_cls = args
+
+            self.assertEqual(server_address, (LISTEN_HOST, 9000))
+            self.assertIs(handler_cls.service, self.service)
+            self.assertFalse(handler_cls.allow_fallback)
+
+    def test_create_server_live_ephemeral_port(self) -> None:
+        """Vérifie la création réelle d'un ModelPoolServer sur port éphémère (port 0)."""
+        server = create_server(self.service, port=0, allow_fallback=True)
+        try:
+            self.assertIsInstance(server, ModelPoolServer)
+            host, port = server.server_address[:2]
+            self.assertEqual(host, LISTEN_HOST)
+            self.assertGreater(port, 0)
+        finally:
+            server.server_close()
+
+    def test_model_pool_server_handle_error(self) -> None:
+        """Vérifie que ModelPoolServer ignore les déconnexions client et propage les autres erreurs."""
+        from unittest.mock import MagicMock
+
+        server = create_server(self.service, port=0)
+        dummy_req = MagicMock()
+        try:
+            with patch("http.server.ThreadingHTTPServer.handle_error") as mock_super_handle_error:
+                # 1. BrokenPipeError ignoré
+                with patch("sys.exc_info", return_value=(BrokenPipeError, BrokenPipeError(), None)):
+                    server.handle_error(dummy_req, ("127.0.0.1", 12345))
+                    mock_super_handle_error.assert_not_called()
+
+                # 2. ConnectionResetError ignoré
+                with patch("sys.exc_info", return_value=(ConnectionResetError, ConnectionResetError(), None)):
+                    server.handle_error(dummy_req, ("127.0.0.1", 12345))
+                    mock_super_handle_error.assert_not_called()
+
+                # 3. Exception ordinaire déléguée à super().handle_error
+                generic_exc = RuntimeError("unexpected error")
+                with patch("sys.exc_info", return_value=(RuntimeError, generic_exc, None)):
+                    server.handle_error(dummy_req, ("127.0.0.1", 12345))
+                    mock_super_handle_error.assert_called_once_with(dummy_req, ("127.0.0.1", 12345))
+        finally:
+            server.server_close()
+
+    def test_serve_local_interface_clean_shutdown(self) -> None:
+        """Vérifie que serve_local_interface gère KeyboardInterrupt proprement sans lever d'exception."""
+        import io
+        from contextlib import redirect_stdout
+
+        with patch("src.web.create_server") as mock_create:
+            mock_server = mock_create.return_value
+            mock_server.__enter__.return_value = mock_server
+            mock_server.serve_forever.side_effect = KeyboardInterrupt()
+
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                serve_local_interface(self.service, port=9000, allow_fallback=False)
+
+            mock_create.assert_called_once_with(self.service, port=9000, allow_fallback=False)
+            mock_server.serve_forever.assert_called_once()
+            output = buf.getvalue()
+            self.assertIn("Arrêt du serveur local", output)
 
 
 if __name__ == "__main__":
