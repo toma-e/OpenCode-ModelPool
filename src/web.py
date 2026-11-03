@@ -59,6 +59,53 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
             "frame-ancestors 'none'; default-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'self';",
         )
 
+    def _validate_export_path(self, requested: str) -> tuple[Optional[str], Optional[str], int]:
+        """Valide et résout de manière sécurisée un chemin d'export ou de prévisualisation diff.
+
+        Garantit que le chemin cible :
+        1. Ne contient aucune traversée de répertoire ('..') ni octet nul ('\\0').
+        2. Réside strictement dans le périmètre du projet ou de ~/.config/opencode/.
+        3. Cible exclusivement un fichier de configuration OpenCode ('opencode.json' ou 'opencode.jsonc').
+        4. Ne pointe pas vers un répertoire ou un fichier source/secret arbitraire (.env, code source, etc.).
+        """
+        cleaned = requested.strip()
+        if not cleaned:
+            return None, "Chemin d'export non autorisé (chemin vide).", 400
+        if ".." in cleaned or "\0" in cleaned:
+            return None, "Chemin d'export non autorisé (traversée interdite).", 400
+
+        if cleaned in ("global", "~/.config/opencode", "~/.config/opencode/opencode.json"):
+            return str(Path.home() / ".config" / "opencode" / "opencode.json"), None, 200
+
+        resolved = self.service.resolve_export_path(cleaned)
+        project_root = self.service.base_dir.resolve()
+        opencode_dir = (Path.home() / ".config" / "opencode").resolve()
+
+        in_project = False
+        try:
+            resolved.resolve().relative_to(project_root)
+            in_project = True
+        except ValueError:
+            pass
+
+        in_opencode = False
+        try:
+            resolved.resolve().relative_to(opencode_dir)
+            in_opencode = True
+        except ValueError:
+            pass
+
+        if not in_project and not in_opencode:
+            return None, "Export interdit en dehors du projet ou de ~/.config/opencode/.", 403
+
+        if resolved.is_dir():
+            return None, "Chemin non autorisé : la cible ne peut pas être un répertoire.", 400
+
+        if resolved.name not in {"opencode.json", "opencode.jsonc"}:
+            return None, "Fichier non autorisé : la cible doit obligatoirement être 'opencode.json' ou 'opencode.jsonc'.", 400
+
+        return str(resolved), None, 200
+
     def do_HEAD(self) -> None:
         if not self._has_safe_host():
             self.send_response(403)
@@ -160,25 +207,11 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/diff":
             target_path = None
             if isinstance(body, dict) and "path" in body and isinstance(body["path"], str):
-                requested = body["path"].strip()
-                if ".." in requested:
-                    self._send_json(400, {"ok": False, "message": "Chemin non autorisé (traversée interdite)."})
+                valid_path, err_msg, status_code = self._validate_export_path(body["path"])
+                if err_msg:
+                    self._send_json(status_code, {"ok": False, "message": err_msg})
                     return
-                if requested in ("global", "~/.config/opencode", "~/.config/opencode/opencode.json"):
-                    target_path = Path.home() / ".config" / "opencode" / "opencode.json"
-                else:
-                    resolved = self.service.resolve_export_path(requested)
-                    project_root = self.service.base_dir.resolve()
-                    opencode_dir = (Path.home() / ".config" / "opencode").resolve()
-                    try:
-                        resolved.resolve().relative_to(project_root)
-                    except ValueError:
-                        try:
-                            resolved.resolve().relative_to(opencode_dir)
-                        except ValueError:
-                            self._send_json(403, {"ok": False, "message": "Chemin interdit en dehors du projet ou de ~/.config/opencode/."})
-                            return
-                    target_path = requested
+                target_path = valid_path
             try:
                 diff_res = self.service.preview_export(
                     path=target_path,
@@ -193,30 +226,16 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
                     "validation_errors": diff_res["validation_errors"],
                 })
             except Exception as e:
-                self._send_json(400, {"ok": False, "message": str(e)})
+                self._send_json(400, {"ok": False, "message": self._sanitize_message(str(e))})
             return
         if parsed.path == "/api/export":
             export_path = None
             if isinstance(body, dict) and "path" in body and isinstance(body["path"], str):
-                requested = body["path"].strip()
-                if ".." in requested:
-                    self._send_json(400, {"ok": False, "message": "Chemin d'export non autorisé (traversée interdite)."})
+                valid_path, err_msg, status_code = self._validate_export_path(body["path"])
+                if err_msg:
+                    self._send_json(status_code, {"ok": False, "message": err_msg})
                     return
-                if requested in ("global", "~/.config/opencode", "~/.config/opencode/opencode.json"):
-                    export_path = str(Path.home() / ".config" / "opencode" / "opencode.json")
-                else:
-                    resolved = self.service.resolve_export_path(requested)
-                    project_root = self.service.base_dir.resolve()
-                    opencode_dir = (Path.home() / ".config" / "opencode").resolve()
-                    try:
-                        resolved.resolve().relative_to(project_root)
-                    except ValueError:
-                        try:
-                            resolved.resolve().relative_to(opencode_dir)
-                        except ValueError:
-                            self._send_json(403, {"ok": False, "message": "Export interdit en dehors du projet ou de ~/.config/opencode/."})
-                            return
-                    export_path = requested
+                export_path = valid_path
             self._send_operation(
                 self.service.export_config(
                     path=export_path,

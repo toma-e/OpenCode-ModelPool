@@ -1,3 +1,8 @@
+## 2026-11-03 - Target Filename Whitelisting and Sensitive File Leak/Overwrite Prevention on Export and Diff Endpoints
+**Vulnerability:** The HTTP API endpoints `POST /api/diff` and `POST /api/export` only enforced directory containment within `project_root` or `~/.config/opencode/`, but lacked target filename validation. An caller could target arbitrary sensitive files (e.g., `.env`, `data/provider_access.json`, `~/.config/opencode/auth.json`) or source files, leading to credential leaks via the unified diff returned in `/api/diff`, or destructive overwrite of codebase files and credential stores via `/api/export`.
+**Learning:** Directory-boundary containment (`relative_to`) is necessary but insufficient when an endpoint reads or writes file content. Path validation for domain-specific exporters must enforce exact target filename whitelisting (`opencode.json`, `opencode.jsonc`) and reject directories or unrelated files.
+**Prevention:** Centralize path validation in a shared method (`_validate_export_path`) verifying containment within approved directories, rejecting directories (`is_dir()`), and strictly constraining target filenames to `opencode.json` and `opencode.jsonc`.
+
 ## 2026-11-01 - Path Traversal Prevention on Web Integration Endpoints
 **Vulnerability:** The HTTP API endpoint `POST /api/integrate` accepted unvalidated `target` and `project_path` payload values, creating directory traversal risk and arbitrary file write / symlink creation outside authorized project boundaries.
 **Learning:** When new API endpoints are added that invoke service operations handling filesystem paths, endpoint-level input validation must mirror or exceed filesystem boundary constraints previously established in endpoints like `/api/export` and `/api/diff`.

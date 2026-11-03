@@ -108,11 +108,28 @@ OPENCODE_FALLBACK_KNOWN_MODELS: Dict[str, Set[str]] = {
 }
 
 
-def load_opencode_known_models(cache_path: Optional[Path] = None) -> Dict[str, Set[str]]:
-    """Charge les modèles reconnus par les adaptateurs OpenCode depuis le cache local ou le catalogue statique."""
-    known: Dict[str, Set[str]] = {k: set(v) for k, v in OPENCODE_FALLBACK_KNOWN_MODELS.items()}
+_OPENCODE_KNOWN_MODELS_CACHE: dict[str, tuple[Optional[float], dict[str, frozenset[str]]]] = {}
+
+
+def _get_opencode_known_models_frozen(cache_path: Optional[Path] = None) -> dict[str, frozenset[str]]:
+    """⚡ Performance optimization (Bolt): Cache en mémoire invalidé par st_mtime.
+
+    Évite de relire et parser à chaque vérification le fichier volumineux (~5.7 Mo)
+    de cache d'OpenCode (~/.cache/opencode/models.json).
+    """
     path = cache_path or (Path.home() / ".cache" / "opencode" / "models.json")
-    if path.is_file():
+    path_key = str(path)
+    try:
+        mtime: Optional[float] = path.stat().st_mtime
+    except OSError:
+        mtime = None
+
+    cached = _OPENCODE_KNOWN_MODELS_CACHE.get(path_key)
+    if cached is not None and cached[0] == mtime:
+        return cached[1]
+
+    known: dict[str, set[str]] = {k: set(v) for k, v in OPENCODE_FALLBACK_KNOWN_MODELS.items()}
+    if mtime is not None:
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -124,7 +141,16 @@ def load_opencode_known_models(cache_path: Optional[Path] = None) -> Dict[str, S
                             known.setdefault(prov, set()).update(models.keys())
         except (OSError, json.JSONDecodeError):
             pass
-    return known
+
+    frozen_known = {k: frozenset(v) for k, v in known.items()}
+    _OPENCODE_KNOWN_MODELS_CACHE[path_key] = (mtime, frozen_known)
+    return frozen_known
+
+
+def load_opencode_known_models(cache_path: Optional[Path] = None) -> Dict[str, Set[str]]:
+    """Charge les modèles reconnus par les adaptateurs OpenCode depuis le cache local ou le catalogue statique."""
+    frozen = _get_opencode_known_models_frozen(cache_path)
+    return {k: set(v) for k, v in frozen.items()}
 
 
 def canonicalize_opencode_model_id(opencode_prefix: str, raw_model_id: str) -> str:
@@ -145,13 +171,13 @@ def canonicalize_opencode_model_id(opencode_prefix: str, raw_model_id: str) -> s
 def is_opencode_supported_model(
     opencode_prefix: str,
     model_id: str,
-    known_models: Optional[Dict[str, Set[str]]] = None,
+    known_models: Optional[Mapping[str, Collection[str]]] = None,
 ) -> bool:
     """Vérifie si un modèle direct est officiellement reconnu par l'adaptateur OpenCode."""
     if opencode_prefix in ("openrouter", "ollama"):
         return True
     if known_models is None:
-        known_models = load_opencode_known_models()
+        known_models = _get_opencode_known_models_frozen()
     supported = known_models.get(opencode_prefix)
     if supported is None:
         return True

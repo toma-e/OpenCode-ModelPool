@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 
 from src.providers.detector import ProviderCredentials
 from src.providers.router import (
     DEFAULT_PROVIDER_PRIORITY,
     ExecutionTarget,
+    is_opencode_supported_model,
+    load_opencode_known_models,
     match_direct_model_id,
     normalize_model_basename,
     resolve_model_execution_target,
@@ -435,6 +438,41 @@ class TestRouter(unittest.TestCase):
         )
         self.assertEqual(target_explore.channel_provider, "groq")
         self.assertEqual(target_explore.formatted_model_id, "groq/openai/gpt-oss-120b")
+
+    def test_opencode_known_models_caching_and_invalidation(self) -> None:
+        """⚡ Performance test (Bolt): Vérifie la mise en cache mtime et l'isolation des sets de modèles OpenCode."""
+        import os
+        from pathlib import Path
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_file = Path(tmpdir) / "models.json"
+            cache_file.write_text(
+                json.dumps({"mistral": {"models": {"custom-mistral-v1": {}}}}),
+                encoding="utf-8",
+            )
+
+            # 1. Premier chargement : peuple le cache
+            res1 = load_opencode_known_models(cache_file)
+            self.assertIn("custom-mistral-v1", res1.get("mistral", set()))
+            self.assertTrue(is_opencode_supported_model("mistral", "custom-mistral-v1", known_models=res1))
+
+            # 2. Isolation des données : muter le dictionnaire retourné ne doit pas altérer le cache interne
+            res1["mistral"].add("injected-model")
+            res2 = load_opencode_known_models(cache_file)
+            self.assertNotIn("injected-model", res2.get("mistral", set()))
+
+            # 3. Modification du fichier avec mise à jour du mtime -> invalidation immédiate
+            new_mtime = cache_file.stat().st_mtime + 2.0
+            cache_file.write_text(
+                json.dumps({"mistral": {"models": {"custom-mistral-v2": {}}}}),
+                encoding="utf-8",
+            )
+            os.utime(cache_file, (new_mtime, new_mtime))
+
+            res3 = load_opencode_known_models(cache_file)
+            self.assertIn("custom-mistral-v2", res3.get("mistral", set()))
+            self.assertNotIn("custom-mistral-v1", res3.get("mistral", set()))
 
 
 if __name__ == "__main__":

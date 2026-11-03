@@ -144,6 +144,44 @@ class TestWeb(unittest.TestCase):
         self.assertFalse(payload["ok"])
         self.assertIn("interdit", payload["message"].lower())
 
+        # Fichier sensible ou arbitraire interdit (doit obligatoirement être opencode.json ou opencode.jsonc)
+        status, payload = self._post("/api/export", {"path": ".env"})
+        self.assertEqual(status, 400)
+        self.assertFalse(payload["ok"])
+        self.assertIn("opencode.json", payload["message"].lower())
+
+        # Répertoire interdit
+        status, payload = self._post("/api/export", {"path": "config"})
+        self.assertEqual(status, 400)
+        self.assertFalse(payload["ok"])
+        self.assertIn("répertoire", payload["message"].lower())
+
+    def test_post_diff_path_security(self) -> None:
+        """Vérifie que POST /api/diff restreint strictement les chemins pour empêcher la fuite de fichiers."""
+        # 1. Traversée interdite (..)
+        status, payload = self._post("/api/diff", {"path": "../../etc/passwd"})
+        self.assertEqual(status, 400)
+        self.assertFalse(payload["ok"])
+        self.assertIn("traversée", payload["message"].lower())
+
+        # 2. Chemin externe absolu interdit
+        status, payload = self._post("/api/diff", {"path": "/etc/shadow"})
+        self.assertEqual(status, 403)
+        self.assertFalse(payload["ok"])
+        self.assertIn("interdit", payload["message"].lower())
+
+        # 3. Tentative de lecture de secret interne (.env ou auth.json) via le diff rejetée
+        status, payload = self._post("/api/diff", {"path": ".env"})
+        self.assertEqual(status, 400)
+        self.assertFalse(payload["ok"])
+        self.assertIn("opencode.json", payload["message"].lower())
+
+        # 4. Répertoire interdit
+        status, payload = self._post("/api/diff", {"path": "config"})
+        self.assertEqual(status, 400)
+        self.assertFalse(payload["ok"])
+        self.assertIn("répertoire", payload["message"].lower())
+
     def test_post_diff_endpoint(self) -> None:
         """Vérifie que POST /api/diff génère la prévisualisation et valide le schéma."""
         status, payload = self._post("/api/diff")
@@ -359,6 +397,19 @@ class TestWeb(unittest.TestCase):
         # 3. POST avec preset manquant -> 400
         err_status, err_data = self._post("/api/agent/add-preset", {})
         self.assertEqual(err_status, 400)
+
+    def test_diff_section_accessibility_attributes(self) -> None:
+        """Vérifie la présence des attributs d'accessibilité ARIA et focus sur la prévisualisation du diff."""
+        status, html_bytes = self._get("/")
+        self.assertEqual(status, 200)
+        html = html_bytes.decode("utf-8")
+        self.assertIn('id="diff_section"', html)
+        self.assertIn('role="region"', html)
+        self.assertIn('aria-labelledby="diff_heading"', html)
+        self.assertIn('id="diff_heading"', html)
+        self.assertIn('id="close_diff_btn"', html)
+        self.assertIn('aria-label="Fermer la prévisualisation du diff"', html)
+        self.assertIn('tabindex="0" role="region" aria-label="Contenu du diff unifié"', html)
 
 
 if __name__ == "__main__":

@@ -371,13 +371,13 @@
 
     <!-- Onglet 1 : Gestion des Agents -->
     <div id="tab_content_agents" class="tab-content active" role="tabpanel" aria-labelledby="tab_btn_agents" tabindex="0">
-      <section id="diff_section" class="card" style="display:none;margin-bottom:1rem;">
+      <section id="diff_section" class="card" role="region" aria-labelledby="diff_heading" tabindex="-1" style="display:none;margin-bottom:1rem;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
-          <h2 style="margin:0;">Prévisualisation des modifications OpenCode (Diff unifié)</h2>
-          <button id="close_diff_btn" class="btn-sm" type="button">Fermer</button>
+          <h2 id="diff_heading" style="margin:0;">Prévisualisation des modifications OpenCode (Diff unifié)</h2>
+          <button id="close_diff_btn" class="btn-sm" type="button" aria-label="Fermer la prévisualisation du diff">Fermer</button>
         </div>
-        <div id="diff_status" style="margin-bottom:0.5rem;font-size:0.85rem;"></div>
-        <pre id="diff_content" style="background:#0d1117;padding:0.75rem;border-radius:0.4rem;overflow-x:auto;font-family:monospace;font-size:0.82rem;white-space:pre-wrap;border:1px solid var(--line);max-height:400px;overflow-y:auto;"></pre>
+        <div id="diff_status" style="margin-bottom:0.5rem;font-size:0.85rem;" aria-live="polite"></div>
+        <pre id="diff_content" tabindex="0" role="region" aria-label="Contenu du diff unifié" style="background:#0d1117;padding:0.75rem;border-radius:0.4rem;overflow-x:auto;font-family:monospace;font-size:0.82rem;white-space:pre-wrap;border:1px solid var(--line);max-height:400px;overflow-y:auto;"></pre>
       </section>
       <section id="providers_bar" style="margin-bottom:0.75rem;display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;background:var(--panel);padding:0.6rem 1rem;border-radius:0.4rem;border:1px solid var(--line);font-size:0.85rem;"></section>
       <section id="priority_section" class="priority-panel">
@@ -565,6 +565,8 @@
     function showBanner(ok, message) {
       banner.className = ok ? "ok" : "err";
       banner.textContent = message;
+      banner.setAttribute("role", ok ? "status" : "alert");
+      banner.setAttribute("aria-live", ok ? "polite" : "assertive");
     }
 
     function money(value) {
@@ -935,7 +937,19 @@
       }
     }
 
+    const previewDiffBtn = document.getElementById("preview_diff");
+    const closeDiffBtn = document.getElementById("close_diff_btn");
+    const diffSec = document.getElementById("diff_section");
+
+    function closeDiff() {
+      if (diffSec && diffSec.style.display !== "none") {
+        diffSec.style.display = "none";
+        if (previewDiffBtn) previewDiffBtn.focus();
+      }
+    }
+
     async function showDiff() {
+      if (previewDiffBtn) previewDiffBtn.disabled = true;
       try {
         const res = await fetch("/api/diff", {
           method: "POST",
@@ -948,7 +962,6 @@
           }),
         });
         const data = await res.json();
-        const diffSec = document.getElementById("diff_section");
         const diffStatus = document.getElementById("diff_status");
         const diffContent = document.getElementById("diff_content");
         diffSec.style.display = "block";
@@ -961,8 +974,11 @@
           diffStatus.innerHTML = "<span style='color:var(--bad);'>Erreur : " + escapeHtml(data.message) + "</span>";
           diffContent.textContent = "";
         }
+        if (closeDiffBtn) closeDiffBtn.focus();
       } catch (e) {
         showBanner(false, "Impossible de générer le diff : " + e);
+      } finally {
+        if (previewDiffBtn) previewDiffBtn.disabled = false;
       }
     }
 
@@ -1368,8 +1384,12 @@
       renderModelsGrid();
     });
 
-    document.getElementById("close_diff_btn").addEventListener("click", () => {
-      document.getElementById("diff_section").style.display = "none";
+    if (closeDiffBtn) closeDiffBtn.addEventListener("click", closeDiff);
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && diffSec && diffSec.style.display !== "none") {
+        e.preventDefault();
+        closeDiff();
+      }
     });
 
 
