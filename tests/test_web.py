@@ -416,6 +416,23 @@ class TestWeb(unittest.TestCase):
         err_status, err_data = self._post("/api/agent/add-preset", {})
         self.assertEqual(err_status, 400)
 
+        # 4. POST avec nom personnalisé invalide (caractères non autorisés / injection / XSS) -> 400
+        invalid_names = [
+            "<script>alert(1)</script>",
+            "agent name with spaces",
+            "agent/slash",
+            "agent;semi",
+            "a" * 65,  # Dépasse 64 caractères
+            "   ",      # Espaces uniquement
+        ]
+        for bad_name in invalid_names:
+            bad_status, bad_data = self._post("/api/agent/add-preset", {
+                "preset_id": "fast_researcher",
+                "name": bad_name,
+            })
+            self.assertEqual(bad_status, 400)
+            self.assertFalse(bad_data.get("ok"))
+
     def test_diff_section_accessibility_attributes(self) -> None:
         """Vérifie la présence des attributs d'accessibilité ARIA et focus sur la prévisualisation du diff."""
         status, html_bytes = self._get("/")

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Optional
 from urllib.parse import parse_qs, urlparse
 
 from src.service import ApplicationService, OperationResult, serialize_report

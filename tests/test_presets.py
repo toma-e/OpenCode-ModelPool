@@ -33,6 +33,38 @@ class TestPresets(unittest.TestCase):
             create_agent_from_preset("non_existent_preset")
         self.assertIn("non_existent_preset", str(ctx.exception))
 
+    def test_create_agent_from_preset_sanitization_in_service(self) -> None:
+        """Vérifie que la couche service applique les restrictions de sécurité sur le nom de l'agent."""
+        import tempfile
+        from pathlib import Path
+        from src.service import ApplicationService
+        from tests.test_service import write_valid_workspace
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ws_path = Path(temp_dir)
+            write_valid_workspace(ws_path)
+            svc = ApplicationService(ws_path)
+
+            # 1. Nom contenant des balises script
+            res = svc.add_agent_from_preset("coder_heavy", custom_name="<script>alert(1)</script>")
+            self.assertFalse(res.ok)
+            self.assertIn("non autorisés", res.message)
+
+            # 2. Nom vide ou composé d'espaces
+            res_empty = svc.add_agent_from_preset("coder_heavy", custom_name="   ")
+            self.assertFalse(res_empty.ok)
+            self.assertIn("vide", res_empty.message)
+
+            # 3. Nom trop long (> 64 caractères)
+            res_long = svc.add_agent_from_preset("coder_heavy", custom_name="a" * 65)
+            self.assertFalse(res_long.ok)
+            self.assertIn("64 caractères", res_long.message)
+
+            # 4. Nom valide avec caractères autorisés (lettres, chiffres, tirets, underscores, points)
+            res_ok = svc.add_agent_from_preset("coder_heavy", custom_name="valid-agent_1.0")
+            self.assertTrue(res_ok.ok)
+            self.assertIn("valid-agent_1.0", res_ok.message)
+
 
 if __name__ == "__main__":
     unittest.main()

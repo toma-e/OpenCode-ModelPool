@@ -1349,12 +1349,28 @@ class ApplicationService:
         allow_fallback: bool = True,
     ) -> OperationResult:
         """Ajoute un nouvel agent à la configuration à partir d'un preset prédéfini."""
+        import re
+
         with self._lock, self._file_lock():
             try:
                 raw_data = _load_json(self.agents_path, "Exigences des agents")
                 agents_list = raw_data.get("agents")
                 if not isinstance(agents_list, list):
                     return OperationResult(False, "Format de configuration invalide : 'agents' doit être une liste.")
+
+                # Validation de sécurité : assainissement et validation du nom personnalisé
+                if custom_name is not None:
+                    cleaned_name = custom_name.strip()
+                    if not cleaned_name:
+                        return OperationResult(False, "Le nom de l'agent ne peut pas être vide.")
+                    if len(cleaned_name) > 64:
+                        return OperationResult(False, "Le nom de l'agent ne doit pas dépasser 64 caractères.")
+                    if not re.match(r"^[a-zA-Z0-9_.-]+$", cleaned_name):
+                        return OperationResult(
+                            False,
+                            "Le nom de l'agent contient des caractères non autorisés (caractères alphanumériques, '.', '_' et '-' uniquement).",
+                        )
+                    custom_name = cleaned_name
 
                 agent_dict = create_agent_from_preset(preset_id, custom_name=custom_name)
                 final_name = agent_dict["name"]
