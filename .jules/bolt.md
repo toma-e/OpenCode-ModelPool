@@ -2,6 +2,12 @@
 
 Critical performance learnings, architectural bottlenecks, and optimization discoveries in OpenCode-ModelPool.
 
+## 2026-11-04 - Lack of Short-Circuiting and Diagnostic List Allocations in Hot Model Compatibility Checks
+
+**Learning:** During multi-agent fleet attribution (`rank_models_for_agent`), compatibility checks were evaluating all $N$ models for all $M$ agents across exact and fallback passes. `is_model_compatible` called `check_common_constraints` *before* filtering by complexity score. Even worse, `check_common_constraints` called `common_constraint_violations`, which allocated a list, performed string set comprehensions, multi-token cost calculations, and multiple `round()` calls to assemble human-readable error messages for every single evaluation (79,000+ times per benchmark cycle), even though only a boolean `True`/`False` was needed.
+
+**Action:** Reorder integer complexity bounds testing to execute *first* in `is_model_compatible` and `is_model_fallback_compatible` (instantly filtering out ~75% of models before any other inspection), and implement pure short-circuit boolean checking in `check_common_constraints` that returns `False` immediately upon the first violated constraint without building diagnostic string lists or calculating token metrics. This reduces model ranking latency from 17.38 ms down to 7.34 ms per fleet cycle (2.37x speedup, -58% CPU time in model filtering) and overall fleet build latency from ~50.5 ms to ~40.9 ms (-19% overall).
+
 ## 2026-11-03 - Redundant Multi-Megabyte JSON Disk I/O & Parsing in OpenCode Model Support Checks
 
 **Learning:** During multi-agent fleet attribution and model selection (`ApplicationService.build_report`), `match_direct_model_id` repeatedly invoked `is_opencode_supported_model` without pre-loaded models. In turn, `is_opencode_supported_model` invoked `load_opencode_known_models()` on every evaluation, reopening and re-parsing `~/.cache/opencode/models.json` (a 5.7 MB JSON document) from disk via `json.load` 9 to 20 times per fleet calculation (~50 to 110 MB of disk read and JSON decoding per run). This redundant I/O and JSON decoding consumed ~94% of `build_report()` execution time (450 ms out of 480 ms).
