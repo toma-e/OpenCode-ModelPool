@@ -348,7 +348,7 @@
       <button id="sync_or" type="button" title="Télécharge le catalogue public OpenRouter">Sync OpenRouter</button>
       <button id="sync_all" class="primary" type="button" title="Synchronise OpenRouter, Ollama et APIs directes">Sync Tous</button>
       <button id="preview_diff" type="button" title="Prévisualise le diff unifié OpenCode avant écriture">Prévisualiser</button>
-      <select id="export_target" title="Destination de l'exportation OpenCode" style="background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:0.35rem 0.5rem;font-size:0.85rem;">
+      <select id="export_target" aria-label="Destination de l'exportation OpenCode" title="Destination de l'exportation OpenCode" style="background:#131b26;color:var(--text);border:1px solid var(--line);border-radius:4px;padding:0.35rem 0.5rem;font-size:0.85rem;">
         <option value="global" selected>OpenCode Global (~/.config/opencode)</option>
         <option value="project">Projet local (config/opencode.json)</option>
       </select>
@@ -380,15 +380,16 @@
         <pre id="diff_content" tabindex="0" role="region" aria-label="Contenu du diff unifié" style="background:#0d1117;padding:0.75rem;border-radius:0.4rem;overflow-x:auto;font-family:monospace;font-size:0.82rem;white-space:pre-wrap;border:1px solid var(--line);max-height:400px;overflow-y:auto;"></pre>
       </section>
       <section id="providers_bar" style="margin-bottom:0.75rem;display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;background:var(--panel);padding:0.6rem 1rem;border-radius:0.4rem;border:1px solid var(--line);font-size:0.85rem;"></section>
-      <section id="priority_section" class="priority-panel">
+      <section id="priority_section" class="priority-panel" aria-labelledby="priority_heading">
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <div>
-            <strong style="font-size:0.95rem;">Ordre de priorité d'exécution des canaux / clés API</strong>
+            <strong id="priority_heading" style="font-size:0.95rem;">Ordre de priorité d'exécution des canaux / clés API</strong>
             <span class="muted" style="font-size:0.82rem;margin-left:0.5rem;">(Le premier fournisseur compatible et disponible prend en charge le modèle)</span>
           </div>
           <button id="save_priority_btn" class="btn-sm" type="button">Sauvegarder la priorité</button>
         </div>
-        <div id="priority_list" class="priority-list"></div>
+        <div id="priority_status" class="muted" style="font-size:0.8rem;margin-top:0.4rem;" aria-live="polite"></div>
+        <div id="priority_list" class="priority-list" role="list" aria-label="Liste ordonnée des priorités de canaux"></div>
       </section>
       <section id="cooldowns_section" class="card" style="display:none;border-color:#7a3e28;background:#261a18;margin-bottom:1rem;"></section>
       <section id="presets_section" class="card" style="margin-bottom:1rem;background:#131c26;border-color:#2a3e52;">
@@ -405,7 +406,7 @@
               <option value="doc_writer">Rédacteur Documentation (doc_writer)</option>
               <option value="test_runner">Exécuteur de Tests (test_runner)</option>
             </select>
-            <input type="text" id="preset_custom_name" placeholder="Nom optionnel" style="padding:0.35rem 0.5rem;font-size:0.85rem;background:var(--bg);border:1px solid var(--line);border-radius:0.3rem;color:var(--text);width:150px;">
+            <input type="text" id="preset_custom_name" placeholder="Nom optionnel" aria-label="Nom personnalisé pour l'agent (optionnel)" style="padding:0.35rem 0.5rem;font-size:0.85rem;background:var(--bg);border:1px solid var(--line);border-radius:0.3rem;color:var(--text);width:150px;">
             <button id="add_preset_btn" class="btn-sm" type="button" style="background:#205438;border-color:#2e754f;">+ Ajouter l'agent</button>
           </div>
         </div>
@@ -590,31 +591,36 @@
     }
 
     const priorityListEl = document.getElementById("priority_list");
+    const priorityStatusEl = document.getElementById("priority_status");
     const savePriorityBtn = document.getElementById("save_priority_btn");
     let currentPriority = [];
 
-    function renderPriorityPanel(priority) {
+    function renderPriorityPanel(priority, focusTarget = null) {
       if (!Array.isArray(priority)) return;
       currentPriority = [...priority];
       priorityListEl.innerHTML = currentPriority.map((prov, i) => {
         const upDisabled = i === 0 ? "disabled" : "";
         const downDisabled = i === currentPriority.length - 1 ? "disabled" : "";
-        return `<div class="priority-item">
+        return `<div class="priority-item" role="listitem" data-provider="${escapeHtml(prov)}">
           <span style="font-weight:700;color:var(--muted);">${i + 1}.</span>
           <strong>${escapeHtml(prov)}</strong>
-          <button type="button" class="btn-up" data-idx="${i}" ${upDisabled} title="Monter d'un rang" aria-label="Monter ${escapeHtml(prov)} d'un rang">▲</button>
-          <button type="button" class="btn-down" data-idx="${i}" ${downDisabled} title="Descendre d'un rang" aria-label="Descendre ${escapeHtml(prov)} d'un rang">▼</button>
+          <button type="button" class="btn-up" data-idx="${i}" data-provider="${escapeHtml(prov)}" ${upDisabled} title="Monter d'un rang" aria-label="Monter ${escapeHtml(prov)} d'un rang (rang actuel: ${i + 1})">▲</button>
+          <button type="button" class="btn-down" data-idx="${i}" data-provider="${escapeHtml(prov)}" ${downDisabled} title="Descendre d'un rang" aria-label="Descendre ${escapeHtml(prov)} d'un rang (rang actuel: ${i + 1})">▼</button>
         </div>`;
       }).join("");
 
       priorityListEl.querySelectorAll(".btn-up").forEach(btn => {
         btn.addEventListener("click", () => {
           const idx = parseInt(btn.dataset.idx, 10);
+          const prov = btn.dataset.provider;
           if (idx > 0) {
             const temp = currentPriority[idx - 1];
             currentPriority[idx - 1] = currentPriority[idx];
             currentPriority[idx] = temp;
-            renderPriorityPanel(currentPriority);
+            if (priorityStatusEl) {
+              priorityStatusEl.textContent = `${prov} déplacé au rang ${idx} sur ${currentPriority.length}.`;
+            }
+            renderPriorityPanel(currentPriority, { provider: prov, preferredDirection: "up" });
           }
         });
       });
@@ -622,14 +628,31 @@
       priorityListEl.querySelectorAll(".btn-down").forEach(btn => {
         btn.addEventListener("click", () => {
           const idx = parseInt(btn.dataset.idx, 10);
+          const prov = btn.dataset.provider;
           if (idx < currentPriority.length - 1) {
             const temp = currentPriority[idx + 1];
             currentPriority[idx + 1] = currentPriority[idx];
             currentPriority[idx] = temp;
-            renderPriorityPanel(currentPriority);
+            if (priorityStatusEl) {
+              priorityStatusEl.textContent = `${prov} déplacé au rang ${idx + 2} sur ${currentPriority.length}.`;
+            }
+            renderPriorityPanel(currentPriority, { provider: prov, preferredDirection: "down" });
           }
         });
       });
+
+      if (focusTarget && focusTarget.provider) {
+        const itemEl = priorityListEl.querySelector(`[data-provider="${CSS.escape(focusTarget.provider)}"]`);
+        if (itemEl) {
+          const primaryBtn = itemEl.querySelector(focusTarget.preferredDirection === "up" ? ".btn-up" : ".btn-down");
+          const fallbackBtn = itemEl.querySelector(focusTarget.preferredDirection === "up" ? ".btn-down" : ".btn-up");
+          if (primaryBtn && !primaryBtn.disabled) {
+            primaryBtn.focus();
+          } else if (fallbackBtn && !fallbackBtn.disabled) {
+            fallbackBtn.focus();
+          }
+        }
+      }
     }
 
     async function savePriorityOrder() {
