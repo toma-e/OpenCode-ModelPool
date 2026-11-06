@@ -953,6 +953,36 @@ class TestSelector(unittest.TestCase):
             })
         self.assertIn("reliability_preference", str(ctx.exception))
 
+    def test_check_common_constraints_matches_violations_exactly(self) -> None:
+        """Vérifie que check_common_constraints concorde à 100% avec common_constraint_violations."""
+        from src.selector import check_common_constraints
+
+        test_cases = [
+            # Tools mismatch
+            (self.llama_1b, AgentRequirement(name="a1", description="", min_complexity=1, max_complexity=5, requires_tools=True, prefer_free=False)),
+            # Vision requirement
+            (self.llama_1b, AgentRequirement(name="a2", description="", min_complexity=1, max_complexity=5, requires_tools=False, prefer_free=False, requires_vision=True)),
+            # Reasoning requirement
+            (self.claude_sonnet, AgentRequirement(name="a3", description="", min_complexity=1, max_complexity=5, requires_tools=False, prefer_free=False, requires_reasoning=True)),
+            # Min context window
+            (self.llama_1b, AgentRequirement(name="a4", description="", min_complexity=1, max_complexity=5, requires_tools=False, prefer_free=False, min_context_window=64000)),
+            # Allow free = False
+            (self.gemini_lite, AgentRequirement(name="a5", description="", min_complexity=1, max_complexity=5, requires_tools=False, prefer_free=False, allow_free=False)),
+            # Allowed providers
+            (self.llama_1b, AgentRequirement(name="a6", description="", min_complexity=1, max_complexity=5, requires_tools=False, prefer_free=False, allowed_providers=["openai"])),
+            # Excluded providers
+            (self.llama_1b, AgentRequirement(name="a7", description="", min_complexity=1, max_complexity=5, requires_tools=False, prefer_free=False, excluded_providers=["meta"])),
+            # Budget exceeded
+            (self.claude_sonnet, AgentRequirement(name="a8", description="", min_complexity=1, max_complexity=5, requires_tools=False, prefer_free=False, estimated_tokens_input=1_000_000, estimated_tokens_output=1_000_000, max_monthly_budget=5.0)),
+            # Compatible model
+            (self.claude_sonnet, AgentRequirement(name="a9", description="", min_complexity=1, max_complexity=5, requires_tools=True, prefer_free=False, requires_vision=True, min_context_window=100000)),
+        ]
+        for model, req in test_cases:
+            with self.subTest(model=model.id, req=req.name):
+                expected = len(common_constraint_violations(model, req)) == 0
+                actual = check_common_constraints(model, req)
+                self.assertEqual(actual, expected)
+
 
 if __name__ == "__main__":
     unittest.main()
