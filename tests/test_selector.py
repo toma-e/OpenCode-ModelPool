@@ -5,6 +5,7 @@ import unittest
 from src.selector import (
     AgentRequirement,
     Model,
+    check_common_constraints,
     common_constraint_violations,
     is_model_compatible,
     is_non_llm_model,
@@ -952,6 +953,39 @@ class TestSelector(unittest.TestCase):
                 "reliability_preference": "super_safe",
             })
         self.assertIn("reliability_preference", str(ctx.exception))
+
+    def test_check_common_constraints_matches_common_constraint_violations(self) -> None:
+        """⚡ Performance test (Bolt): check_common_constraints matches common_constraint_violations exactly."""
+        reqs = [
+            AgentRequirement(name="a1", description="", min_complexity=1, max_complexity=5, requires_tools=True, prefer_free=False),
+            AgentRequirement(name="a2", description="", min_complexity=1, max_complexity=5, requires_tools=False, prefer_free=False, requires_vision=True),
+            AgentRequirement(name="a3", description="", min_complexity=1, max_complexity=5, requires_tools=False, prefer_free=False, requires_reasoning=True),
+            AgentRequirement(name="a4", description="", min_complexity=1, max_complexity=5, requires_tools=False, prefer_free=False, min_context_window=200_000),
+            AgentRequirement(name="a5", description="", min_complexity=1, max_complexity=5, requires_tools=False, prefer_free=False, allow_free=False),
+            AgentRequirement(name="a6", description="", min_complexity=1, max_complexity=5, requires_tools=False, prefer_free=False, allowed_providers=["google"]),
+            AgentRequirement(name="a7", description="", min_complexity=1, max_complexity=5, requires_tools=False, prefer_free=False, excluded_providers=["google"]),
+            AgentRequirement(
+                name="a8",
+                description="",
+                min_complexity=1,
+                max_complexity=5,
+                requires_tools=False,
+                prefer_free=False,
+                estimated_tokens_input=1_000_000,
+                estimated_tokens_output=1_000_000,
+                max_monthly_budget=0.10,
+            ),
+        ]
+        for req in reqs:
+            for model in self.models:
+                violations = common_constraint_violations(model, req)
+                expected_compatible = len(violations) == 0
+                actual_compatible = check_common_constraints(model, req)
+                self.assertEqual(
+                    actual_compatible,
+                    expected_compatible,
+                    f"Mismatch for model={model.id} req={req.name}: violations={violations}",
+                )
 
 
 if __name__ == "__main__":
