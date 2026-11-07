@@ -425,7 +425,7 @@
               <option value="doc_writer">Rédacteur Documentation (doc_writer)</option>
               <option value="test_runner">Exécuteur de Tests (test_runner)</option>
             </select>
-            <input type="text" id="preset_custom_name" placeholder="Nom optionnel" style="padding:0.35rem 0.5rem;font-size:0.85rem;background:var(--bg);border:1px solid var(--line);border-radius:0.3rem;color:var(--text);width:150px;">
+            <input type="text" id="preset_custom_name" placeholder="Nom optionnel" aria-label="Nom personnalisé de l'agent" style="padding:0.35rem 0.5rem;font-size:0.85rem;background:var(--bg);border:1px solid var(--line);border-radius:0.3rem;color:var(--text);width:150px;">
             <button id="add_preset_btn" class="btn-sm" type="button" style="background:#205438;border-color:#2e754f;">+ Ajouter l'agent</button>
           </div>
         </div>
@@ -908,7 +908,7 @@
               <label><input type="checkbox" id="req_reasoning-${agentIdx}"${reqReasoning ? " checked" : ""}> Raisonnement</label>
             </div>
 
-            <button type="submit" class="btn-sm">Appliquer</button>
+            <button type="submit" class="btn-sm" aria-label="Appliquer les modifications pour ${escapeHtml(agent.name)}">Appliquer</button>
             ${failoverControls}
           </form>
         </article>`;
@@ -920,7 +920,8 @@
           e.preventDefault();
           const name = form.getAttribute("data-agent-name");
           const idx = form.getAttribute("data-agent-idx");
-          saveAgentRequirements(name, idx);
+          const submitBtn = form.querySelector('button[type="submit"]');
+          saveAgentRequirements(name, idx, submitBtn);
         });
       });
 
@@ -935,7 +936,12 @@
       });
     }
 
-    async function saveAgentRequirements(agentName, agentIdx) {
+    async function saveAgentRequirements(agentName, agentIdx, submitBtn) {
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.setAttribute("aria-busy", "true");
+        submitBtn.textContent = "Application...";
+      }
       const strategyEl = document.getElementById("strat-" + agentIdx);
       const reliabilityEl = document.getElementById("reliability-" + agentIdx);
       const allowFreeEl = document.getElementById("allow_free-" + agentIdx);
@@ -974,9 +980,20 @@
         });
         const payload = await response.json();
         showBanner(Boolean(payload.ok), payload.message || (payload.ok ? "Enregistré" : "Erreur"));
-        if (payload.report) render(payload.report);
+        if (payload.report) {
+          render(payload.report);
+          const safeSelector = window.CSS && CSS.escape ? CSS.escape(agentName) : agentName.replace(/"/g, '\\"');
+          const updatedForm = document.querySelector(`.agent-form[data-agent-name="${safeSelector}"]`);
+          const updatedBtn = updatedForm ? updatedForm.querySelector('button[type="submit"]') : null;
+          if (updatedBtn) updatedBtn.focus();
+        }
       } catch (error) {
         showBanner(false, "Échec de l'enregistrement : " + error);
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.removeAttribute("aria-busy");
+          submitBtn.textContent = "Appliquer";
+        }
       }
     }
 

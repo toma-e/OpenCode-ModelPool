@@ -15,3 +15,7 @@
 ## 2026-11-04 - Accessible Reordering: Focus Preservation & Live Position Announcements
 **Learning:** In interactive re-orderable lists (like execution channel priority), re-rendering the list DOM after an item move resets active keyboard focus to the `body`, breaking the user's sequential workflow and requiring repetitive tabbing. Screen reader users also receive no feedback about the new item order unless polite live status regions announce the positional shift.
 **Action:** Whenever re-rendering a dynamically reordered list, explicitly maintain focus on the moved item's action button (or swap to its enabled sibling button when hitting the top/bottom boundary), and emit polite live region announcements (e.g. "[Item] déplacé en position X sur Y").
+
+## 2026-11-05 - Asynchronous Form Submissions: Loading States & Focus Continuity
+**Learning:** Submitting forms within dynamic lists (such as agent configuration cards) that trigger full innerHTML re-renders abruptly resets keyboard focus to `document.body`. This forces keyboard and screen reader users to redundantly tab through preceding controls, while lack of loading feedback or button disabling risks duplicate submissions.
+**Action:** Provide explicit ARIA labels on per-item action buttons, disable and mark buttons with `aria-busy="true"` and loading text during in-flight requests, and re-target active focus to the newly rendered item's submit button after completing the DOM refresh.

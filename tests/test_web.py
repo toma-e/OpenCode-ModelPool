@@ -466,6 +466,18 @@ class TestWeb(unittest.TestCase):
         self.assertIn('aria-label="Fermer la notification"', html)
         self.assertIn('hideBanner', html)
 
+    def test_agent_form_and_preset_accessibility_attributes(self) -> None:
+        """Vérifie les attributs d'accessibilité et la préservation de focus sur les formulaires d'agents et presets."""
+        status, html_bytes = self._get("/")
+        self.assertEqual(status, 200)
+        html = html_bytes.decode("utf-8")
+        self.assertIn('id="preset_custom_name"', html)
+        self.assertIn('aria-label="Nom personnalisé de l\'agent"', html)
+        self.assertIn('aria-label="Appliquer les modifications pour', html)
+        self.assertIn('aria-busy', html)
+        self.assertIn('Application...', html)
+        self.assertIn('updatedBtn.focus()', html)
+
     def test_head_static_files(self) -> None:
         """Vérifie que HEAD sur / et /index.html renvoie 200, les en-têtes corrects et un corps vide."""
         for path in ("/", "/index.html"):
