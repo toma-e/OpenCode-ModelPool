@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -44,13 +43,19 @@ class ProviderCredentials:
 
 
 def mask_key(key: Optional[str]) -> Optional[str]:
-    """Masque une clé d'API pour journalisation et diagnostic sécurisés."""
+    """Masque une clé d'API pour journalisation et diagnostic sécurisés (défense en profondeur).
+
+    Garantit qu'une proportion excessive d'entropie n'est jamais divulguée :
+    - Clés courtes (< 8 caractères) : masquage intégral '****'
+    - Clés moyennes (8 à 16 caractères) : 2 premiers et 2 derniers caractères visibles
+    - Clés longues (> 16 caractères) : 4 premiers et 4 derniers caractères visibles
+    """
     if not key or not isinstance(key, str):
         return None
     cleaned = key.strip()
-    if len(cleaned) <= 6:
+    if len(cleaned) < 8:
         return "****"
-    if len(cleaned) <= 12:
+    if len(cleaned) <= 16:
         return f"{cleaned[:2]}...{cleaned[-2:]}"
     return f"{cleaned[:4]}...{cleaned[-4:]}"
 
