@@ -7,8 +7,6 @@ import unittest
 
 from src.providers.detector import ProviderCredentials
 from src.providers.router import (
-    DEFAULT_PROVIDER_PRIORITY,
-    ExecutionTarget,
     is_opencode_supported_model,
     load_opencode_known_models,
     match_direct_model_id,
