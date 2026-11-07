@@ -443,6 +443,17 @@ class TestWeb(unittest.TestCase):
         self.assertIn('aria-label="Fermer la prévisualisation du diff"', html)
         self.assertIn('tabindex="0" role="region" aria-label="Contenu du diff unifié"', html)
 
+    def test_notification_banner_accessibility_and_dismissibility(self) -> None:
+        """Vérifie que le bandeau de notification comporte les éléments d'accessibilité et de fermeture."""
+        status, html_bytes = self._get("/")
+        self.assertEqual(status, 200)
+        html = html_bytes.decode("utf-8")
+        self.assertIn('id="banner"', html)
+        self.assertIn('id="banner_text"', html)
+        self.assertIn('id="banner_close_btn"', html)
+        self.assertIn('aria-label="Fermer la notification"', html)
+        self.assertIn('hideBanner', html)
+
     def test_head_static_files(self) -> None:
         """Vérifie que HEAD sur / et /index.html renvoie 200, les en-têtes corrects et un corps vide."""
         for path in ("/", "/index.html"):

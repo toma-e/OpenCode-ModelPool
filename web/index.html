@@ -50,9 +50,25 @@
       max-width: 1100px;
       padding: 0.75rem 1.25rem;
       border-radius: 0.4rem;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
     }
-    #banner.ok { display: block; background: #143528; color: var(--ok); }
-    #banner.err { display: block; background: #3a1c22; color: var(--bad); }
+    #banner.ok { display: flex; background: #143528; color: var(--ok); }
+    #banner.err { display: flex; background: #3a1c22; color: var(--bad); }
+    .banner-text { flex: 1; word-break: break-word; }
+    .banner-close {
+      background: transparent;
+      border: 1px solid transparent;
+      color: inherit;
+      padding: 0.2rem 0.5rem;
+      border-radius: 0.3rem;
+      font-size: 1.1rem;
+      line-height: 1;
+      opacity: 0.8;
+      cursor: pointer;
+    }
+    .banner-close:hover { opacity: 1; background: rgba(255, 255, 255, 0.1); }
     .summary, .card {
       background: var(--panel);
       border: 1px solid var(--line);
@@ -356,7 +372,10 @@
       <button id="integrate" type="button" title="Lie OpenCode à ModelPool (commandes, plugins et configuration synchronisée)">Intégrer OpenCode</button>
     </div>
   </header>
-  <div id="banner" role="status"></div>
+  <div id="banner" role="status">
+    <div id="banner_text" class="banner-text"></div>
+    <button type="button" id="banner_close_btn" class="banner-close" aria-label="Fermer la notification" title="Fermer la notification (Échap)">✕</button>
+  </div>
   <main>
     <nav class="tabs-nav" role="tablist" aria-label="Navigation principale">
       <button type="button" id="tab_btn_agents" class="tab-btn active" role="tab" aria-selected="true" aria-controls="tab_content_agents" tabindex="0">
@@ -562,11 +581,41 @@
       }
     }
 
+    const bannerText = document.getElementById("banner_text");
+    const bannerCloseBtn = document.getElementById("banner_close_btn");
+    let bannerTimeoutId = null;
+
+    function hideBanner() {
+      if (bannerTimeoutId) {
+        clearTimeout(bannerTimeoutId);
+        bannerTimeoutId = null;
+      }
+      banner.className = "";
+      banner.style.display = "none";
+      if (bannerText) bannerText.textContent = "";
+    }
+
+    if (bannerCloseBtn) {
+      bannerCloseBtn.addEventListener("click", hideBanner);
+    }
+
     function showBanner(ok, message) {
+      if (bannerTimeoutId) {
+        clearTimeout(bannerTimeoutId);
+        bannerTimeoutId = null;
+      }
+      banner.style.display = "";
       banner.className = ok ? "ok" : "err";
-      banner.textContent = message;
+      if (bannerText) {
+        bannerText.textContent = message;
+      } else {
+        banner.textContent = message;
+      }
       banner.setAttribute("role", ok ? "status" : "alert");
       banner.setAttribute("aria-live", ok ? "polite" : "assertive");
+      if (ok) {
+        bannerTimeoutId = setTimeout(hideBanner, 6000);
+      }
     }
 
     function money(value) {
@@ -1386,9 +1435,14 @@
 
     if (closeDiffBtn) closeDiffBtn.addEventListener("click", closeDiff);
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && diffSec && diffSec.style.display !== "none") {
-        e.preventDefault();
-        closeDiff();
+      if (e.key === "Escape") {
+        if (diffSec && diffSec.style.display !== "none") {
+          e.preventDefault();
+          closeDiff();
+        } else if (banner && banner.style.display !== "none" && (banner.classList.contains("ok") || banner.classList.contains("err"))) {
+          e.preventDefault();
+          hideBanner();
+        }
       }
     });
 
