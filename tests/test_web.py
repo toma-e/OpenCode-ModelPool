@@ -443,6 +443,18 @@ class TestWeb(unittest.TestCase):
         self.assertIn('aria-label="Fermer la prévisualisation du diff"', html)
         self.assertIn('tabindex="0" role="region" aria-label="Contenu du diff unifié"', html)
 
+    def test_priority_panel_accessibility_attributes(self) -> None:
+        """Vérifie la présence des rôles et attributs ARIA pour la liste de priorité des canaux."""
+        status, html_bytes = self._get("/")
+        self.assertEqual(status, 200)
+        html = html_bytes.decode("utf-8")
+        self.assertIn('id="priority_list"', html)
+        self.assertIn('role="list"', html)
+        self.assertIn('aria-label="Ordre de priorité des canaux et fournisseurs"', html)
+        self.assertIn('id="priority_live"', html)
+        self.assertIn('role="status"', html)
+        self.assertIn('aria-live="polite"', html)
+
     def test_notification_banner_accessibility_and_dismissibility(self) -> None:
         """Vérifie que le bandeau de notification comporte les éléments d'accessibilité et de fermeture."""
         status, html_bytes = self._get("/")

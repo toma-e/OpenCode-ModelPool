@@ -11,3 +11,7 @@
 ## 2026-11-04 - Accessible Notification Banner Dismissal and Transient Timers
 **Learning:** Persistent notification banners at the top of web interfaces quickly clutter the screen and create repetitive friction for keyboard and screen reader users when they cannot be dismissed. Additionally, auto-dismissing error alerts prematurely can prevent assistive tech users from perceiving critical failures.
 **Action:** Always provide an explicit accessible dismiss button (`aria-label="Fermer la notification"`) and keyboard `Escape` handler on notification banners, and differentiate dismissal behavior by automatically clearing success feedback after a short duration while keeping errors persistent until user dismissal.
+
+## 2026-11-04 - Accessible Reordering: Focus Preservation & Live Position Announcements
+**Learning:** In interactive re-orderable lists (like execution channel priority), re-rendering the list DOM after an item move resets active keyboard focus to the `body`, breaking the user's sequential workflow and requiring repetitive tabbing. Screen reader users also receive no feedback about the new item order unless polite live status regions announce the positional shift.
+**Action:** Whenever re-rendering a dynamically reordered list, explicitly maintain focus on the moved item's action button (or swap to its enabled sibling button when hitting the top/bottom boundary), and emit polite live region announcements (e.g. "[Item] déplacé en position X sur Y").

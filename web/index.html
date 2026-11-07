@@ -407,7 +407,8 @@
           </div>
           <button id="save_priority_btn" class="btn-sm" type="button">Sauvegarder la priorité</button>
         </div>
-        <div id="priority_list" class="priority-list"></div>
+        <div id="priority_live" class="sr-only" role="status" aria-live="polite" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0;"></div>
+        <div id="priority_list" class="priority-list" role="list" aria-label="Ordre de priorité des canaux et fournisseurs"></div>
       </section>
       <section id="cooldowns_section" class="card" style="display:none;border-color:#7a3e28;background:#261a18;margin-bottom:1rem;"></section>
       <section id="presets_section" class="card" style="margin-bottom:1rem;background:#131c26;border-color:#2a3e52;">
@@ -639,31 +640,36 @@
     }
 
     const priorityListEl = document.getElementById("priority_list");
+    const priorityLiveEl = document.getElementById("priority_live");
     const savePriorityBtn = document.getElementById("save_priority_btn");
     let currentPriority = [];
 
-    function renderPriorityPanel(priority) {
+    function renderPriorityPanel(priority, focusTarget = null) {
       if (!Array.isArray(priority)) return;
       currentPriority = [...priority];
       priorityListEl.innerHTML = currentPriority.map((prov, i) => {
         const upDisabled = i === 0 ? "disabled" : "";
         const downDisabled = i === currentPriority.length - 1 ? "disabled" : "";
-        return `<div class="priority-item">
+        return `<div class="priority-item" role="listitem">
           <span style="font-weight:700;color:var(--muted);">${i + 1}.</span>
           <strong>${escapeHtml(prov)}</strong>
-          <button type="button" class="btn-up" data-idx="${i}" ${upDisabled} title="Monter d'un rang" aria-label="Monter ${escapeHtml(prov)} d'un rang">▲</button>
-          <button type="button" class="btn-down" data-idx="${i}" ${downDisabled} title="Descendre d'un rang" aria-label="Descendre ${escapeHtml(prov)} d'un rang">▼</button>
+          <button type="button" class="btn-up" data-prov="${escapeHtml(prov)}" data-idx="${i}" ${upDisabled} title="Monter d'un rang" aria-label="Monter ${escapeHtml(prov)} d'un rang">▲</button>
+          <button type="button" class="btn-down" data-prov="${escapeHtml(prov)}" data-idx="${i}" ${downDisabled} title="Descendre d'un rang" aria-label="Descendre ${escapeHtml(prov)} d'un rang">▼</button>
         </div>`;
       }).join("");
 
       priorityListEl.querySelectorAll(".btn-up").forEach(btn => {
         btn.addEventListener("click", () => {
           const idx = parseInt(btn.dataset.idx, 10);
+          const prov = btn.dataset.prov;
           if (idx > 0) {
             const temp = currentPriority[idx - 1];
             currentPriority[idx - 1] = currentPriority[idx];
             currentPriority[idx] = temp;
-            renderPriorityPanel(currentPriority);
+            if (priorityLiveEl) {
+              priorityLiveEl.textContent = `${prov} déplacé en position ${idx} sur ${currentPriority.length}`;
+            }
+            renderPriorityPanel(currentPriority, { prov, direction: "up" });
           }
         });
       });
@@ -671,14 +677,28 @@
       priorityListEl.querySelectorAll(".btn-down").forEach(btn => {
         btn.addEventListener("click", () => {
           const idx = parseInt(btn.dataset.idx, 10);
+          const prov = btn.dataset.prov;
           if (idx < currentPriority.length - 1) {
             const temp = currentPriority[idx + 1];
             currentPriority[idx + 1] = currentPriority[idx];
             currentPriority[idx] = temp;
-            renderPriorityPanel(currentPriority);
+            if (priorityLiveEl) {
+              priorityLiveEl.textContent = `${prov} déplacé en position ${idx + 2} sur ${currentPriority.length}`;
+            }
+            renderPriorityPanel(currentPriority, { prov, direction: "down" });
           }
         });
       });
+
+      if (focusTarget && focusTarget.prov) {
+        const selector = focusTarget.direction === "up" ? `.btn-up[data-prov="${focusTarget.prov}"]` : `.btn-down[data-prov="${focusTarget.prov}"]`;
+        let targetBtn = priorityListEl.querySelector(selector);
+        if (targetBtn && targetBtn.disabled) {
+          const altSelector = focusTarget.direction === "up" ? `.btn-down[data-prov="${focusTarget.prov}"]` : `.btn-up[data-prov="${focusTarget.prov}"]`;
+          targetBtn = priorityListEl.querySelector(altSelector);
+        }
+        if (targetBtn) targetBtn.focus();
+      }
     }
 
     async function savePriorityOrder() {
