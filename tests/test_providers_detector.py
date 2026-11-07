@@ -21,10 +21,17 @@ class TestProviderDetector(unittest.TestCase):
     def test_mask_key(self) -> None:
         self.assertIsNone(mask_key(None))
         self.assertIsNone(mask_key(""))
+        # Clés courtes (< 8 caractères) : masquage complet
         self.assertEqual(mask_key("short"), "****")
         self.assertEqual(mask_key("123456"), "****")
+        self.assertEqual(mask_key("1234567"), "****")
+        # Clés moyennes (8 à 16 caractères) : 2 caractères visibles au début et à la fin
+        self.assertEqual(mask_key("12345678"), "12...78")
         self.assertEqual(mask_key("123456789"), "12...89")
         self.assertEqual(mask_key("mis_12345678"), "mi...78")
+        self.assertEqual(mask_key("1234567890123456"), "12...56")
+        # Clés longues (> 16 caractères) : 4 caractères visibles au début et à la fin
+        self.assertEqual(mask_key("12345678901234567"), "1234...4567")
         self.assertEqual(mask_key("sk-ant-api03-123456789"), "sk-a...6789")
 
     def test_parse_dotenv_file(self) -> None:

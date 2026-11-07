@@ -283,6 +283,20 @@ class TestWeb(unittest.TestCase):
             self.assertIn("base-uri 'none'", csp)
             self.assertIn("form-action 'self'", csp)
 
+    def test_get_providers_masks_credentials(self) -> None:
+        """Vérifie que l'endpoint GET /api/providers ne divulgue jamais de clé brute et applique le masquage."""
+        with urllib.request.urlopen(self.base + "/api/providers", timeout=5) as response:
+            self.assertEqual(response.status, 200)
+            payload = json.loads(response.read().decode("utf-8"))
+            self.assertTrue(payload.get("ok"))
+            self.assertIn("providers", payload)
+            providers = payload["providers"]
+            for prov_name, cred in providers.items():
+                masked = cred.get("masked_key")
+                if masked is not None:
+                    # Ne doit jamais être un token brut ou dépasser le format masqué
+                    self.assertTrue(masked.startswith("****") or "..." in masked)
+
     def test_post_recalculate_returns_report(self) -> None:
         """Vérifie que POST /api/recalculate renvoie un rapport complet."""
         request = urllib.request.Request(
