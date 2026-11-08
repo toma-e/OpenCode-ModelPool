@@ -2,6 +2,12 @@
 
 Critical performance learnings, architectural bottlenecks, and optimization discoveries in OpenCode-ModelPool.
 
+## 2026-11-08 - Over-Granular Route Cache Key and Redundant Channel Target Evaluation
+
+**Learning:** In `ApplicationService._build_report_unlocked`, candidate target routing in fallback chains and channel ranking repeatedly evaluated `_route(m, agent)`. The route cache was keyed on `(model.id, agent_req.name)`. Because the agent name differs across all agents, candidate target evaluations for every agent completely missed the pre-warmed catalogue route cache, causing ~1,370 redundant calls to `resolve_model_execution_target` per report build. However, inside `resolve_model_execution_target`, `agent_requirement` is only checked when Groq credentials are active (specifically checking `min_context_window > 8000` and `requires_tools`). Additionally, `channel_rank` and `channel_costs` were evaluating `_route(m)` across two separate dictionary comprehension loops.
+
+**Action:** Consolidate the channel target evaluation into a single pass (`channel_targets = {m.id: _route(m) for m in models}`) and normalize the `_route` cache key to `(model.id, groq_key)` where `groq_key` only captures the effective Groq constraint tuple `(((agent_req.min_context_window or 0) > 8000, agent_req.requires_tools) if (agent_req and groq_active) else None)`. All candidate target and fallback evaluations across all agents now hit the pre-warmed cache, eliminating ~1,370 router calls per report build. This reduces `build_report` latency from ~41.3 ms to ~23.1 ms (~1.8x speedup, ~44% latency reduction).
+
 ## 2026-11-04 - Eager Full-Constraint Allocation and Inverted Filtering in Fleet Compatibility Checking
 
 **Learning:** During agent fleet assignment and candidate evaluation (`rank_models_for_agent`), `is_model_compatible` repeatedly invoked `check_common_constraints`, which directly delegated to `common_constraint_violations`. For every model evaluation (over 3,900 checks per fleet build), `common_constraint_violations` eagerly constructed a list, tested all 8 constraint dimensions without early exit, performed token arithmetic with multiple float `round()` calls, and repeatedly built sets for provider names—even when the model failed on the simplest check. Additionally, `is_model_compatible` ran common constraints before the complexity check, failing to take advantage of the fact that an O(1) integer range check (`min <= complexity <= max`) eliminates ~75-85% of models instantly.

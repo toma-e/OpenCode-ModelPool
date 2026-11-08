@@ -340,15 +340,15 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
             if not isinstance(body, dict):
                 self._send_json(400, {"ok": False, "message": "Corps JSON attendu."})
                 return
-            target = body.get("target") or body.get("agent_name") or body.get("model_id")
-            if not isinstance(target, str) or not target.strip():
+            raw_target = body.get("target") or body.get("agent_name") or body.get("model_id")
+            if not isinstance(raw_target, str) or not raw_target.strip():
                 self._send_json(400, {"ok": False, "message": "Champ 'target' (ou 'agent_name') obligatoire."})
                 return
             reason = str(body.get("reason") or "rate_limit").strip()
             auto_export = bool(body.get("auto_export", True))
             self._send_operation(
                 self.service.report_model_error(
-                    target_or_agent=target.strip(),
+                    target_or_agent=raw_target.strip(),
                     reason=reason,
                     allow_fallback=fallback,
                     filter_by_keys=filter_keys,
