@@ -466,6 +466,16 @@ class TestWeb(unittest.TestCase):
         self.assertIn('aria-label="Fermer la notification"', html)
         self.assertIn('hideBanner', html)
 
+    def test_model_assign_button_accessible_disabled_state(self) -> None:
+        """Vérifie que le template HTML configure le bouton d'assignation avec état désactivé accessible et écouteur de changement."""
+        status, html_bytes = self._get("/")
+        self.assertEqual(status, 200)
+        html = html_bytes.decode("utf-8")
+        self.assertIn('btn-assign-model', html)
+        self.assertIn('disabled aria-disabled="true"', html)
+        self.assertIn("Sélectionnez un agent pour lui imposer ce modèle", html)
+        self.assertIn(".assign-agent-select", html)
+
     def test_head_static_files(self) -> None:
         """Vérifie que HEAD sur / et /index.html renvoie 200, les en-têtes corrects et un corps vide."""
         for path in ("/", "/index.html"):
