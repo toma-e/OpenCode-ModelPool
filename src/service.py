@@ -11,11 +11,10 @@ import json
 import sys
 import threading
 import time
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Callable, Iterator, Optional
+from typing import Any, Callable, Dict, Iterator, Mapping, Optional
 
-from datetime import datetime, timezone
 
 try:
     import fcntl
@@ -29,7 +28,7 @@ except ImportError:
 
 from src.budget import AgentBudgetReport, FleetBudgetReport, simulate_fleet_budget
 from src.diagnostics import build_fleet_diagnostics, check_catalogue_staleness
-from src.presets import BUILTIN_PRESETS, create_agent_from_preset, get_available_presets
+from src.presets import create_agent_from_preset, get_available_presets
 from src.cooldown import (
     CooldownEntry,
     create_cooldown_entry,
@@ -55,7 +54,6 @@ from src.fetcher import (
 from src.providers.detector import (
     ProviderCredentials,
     detect_provider_credentials,
-    get_available_provider_names,
 )
 from src.providers.ollama import get_ollama_models
 from src.providers.access import (
@@ -77,7 +75,6 @@ from src.selector import (
     Model,
     SelectionResult,
     build_hybrid_fallback_chain,
-    is_non_llm_model,
     resolve_model_for_agent,
 )
 
