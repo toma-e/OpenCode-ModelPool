@@ -35,6 +35,7 @@ from src.cooldown import (
     create_cooldown_entry,
     is_model_in_cooldown,
     read_cooldowns,
+    validate_target_id,
     write_cooldowns,
 )
 from src.exporter import (
@@ -1392,9 +1393,10 @@ class ApplicationService:
         export_path: str | Path | None = None,
     ) -> OperationResult:
         """Signale une erreur sur un agent, un modèle ou un fournisseur, l'isole en quarantaine et bascule sur le modèle de repli."""
-        clean_target = (target_or_agent or "").strip()
-        if not clean_target:
-            return OperationResult(False, "Veuillez indiquer un nom d'agent ou un identifiant de modèle à basculer.")
+        try:
+            clean_target = validate_target_id(target_or_agent)
+        except ValueError as err:
+            return OperationResult(False, str(err))
 
         with self._lock, self._file_lock():
             try:
@@ -1485,6 +1487,12 @@ class ApplicationService:
         export_path: str | Path | None = None,
     ) -> OperationResult:
         """Lève la quarantaine d'un modèle spécifique ou de tous les modèles et recalcule les attributions."""
+        if target_id is not None and target_id.strip() and target_id.strip().lower() != "all":
+            try:
+                target_id = validate_target_id(target_id)
+            except ValueError as err:
+                return OperationResult(False, str(err))
+
         with self._lock, self._file_lock():
             try:
                 existing = read_cooldowns(self.cooldown_path)

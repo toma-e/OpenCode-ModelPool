@@ -88,6 +88,39 @@ class TestCooldownClassificationAndPersistence(unittest.TestCase):
             self.assertEqual(loaded[0].target_id, "groq/openai/gpt-oss-120b")
             self.assertEqual(loaded[0].reason, REASON_QUOTA_EXCEEDED)
 
+    def test_validate_target_id_valid_and_invalid(self) -> None:
+        from src.cooldown import validate_target_id
+
+        # Cibles valides
+        self.assertEqual(validate_target_id("openrouter/nvidia/nemotron:free"), "openrouter/nvidia/nemotron:free")
+        self.assertEqual(validate_target_id("provider:groq"), "provider:groq")
+        self.assertEqual(validate_target_id("build"), "build")
+        self.assertEqual(validate_target_id("all"), "all")
+
+        # Cibles invalides : vide ou espaces
+        with self.assertRaises(ValueError):
+            validate_target_id("")
+        with self.assertRaises(ValueError):
+            validate_target_id("   ")
+
+        # Cibles invalides : non-string
+        with self.assertRaises(ValueError):
+            validate_target_id(123)  # type: ignore[arg-type]
+
+        # Cibles invalides : dépassement de longueur
+        with self.assertRaises(ValueError):
+            validate_target_id("a" * 256)
+
+        # Cibles invalides : caractères de contrôle (null byte, newline, carriage return, escape)
+        with self.assertRaises(ValueError):
+            validate_target_id("openrouter/model\0injection")
+        with self.assertRaises(ValueError):
+            validate_target_id("openrouter/model\ninjection")
+        with self.assertRaises(ValueError):
+            validate_target_id("openrouter/model\rinjection")
+        with self.assertRaises(ValueError):
+            validate_target_id("openrouter/model\x1binjection")
+
     def test_is_model_and_provider_in_cooldown_matching(self) -> None:
         now = datetime(2026, 10, 27, 18, 0, 0, tzinfo=timezone.utc)
         entries = [
