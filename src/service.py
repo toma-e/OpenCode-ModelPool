@@ -399,10 +399,22 @@ class ApplicationService:
                 f"Quarantaine active ({c.reason_label}) sur '{c.target_id}' — réhabilitation dans ~{rem_min} min."
             )
 
-        route_cache: dict[tuple[str, str], ExecutionTarget] = {}
+        # ⚡ Performance optimization (Bolt): Memoize route targets across all agents.
+        # Inside resolve_model_execution_target, agent_requirement is only inspected when
+        # Groq credentials are live (for TPM context limits > 8000 and tool requirements).
+        # Normalizing the cache key to only effective Groq constraints allows candidate evaluations
+        # and fallback chains across all agents to reuse pre-warmed targets instead of cache-missing
+        # on agent.name, avoiding ~1,370 redundant resolve_model_execution_target calls per report build.
+        groq_active = bool(creds.get("groq") and creds["groq"].is_available)
+        route_cache: dict[tuple[str, Any], ExecutionTarget] = {}
 
         def _route(model: Model, agent_req: Optional[AgentRequirement] = None) -> ExecutionTarget:
-            cache_key = (model.id, agent_req.name if agent_req else "")
+            groq_key = (
+                ((agent_req.min_context_window or 0) > 8000, agent_req.requires_tools)
+                if (agent_req is not None and groq_active)
+                else None
+            )
+            cache_key = (model.id, groq_key)
             cached = route_cache.get(cache_key)
             if cached is None:
                 cached = resolve_model_execution_target(
@@ -450,10 +462,12 @@ class ApplicationService:
 
         # Priorité des canaux : un modèle exécutable via un canal prioritaire (ex: crédits gratuits
         # Mistral/Google) est préféré à tout modèle d'un canal suivant.
-        channel_rank = {m.id: _channel_index(_route(m)) for m in models}
+        # ⚡ Performance optimization (Bolt): Compute targets once for both channel rank and costs.
+        channel_targets = {m.id: _route(m) for m in models}
+        channel_rank = {m_id: _channel_index(target) for m_id, target in channel_targets.items()}
         channel_costs = {
-            m.id: _route(m).effective_cost_input_per_m + _route(m).effective_cost_output_per_m
-            for m in models
+            m_id: target.effective_cost_input_per_m + target.effective_cost_output_per_m
+            for m_id, target in channel_targets.items()
         }
         results = [
             resolve_model_for_agent(
