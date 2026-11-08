@@ -1336,7 +1336,7 @@
                 <option value="">Imposer à...</option>
                 ${agentOptions}
               </select>
-              <button type="button" class="btn-sm btn-assign-model" data-model-id="${escapeHtml(m.id)}" title="Imposer ce modèle à l'agent sélectionné" aria-label="Fixer le modèle ${escapeHtml(m.id)}">Fixer</button>
+              <button type="button" class="btn-sm btn-assign-model" data-model-id="${escapeHtml(m.id)}" disabled aria-disabled="true" title="Sélectionnez un agent pour lui imposer ce modèle" aria-label="Fixer le modèle ${escapeHtml(m.id)} (sélectionnez d'abord un agent)">Fixer</button>
             </div>
           </div>
         </div>`;
@@ -1364,16 +1364,34 @@
         });
       });
 
+      modelsGrid.querySelectorAll(".assign-agent-select").forEach((select) => {
+        select.addEventListener("change", () => {
+          const parentActions = select.closest(".model-actions");
+          const btn = parentActions ? parentActions.querySelector(".btn-assign-model") : null;
+          if (!btn) return;
+          const modelId = btn.getAttribute("data-model-id") || "";
+          const agentName = select.value.trim();
+          if (agentName) {
+            btn.disabled = false;
+            btn.removeAttribute("aria-disabled");
+            btn.title = `Imposer le modèle ${modelId} à l'agent ${agentName}`;
+            btn.setAttribute("aria-label", `Imposer le modèle ${modelId} à l'agent ${agentName}`);
+          } else {
+            btn.disabled = true;
+            btn.setAttribute("aria-disabled", "true");
+            btn.title = "Sélectionnez un agent pour lui imposer ce modèle";
+            btn.setAttribute("aria-label", `Fixer le modèle ${modelId} (sélectionnez d'abord un agent)`);
+          }
+        });
+      });
+
       modelsGrid.querySelectorAll(".btn-assign-model").forEach((btn) => {
         btn.addEventListener("click", () => {
           const modelId = btn.getAttribute("data-model-id");
           const parentActions = btn.closest(".model-actions");
           const select = parentActions ? parentActions.querySelector(".assign-agent-select") : null;
           const agentName = select ? select.value : "";
-          if (!agentName) {
-            alert("Veuillez sélectionner un agent dans la liste déroulante avant d'appliquer.");
-            return;
-          }
+          if (!agentName) return;
           assignModelToAgent(agentName, modelId);
         });
       });
