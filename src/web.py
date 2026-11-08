@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, ClassVar, Optional
 from urllib.parse import parse_qs, urlparse
 
+from src.cooldown import validate_target_id
 from src.service import ApplicationService, OperationResult, serialize_report
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
@@ -344,11 +345,16 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
             if not isinstance(target, str) or not target.strip():
                 self._send_json(400, {"ok": False, "message": "Champ 'target' (ou 'agent_name') obligatoire."})
                 return
+            try:
+                target = validate_target_id(target)
+            except ValueError as err:
+                self._send_json(400, {"ok": False, "message": str(err)})
+                return
             reason = str(body.get("reason") or "rate_limit").strip()
             auto_export = bool(body.get("auto_export", True))
             self._send_operation(
                 self.service.report_model_error(
-                    target_or_agent=target.strip(),
+                    target_or_agent=target,
                     reason=reason,
                     allow_fallback=fallback,
                     filter_by_keys=filter_keys,
@@ -360,6 +366,12 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
             target_id = body.get("target_id") if isinstance(body, dict) else None
             if target_id is not None and not isinstance(target_id, str):
                 target_id = None
+            if target_id is not None and target_id.strip() and target_id.strip().lower() != "all":
+                try:
+                    target_id = validate_target_id(target_id)
+                except ValueError as err:
+                    self._send_json(400, {"ok": False, "message": str(err)})
+                    return
             auto_export = bool(body.get("auto_export", False)) if isinstance(body, dict) else False
             self._send_operation(
                 self.service.clear_cooldowns(

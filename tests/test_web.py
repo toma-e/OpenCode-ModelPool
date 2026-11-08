@@ -174,6 +174,32 @@ class TestWeb(unittest.TestCase):
         self.assertFalse(payload["ok"])
         self.assertIn("répertoire", payload["message"].lower())
 
+    def test_post_failover_and_clear_cooldowns_input_validation(self) -> None:
+        """Vérifie que POST /api/failover et /api/cooldowns/clear rejettent les inputs malformés ou dangereux."""
+        # 1. /api/failover avec null byte
+        status, payload = self._post("/api/failover", {"target": "model\0inject"})
+        self.assertEqual(status, 400)
+        self.assertFalse(payload["ok"])
+        self.assertIn("caractères de contrôle", payload["message"])
+
+        # 2. /api/failover avec taille excessive (> 255 caractères)
+        status, payload = self._post("/api/failover", {"target": "m" * 300})
+        self.assertEqual(status, 400)
+        self.assertFalse(payload["ok"])
+        self.assertIn("taille maximale", payload["message"])
+
+        # 3. /api/cooldowns/clear avec newline injection
+        status, payload = self._post("/api/cooldowns/clear", {"target_id": "model\ninject"})
+        self.assertEqual(status, 400)
+        self.assertFalse(payload["ok"])
+        self.assertIn("caractères de contrôle", payload["message"])
+
+        # 4. /api/cooldowns/clear avec taille excessive
+        status, payload = self._post("/api/cooldowns/clear", {"target_id": "c" * 300})
+        self.assertEqual(status, 400)
+        self.assertFalse(payload["ok"])
+        self.assertIn("taille maximale", payload["message"])
+
     def test_post_diff_path_security(self) -> None:
         """Vérifie que POST /api/diff restreint strictement les chemins pour empêcher la fuite de fichiers."""
         # 1. Traversée interdite (..)

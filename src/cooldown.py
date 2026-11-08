@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
-from src.providers.router import PROVIDER_ALIASES, normalize_model_basename
+from src.providers.router import PROVIDER_ALIASES
 
 COOLDOWN_SCHEMA_VERSION = 1
 
@@ -165,9 +165,10 @@ class CooldownEntry:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> CooldownEntry:
         """Reconstruit une entrée depuis un dictionnaire JSON."""
-        target_id = str(data.get("target_id") or "").strip()
-        if not target_id:
+        raw_target = data.get("target_id")
+        if not isinstance(raw_target, str) or not raw_target.strip():
             raise ValueError("CooldownEntry: 'target_id' obligatoire.")
+        target_id = validate_target_id(raw_target)
         raw_reason = str(data.get("reason") or REASON_OTHER).strip().lower()
         reason = raw_reason if raw_reason in VALID_ERROR_REASONS else REASON_OTHER
         reported_at = str(data.get("reported_at") or "").strip()
@@ -184,6 +185,31 @@ class CooldownEntry:
         )
 
 
+MAX_TARGET_ID_LENGTH = 255
+
+
+def validate_target_id(target_id: str) -> str:
+    """Valide et assainit l'identifiant d'une cible de quarantaine (modèle, provider ou agent).
+
+    Garantit l'absence d'injections de caractères de contrôle, retours à la ligne ou octets nuls,
+    et prévient les attaques par déni de service (DoS) par surcharge de taille de stockage.
+    """
+    if not isinstance(target_id, str):
+        raise ValueError("L'identifiant de cible doit être une chaîne de caractères.")
+    clean_target = target_id.strip()
+    if not clean_target:
+        raise ValueError("L'identifiant de cible à mettre en quarantaine ne peut pas être vide.")
+    if len(clean_target) > MAX_TARGET_ID_LENGTH:
+        raise ValueError(
+            f"L'identifiant de cible dépasse la taille maximale autorisée ({MAX_TARGET_ID_LENGTH} caractères)."
+        )
+    if any(c in clean_target for c in ("\0", "\r", "\n")):
+        raise ValueError("L'identifiant de cible contient des caractères de contrôle interdits.")
+    if any(ord(c) < 32 for c in clean_target):
+        raise ValueError("L'identifiant de cible contient des caractères de contrôle non imprimables.")
+    return clean_target
+
+
 def create_cooldown_entry(
     target_id: str,
     reason: str = REASON_RATE_LIMIT,
@@ -192,9 +218,7 @@ def create_cooldown_entry(
     now: Optional[datetime] = None,
 ) -> CooldownEntry:
     """Crée une nouvelle entrée de quarantaine avec calcul automatique de ``expires_at``."""
-    clean_target = target_id.strip()
-    if not clean_target:
-        raise ValueError("L'identifiant de cible à mettre en quarantaine ne peut pas être vide.")
+    clean_target = validate_target_id(target_id)
     norm_reason = reason.strip().lower() if reason else REASON_RATE_LIMIT
     if norm_reason not in VALID_ERROR_REASONS:
         norm_reason = classify_error_reason(error_message=reason)

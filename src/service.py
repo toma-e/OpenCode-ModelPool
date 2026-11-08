@@ -11,11 +11,10 @@ import json
 import sys
 import threading
 import time
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Callable, Iterator, Optional
+from typing import Any, Callable, Dict, Iterator, Mapping, Optional
 
-from datetime import datetime, timezone
 
 try:
     import fcntl
@@ -29,12 +28,13 @@ except ImportError:
 
 from src.budget import AgentBudgetReport, FleetBudgetReport, simulate_fleet_budget
 from src.diagnostics import build_fleet_diagnostics, check_catalogue_staleness
-from src.presets import BUILTIN_PRESETS, create_agent_from_preset, get_available_presets
+from src.presets import create_agent_from_preset, get_available_presets
 from src.cooldown import (
     CooldownEntry,
     create_cooldown_entry,
     is_model_in_cooldown,
     read_cooldowns,
+    validate_target_id,
     write_cooldowns,
 )
 from src.exporter import (
@@ -55,7 +55,6 @@ from src.fetcher import (
 from src.providers.detector import (
     ProviderCredentials,
     detect_provider_credentials,
-    get_available_provider_names,
 )
 from src.providers.ollama import get_ollama_models
 from src.providers.access import (
@@ -77,7 +76,6 @@ from src.selector import (
     Model,
     SelectionResult,
     build_hybrid_fallback_chain,
-    is_non_llm_model,
     resolve_model_for_agent,
 )
 
@@ -1392,9 +1390,10 @@ class ApplicationService:
         export_path: str | Path | None = None,
     ) -> OperationResult:
         """Signale une erreur sur un agent, un modèle ou un fournisseur, l'isole en quarantaine et bascule sur le modèle de repli."""
-        clean_target = (target_or_agent or "").strip()
-        if not clean_target:
-            return OperationResult(False, "Veuillez indiquer un nom d'agent ou un identifiant de modèle à basculer.")
+        try:
+            clean_target = validate_target_id(target_or_agent)
+        except ValueError as err:
+            return OperationResult(False, str(err))
 
         with self._lock, self._file_lock():
             try:
@@ -1485,6 +1484,12 @@ class ApplicationService:
         export_path: str | Path | None = None,
     ) -> OperationResult:
         """Lève la quarantaine d'un modèle spécifique ou de tous les modèles et recalcule les attributions."""
+        if target_id is not None and target_id.strip() and target_id.strip().lower() != "all":
+            try:
+                target_id = validate_target_id(target_id)
+            except ValueError as err:
+                return OperationResult(False, str(err))
+
         with self._lock, self._file_lock():
             try:
                 existing = read_cooldowns(self.cooldown_path)
