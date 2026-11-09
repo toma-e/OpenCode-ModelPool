@@ -11,11 +11,10 @@ import json
 import sys
 import threading
 import time
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Callable, Iterator, Optional
+from typing import Any, Callable, Dict, Iterator, Mapping, Optional
 
-from datetime import datetime, timezone
 
 try:
     import fcntl
@@ -29,7 +28,7 @@ except ImportError:
 
 from src.budget import AgentBudgetReport, FleetBudgetReport, simulate_fleet_budget
 from src.diagnostics import build_fleet_diagnostics, check_catalogue_staleness
-from src.presets import BUILTIN_PRESETS, create_agent_from_preset, get_available_presets
+from src.presets import create_agent_from_preset, get_available_presets
 from src.cooldown import (
     CooldownEntry,
     create_cooldown_entry,
@@ -55,7 +54,6 @@ from src.fetcher import (
 from src.providers.detector import (
     ProviderCredentials,
     detect_provider_credentials,
-    get_available_provider_names,
 )
 from src.providers.ollama import get_ollama_models
 from src.providers.access import (
@@ -77,7 +75,6 @@ from src.selector import (
     Model,
     SelectionResult,
     build_hybrid_fallback_chain,
-    is_non_llm_model,
     resolve_model_for_agent,
 )
 
@@ -399,10 +396,23 @@ class ApplicationService:
                 f"Quarantaine active ({c.reason_label}) sur '{c.target_id}' — réhabilitation dans ~{rem_min} min."
             )
 
-        route_cache: dict[tuple[str, str], ExecutionTarget] = {}
+        # ⚡ Performance optimization (Bolt): Cache routing by model ID and only relevant
+        # agent constraints (Groq limits) rather than agent name. In resolve_model_execution_target,
+        # agent_requirement is only inspected when Groq credentials are active (min_context_window > 8000,
+        # requires_tools). Using agent.name previously caused complete cache misses across 1,360+ candidate
+        # evaluations during fallback chain calculations.
+        groq_cred = creds.get("groq")
+        groq_active = bool(groq_cred and groq_cred.is_available)
+
+        route_cache: dict[tuple[str, Any], ExecutionTarget] = {}
 
         def _route(model: Model, agent_req: Optional[AgentRequirement] = None) -> ExecutionTarget:
-            cache_key = (model.id, agent_req.name if agent_req else "")
+            req_key = (
+                ((agent_req.min_context_window or 0) > 8000, bool(agent_req.requires_tools))
+                if (groq_active and agent_req is not None)
+                else None
+            )
+            cache_key = (model.id, req_key)
             cached = route_cache.get(cache_key)
             if cached is None:
                 cached = resolve_model_execution_target(
@@ -450,9 +460,11 @@ class ApplicationService:
 
         # Priorité des canaux : un modèle exécutable via un canal prioritaire (ex: crédits gratuits
         # Mistral/Google) est préféré à tout modèle d'un canal suivant.
-        channel_rank = {m.id: _channel_index(_route(m)) for m in models}
+        # ⚡ Pre-compute default targets once to avoid resolving/looking up _route(m) twice per model.
+        default_targets = {m.id: _route(m) for m in models}
+        channel_rank = {m.id: _channel_index(default_targets[m.id]) for m in models}
         channel_costs = {
-            m.id: _route(m).effective_cost_input_per_m + _route(m).effective_cost_output_per_m
+            m.id: default_targets[m.id].effective_cost_input_per_m + default_targets[m.id].effective_cost_output_per_m
             for m in models
         }
         results = [
@@ -508,8 +520,8 @@ class ApplicationService:
         # Chaîne de repli hybride par agent (limites de débit / quotas) :
         # Passe 1 : canaux distincts en priorité ; Passe 2 : modèles distincts sur même canal si besoin.
         fallback_chains: dict[str, list[str]] = {}
-        for res, target in zip(results, execution_targets):
-            if res.model is None or target is None:
+        for res, exec_t in zip(results, execution_targets):
+            if res.model is None or exec_t is None:
                 continue
             agent = agent_by_name.get(res.agent_name)
             candidate_targets: list[tuple[str, str]] = []
@@ -524,8 +536,8 @@ class ApplicationService:
                     continue
                 candidate_targets.append((cand_target.formatted_model_id, cand_target.channel_provider))
             fallback_chains[res.agent_name] = build_hybrid_fallback_chain(
-                primary_formatted_id=target.formatted_model_id,
-                primary_channel=target.channel_provider,
+                primary_formatted_id=exec_t.formatted_model_id,
+                primary_channel=exec_t.channel_provider,
                 candidate_targets=candidate_targets,
                 max_length=3,
             )
@@ -1587,7 +1599,8 @@ class ApplicationService:
                 return True, None
             raw = _load_json(self.models_path, "Catalogue de modèles")
             updated = raw.get("last_updated")
-            return check_catalogue_staleness(updated, max_days=max_days)
+            updated_str = str(updated) if isinstance(updated, str) else None
+            return check_catalogue_staleness(updated_str, max_days=max_days)
         except Exception:
             return True, None
 
