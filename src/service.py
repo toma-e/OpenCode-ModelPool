@@ -505,12 +505,12 @@ class ApplicationService:
         # Chaîne de repli hybride par agent (limites de débit / quotas) :
         # Passe 1 : canaux distincts en priorité ; Passe 2 : modèles distincts sur même canal si besoin.
         fallback_chains: dict[str, list[str]] = {}
-        for res, target in zip(results, execution_targets):
-            if res.model is None or target is None:
+        for r_item, t_item in zip(results, execution_targets):
+            if r_item.model is None or t_item is None:
                 continue
-            agent = agent_by_name.get(res.agent_name)
+            agent = agent_by_name.get(r_item.agent_name)
             candidate_targets: list[tuple[str, str]] = []
-            for candidate in res.candidates[1:]:
+            for candidate in r_item.candidates[1:]:
                 cand_target = _route(candidate, agent)
                 if is_model_in_cooldown(
                     candidate.id,
@@ -1583,7 +1583,7 @@ class ApplicationService:
             if not self.models_path.exists():
                 return True, None
             raw = _load_json(self.models_path, "Catalogue de modèles")
-            updated = raw.get("last_updated")
+            updated = str(raw.get("last_updated")) if raw.get("last_updated") is not None else None
             return check_catalogue_staleness(updated, max_days=max_days)
         except Exception:
             return True, None
