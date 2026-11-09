@@ -1044,7 +1044,7 @@ class ApplicationService:
                         else:
                             target_dir = raw_proj / ".opencode"
                     else:
-                        target_dir = (Path.cwd() / ".opencode").resolve()
+                        target_dir = (self.base_dir / ".opencode").resolve()
                 else:
                     target_dir = (Path.home() / ".config" / "opencode").resolve()
 

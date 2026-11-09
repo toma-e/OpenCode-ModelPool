@@ -168,7 +168,7 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
                 data = self.service.get_models_catalog()
                 self._send_json(200, {"ok": True, **data})
             except Exception as error:
-                self._send_json(500, {"ok": False, "message": f"Erreur lors de la lecture du catalogue : {error}"})
+                self._send_json(500, {"ok": False, "message": self._sanitize_message(f"Erreur lors de la lecture du catalogue : {error}")})
             return
         self._send_json(404, {"ok": False, "message": "Ressource introuvable."})
 
@@ -263,8 +263,11 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
                 return
 
             # Contrôle de sécurité : prévention de traversée de répertoire et restriction du périmètre
-            if target == "project" and project_path:
-                if ".." in project_path:
+            if target == "project":
+                if not project_path:
+                    self._send_json(400, {"ok": False, "message": "Chemin de projet obligatoire pour la cible 'project'."})
+                    return
+                if ".." in project_path or "\0" in project_path:
                     self._send_json(400, {"ok": False, "message": "Chemin de projet non autorisé (traversée interdite)."})
                     return
                 # Vérifier que le chemin résolu reste dans le périmètre du projet ou d'un sous-dossier autorisé
