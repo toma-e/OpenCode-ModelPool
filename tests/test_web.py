@@ -246,6 +246,23 @@ class TestWeb(unittest.TestCase):
         self.assertFalse(payload["ok"])
         self.assertIn("interdite en dehors du projet", payload["message"].lower())
 
+        # 4. Cible 'project' sans project_path fourni ou vide -> 400
+        status, payload = self._post("/api/integrate", {"target": "project"})
+        self.assertEqual(status, 400)
+        self.assertFalse(payload["ok"])
+        self.assertIn("obligatoire", payload["message"].lower())
+
+        status, payload = self._post("/api/integrate", {"target": "project", "project_path": "   "})
+        self.assertEqual(status, 400)
+        self.assertFalse(payload["ok"])
+        self.assertIn("obligatoire", payload["message"].lower())
+
+        # 5. Null byte (\0) dans project_path -> 400
+        status, payload = self._post("/api/integrate", {"target": "project", "project_path": "valid_proj\0/escape"})
+        self.assertEqual(status, 400)
+        self.assertFalse(payload["ok"])
+        self.assertIn("traversée interdite", payload["message"].lower())
+
     def test_post_rejects_missing_json_content_type(self) -> None:
         request = urllib.request.Request(
             self.base + "/api/export",
@@ -406,6 +423,22 @@ class TestWeb(unittest.TestCase):
         self.assertIn("supports_tools", first_model)
         self.assertIn("is_executable", first_model)
         self.assertIn("execution_target", first_model)
+
+    def test_models_catalog_get_endpoint_sanitizes_error(self) -> None:
+        """Vérifie que GET /api/models masque les chemins internes en cas d'erreur de lecture."""
+        with patch.object(self.service, "get_models_catalog") as mock_catalog:
+            secret_path = str(self.service.base_dir.resolve() / "private" / "models.json")
+            mock_catalog.side_effect = RuntimeError(f"Fichier inaccessible: {secret_path}")
+            try:
+                status, data = self._get("/api/models")
+            except urllib.error.HTTPError as error:
+                status = error.code
+                data = error.read()
+            self.assertEqual(status, 500)
+            parsed = json.loads(data.decode("utf-8"))
+            self.assertFalse(parsed["ok"])
+            self.assertNotIn(str(self.service.base_dir.resolve()), parsed["message"])
+            self.assertIn("./private/models.json", parsed["message"])
 
     def test_get_presets_and_post_add_preset(self) -> None:
         """Vérifie GET /api/presets et POST /api/agent/add-preset."""
