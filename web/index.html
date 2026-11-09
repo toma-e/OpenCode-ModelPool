@@ -425,7 +425,7 @@
               <option value="doc_writer">Rédacteur Documentation (doc_writer)</option>
               <option value="test_runner">Exécuteur de Tests (test_runner)</option>
             </select>
-            <input type="text" id="preset_custom_name" placeholder="Nom optionnel" style="padding:0.35rem 0.5rem;font-size:0.85rem;background:var(--bg);border:1px solid var(--line);border-radius:0.3rem;color:var(--text);width:150px;">
+            <input type="text" id="preset_custom_name" placeholder="Nom optionnel" aria-label="Nom personnalisé pour le nouvel agent (optionnel)" style="padding:0.35rem 0.5rem;font-size:0.85rem;background:var(--bg);border:1px solid var(--line);border-radius:0.3rem;color:var(--text);width:150px;">
             <button id="add_preset_btn" class="btn-sm" type="button" style="background:#205438;border-color:#2e754f;">+ Ajouter l'agent</button>
           </div>
         </div>
@@ -868,7 +868,7 @@
           ${fbChainHtml}
           ${alternatives ? `<p class="muted">Alternatives</p><ul>${alternatives}</ul>` : ""}
 
-          <form class="form-row agent-form" data-agent-name="${escapeHtml(agent.name)}" data-agent-idx="${agentIdx}">
+          <form class="form-row agent-form" data-agent-name="${escapeHtml(agent.name)}" data-agent-idx="${agentIdx}" aria-label="Configurer les exigences pour ${escapeHtml(agent.name)}">
             <div class="form-group">
               <label for="strat-${agentIdx}">Stratégie :</label>
               <select id="strat-${agentIdx}">
@@ -889,26 +889,26 @@
             </div>
 
             <div class="form-group">
-              <label><input type="checkbox" id="prefer_tier1-${agentIdx}"${preferTier1 ? " checked" : ""}> Préférer Tier 1 (Labs majeurs)</label>
+              <label for="prefer_tier1-${agentIdx}"><input type="checkbox" id="prefer_tier1-${agentIdx}"${preferTier1 ? " checked" : ""}> Préférer Tier 1 (Labs majeurs)</label>
             </div>
 
             <div class="form-group">
-              <label><input type="checkbox" id="allow_free-${agentIdx}"${allowFree ? " checked" : ""}> Autoriser gratuit</label>
+              <label for="allow_free-${agentIdx}"><input type="checkbox" id="allow_free-${agentIdx}"${allowFree ? " checked" : ""}> Autoriser gratuit</label>
             </div>
 
             <div class="form-group">
-              <label><input type="checkbox" id="prefer_free-${agentIdx}"${preferFree ? " checked" : ""}> Préférer gratuit</label>
+              <label for="prefer_free-${agentIdx}"><input type="checkbox" id="prefer_free-${agentIdx}"${preferFree ? " checked" : ""}> Préférer gratuit</label>
             </div>
 
             <div class="form-group">
-              <label><input type="checkbox" id="req_vision-${agentIdx}"${reqVision ? " checked" : ""}> Vision requise</label>
+              <label for="req_vision-${agentIdx}"><input type="checkbox" id="req_vision-${agentIdx}"${reqVision ? " checked" : ""}> Vision requise</label>
             </div>
 
             <div class="form-group">
-              <label><input type="checkbox" id="req_reasoning-${agentIdx}"${reqReasoning ? " checked" : ""}> Raisonnement</label>
+              <label for="req_reasoning-${agentIdx}"><input type="checkbox" id="req_reasoning-${agentIdx}"${reqReasoning ? " checked" : ""}> Raisonnement</label>
             </div>
 
-            <button type="submit" class="btn-sm">Appliquer</button>
+            <button type="submit" class="btn-sm btn-submit-agent" aria-label="Appliquer les contraintes pour ${escapeHtml(agent.name)}">Appliquer</button>
             ${failoverControls}
           </form>
         </article>`;
@@ -936,6 +936,14 @@
     }
 
     async function saveAgentRequirements(agentName, agentIdx) {
+      const form = document.querySelector(`.agent-form[data-agent-idx="${agentIdx}"]`);
+      const submitBtn = form ? form.querySelector(".btn-submit-agent") : null;
+      const originalBtnText = submitBtn ? submitBtn.textContent : "Appliquer";
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Enregistrement...";
+      }
+
       const strategyEl = document.getElementById("strat-" + agentIdx);
       const reliabilityEl = document.getElementById("reliability-" + agentIdx);
       const allowFreeEl = document.getElementById("allow_free-" + agentIdx);
@@ -977,6 +985,11 @@
         if (payload.report) render(payload.report);
       } catch (error) {
         showBanner(false, "Échec de l'enregistrement : " + error);
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalBtnText;
+        }
       }
     }
 

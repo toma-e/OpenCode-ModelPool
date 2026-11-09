@@ -11,11 +11,10 @@ import json
 import sys
 import threading
 import time
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Callable, Iterator, Optional
+from typing import Any, Callable, Dict, Iterator, Mapping, Optional
 
-from datetime import datetime, timezone
 
 try:
     import fcntl
@@ -29,7 +28,7 @@ except ImportError:
 
 from src.budget import AgentBudgetReport, FleetBudgetReport, simulate_fleet_budget
 from src.diagnostics import build_fleet_diagnostics, check_catalogue_staleness
-from src.presets import BUILTIN_PRESETS, create_agent_from_preset, get_available_presets
+from src.presets import create_agent_from_preset, get_available_presets
 from src.cooldown import (
     CooldownEntry,
     create_cooldown_entry,
@@ -55,7 +54,6 @@ from src.fetcher import (
 from src.providers.detector import (
     ProviderCredentials,
     detect_provider_credentials,
-    get_available_provider_names,
 )
 from src.providers.ollama import get_ollama_models
 from src.providers.access import (
@@ -77,7 +75,6 @@ from src.selector import (
     Model,
     SelectionResult,
     build_hybrid_fallback_chain,
-    is_non_llm_model,
     resolve_model_for_agent,
 )
 
@@ -508,12 +505,12 @@ class ApplicationService:
         # Chaîne de repli hybride par agent (limites de débit / quotas) :
         # Passe 1 : canaux distincts en priorité ; Passe 2 : modèles distincts sur même canal si besoin.
         fallback_chains: dict[str, list[str]] = {}
-        for res, target in zip(results, execution_targets):
-            if res.model is None or target is None:
+        for r_item, t_item in zip(results, execution_targets):
+            if r_item.model is None or t_item is None:
                 continue
-            agent = agent_by_name.get(res.agent_name)
+            agent = agent_by_name.get(r_item.agent_name)
             candidate_targets: list[tuple[str, str]] = []
-            for candidate in res.candidates[1:]:
+            for candidate in r_item.candidates[1:]:
                 cand_target = _route(candidate, agent)
                 if is_model_in_cooldown(
                     candidate.id,
@@ -1586,7 +1583,7 @@ class ApplicationService:
             if not self.models_path.exists():
                 return True, None
             raw = _load_json(self.models_path, "Catalogue de modèles")
-            updated = raw.get("last_updated")
+            updated = str(raw.get("last_updated")) if raw.get("last_updated") is not None else None
             return check_catalogue_staleness(updated, max_days=max_days)
         except Exception:
             return True, None
