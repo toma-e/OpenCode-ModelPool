@@ -399,10 +399,23 @@ class ApplicationService:
                 f"Quarantaine active ({c.reason_label}) sur '{c.target_id}' — réhabilitation dans ~{rem_min} min."
             )
 
-        route_cache: dict[tuple[str, str], ExecutionTarget] = {}
+        # ⚡ Performance optimization (Bolt): Cache routing by model ID and only relevant
+        # agent constraints (Groq limits) rather than agent name. In resolve_model_execution_target,
+        # agent_requirement is only inspected when Groq credentials are active (min_context_window > 8000,
+        # requires_tools). Using agent.name previously caused complete cache misses across 1,360+ candidate
+        # evaluations during fallback chain calculations.
+        groq_cred = creds.get("groq")
+        groq_active = bool(groq_cred and groq_cred.is_available)
+
+        route_cache: dict[tuple[str, Any], ExecutionTarget] = {}
 
         def _route(model: Model, agent_req: Optional[AgentRequirement] = None) -> ExecutionTarget:
-            cache_key = (model.id, agent_req.name if agent_req else "")
+            req_key = (
+                ((agent_req.min_context_window or 0) > 8000, bool(agent_req.requires_tools))
+                if (groq_active and agent_req is not None)
+                else None
+            )
+            cache_key = (model.id, req_key)
             cached = route_cache.get(cache_key)
             if cached is None:
                 cached = resolve_model_execution_target(
@@ -450,9 +463,11 @@ class ApplicationService:
 
         # Priorité des canaux : un modèle exécutable via un canal prioritaire (ex: crédits gratuits
         # Mistral/Google) est préféré à tout modèle d'un canal suivant.
-        channel_rank = {m.id: _channel_index(_route(m)) for m in models}
+        # ⚡ Pre-compute default targets once to avoid resolving/looking up _route(m) twice per model.
+        default_targets = {m.id: _route(m) for m in models}
+        channel_rank = {m.id: _channel_index(default_targets[m.id]) for m in models}
         channel_costs = {
-            m.id: _route(m).effective_cost_input_per_m + _route(m).effective_cost_output_per_m
+            m.id: default_targets[m.id].effective_cost_input_per_m + default_targets[m.id].effective_cost_output_per_m
             for m in models
         }
         results = [
