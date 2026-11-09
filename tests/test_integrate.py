@@ -6,10 +6,8 @@ import time
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
 
 from main import main
-from src.exporter import DEFAULT_OPENCODE_COMMANDS
 from src.service import ApplicationService
 
 
