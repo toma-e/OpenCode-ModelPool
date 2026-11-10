@@ -246,6 +246,18 @@ class TestWeb(unittest.TestCase):
         self.assertFalse(payload["ok"])
         self.assertIn("interdite en dehors du projet", payload["message"].lower())
 
+        # 4. Octet nul (\0) dans project_path
+        status, payload = self._post("/api/integrate", {"target": "project", "project_path": "subdir\0nullbyte"})
+        self.assertEqual(status, 400)
+        self.assertFalse(payload["ok"])
+        self.assertIn("traversée interdite", payload["message"].lower())
+
+        # 5. Chemin vide ou composé d'espaces
+        status, payload = self._post("/api/integrate", {"target": "project", "project_path": "   "})
+        self.assertEqual(status, 400)
+        self.assertFalse(payload["ok"])
+        self.assertIn("chemin vide", payload["message"].lower())
+
     def test_post_rejects_missing_json_content_type(self) -> None:
         request = urllib.request.Request(
             self.base + "/api/export",
