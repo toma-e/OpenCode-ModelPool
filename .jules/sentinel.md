@@ -1,3 +1,8 @@
+## 2026-11-06 - Null-Byte and Whitespace Path Sanitization on Web Integration Endpoints
+**Vulnerability:** The HTTP API endpoint `POST /api/integrate` checked `target == "project"` and validated `if ".." in project_path:`, but did not reject null bytes (`\0`) or empty/whitespace-only paths before path resolution and boundary verification. Null bytes in user-provided paths can lead to path truncation or operating system filesystem vulnerabilities.
+**Learning:** Checking for directory traversal tokens (`..`) alone is insufficient for path safety. Endpoints accepting arbitrary paths must trim whitespace, reject empty inputs, reject null bytes (`\0`), and encapsulate resolution and relative boundary containment within exception handling blocks.
+**Prevention:** Reject null bytes (`\0`) and empty strings on all path inputs before constructing `Path` objects, and sanitize input variables prior to invoking backend service methods.
+
 ## 2026-11-05 - API Key Masking Entropy Preservation and Leak Prevention
 **Vulnerability:** The credential detector masking utility `mask_key` displayed visible prefixes and suffixes (2 prefix + 2 suffix, or 4 prefix + 4 suffix) across relatively short token lengths (e.g. 7-13 characters), disclosing over 55-60% of character entropy and simplifying brute-force or key-reconstruction attacks if exposed in logs or web status endpoints (`GET /api/providers`).
 **Learning:** Masking functions must scale thresholds conservatively with token entropy. Short keys (< 8 characters) must be completely masked (`****`), intermediate tokens (8 to 16 characters) should expose at most 2 characters at each end, and only keys strictly longer than 16 characters should expose 4 characters.
