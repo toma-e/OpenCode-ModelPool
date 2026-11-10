@@ -466,6 +466,19 @@ class TestWeb(unittest.TestCase):
         self.assertIn('aria-label="Fermer la notification"', html)
         self.assertIn('hideBanner', html)
 
+    def test_model_search_keyboard_shortcut_and_affordance(self) -> None:
+        """Vérifie la présence du raccourci clavier '/' et des affordances d'accessibilité sur la recherche de modèles."""
+        status, html_bytes = self._get("/")
+        self.assertEqual(status, 200)
+        html = html_bytes.decode("utf-8")
+        self.assertIn('class="models-search-wrapper"', html)
+        self.assertIn('id="model_search"', html)
+        self.assertIn('aria-label="Rechercher par identifiant ou fournisseur (raccourci : /)"', html)
+        self.assertIn('class="search-kbd"', html)
+        self.assertIn('title="Raccourci clavier : appuyez sur /"', html)
+        self.assertIn('switchTab("models")', html)
+        self.assertIn('modelSearchInput.focus()', html)
+
     def test_head_static_files(self) -> None:
         """Vérifie que HEAD sur / et /index.html renvoie 200, les en-têtes corrects et un corps vide."""
         for path in ("/", "/index.html"):

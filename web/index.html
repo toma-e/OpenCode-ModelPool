@@ -223,14 +223,32 @@
       flex-wrap: wrap;
       align-items: center;
     }
-    .models-search-input {
+    .models-search-wrapper {
       flex: 1 1 250px;
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .models-search-input {
+      width: 100%;
       background: #131b26;
       border: 1px solid var(--line);
       color: var(--text);
-      padding: 0.5rem 0.75rem;
+      padding: 0.5rem 2.2rem 0.5rem 0.75rem;
       border-radius: 0.4rem;
       font-size: 0.95rem;
+    }
+    .search-kbd {
+      position: absolute;
+      right: 0.6rem;
+      padding: 0.1rem 0.4rem;
+      font-size: 0.78rem;
+      font-family: inherit;
+      background: #1c2736;
+      border: 1px solid var(--line);
+      border-radius: 0.25rem;
+      color: var(--muted);
+      pointer-events: none;
     }
     .models-filters-row {
       display: flex;
@@ -438,7 +456,10 @@
     <div id="tab_content_models" class="tab-content" role="tabpanel" aria-labelledby="tab_btn_models" tabindex="0">
       <section class="models-toolbar">
         <div class="models-search-row">
-          <input type="text" id="model_search" class="models-search-input" placeholder="Rechercher par ID ou fournisseur (ex: claude, gemini, qwen, mistral)..." aria-label="Rechercher par identifiant ou fournisseur">
+          <div class="models-search-wrapper">
+            <input type="text" id="model_search" class="models-search-input" placeholder="Rechercher par ID ou fournisseur (ex: claude, gemini, qwen) [/]..." aria-label="Rechercher par identifiant ou fournisseur (raccourci : /)">
+            <kbd class="search-kbd" title="Raccourci clavier : appuyez sur /" aria-hidden="true">/</kbd>
+          </div>
           <div style="display:flex;gap:0.5rem;align-items:center;">
             <label for="model_sort" style="white-space:nowrap;">Trier par :</label>
             <select id="model_sort">
@@ -1424,9 +1445,22 @@
     }
 
     modelSearchInput.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && modelSearchInput.value) {
-        modelSearchInput.value = "";
-        applyFiltersAndSort();
+      if (e.key === "Escape") {
+        if (modelSearchInput.value) {
+          modelSearchInput.value = "";
+          applyFiltersAndSort();
+        } else {
+          modelSearchInput.blur();
+        }
+      }
+    });
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "/" && !["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement?.tagName)) {
+        e.preventDefault();
+        switchTab("models");
+        modelSearchInput.focus();
+        modelSearchInput.select();
       }
     });
 
