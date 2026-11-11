@@ -430,6 +430,39 @@ class TestWeb(unittest.TestCase):
         err_status, err_data = self._post("/api/agent/add-preset", {})
         self.assertEqual(err_status, 400)
 
+    def test_post_cooldowns_clear_validation(self) -> None:
+        """Vérifie la validation des entrées sur POST /api/cooldowns/clear."""
+        # 1. Succès sans target_id
+        status, data = self._post("/api/cooldowns/clear", {})
+        self.assertEqual(status, 200)
+        self.assertTrue(data.get("ok"))
+
+        # 2. Succès avec target_id valide
+        status, data = self._post("/api/cooldowns/clear", {"target_id": "test/model"})
+        self.assertEqual(status, 200)
+        self.assertTrue(data.get("ok"))
+
+        # 3. Échec si target_id n'est pas une chaîne
+        status, data = self._post("/api/cooldowns/clear", {"target_id": 12345})
+        self.assertEqual(status, 400)
+        self.assertFalse(data.get("ok"))
+        self.assertIn("chaîne", data.get("message", "").lower())
+
+        # 4. Échec si target_id contient des caractères de contrôle (ex: \0, \n, \r)
+        status, data = self._post("/api/cooldowns/clear", {"target_id": "test/model\0injection"})
+        self.assertEqual(status, 400)
+        self.assertFalse(data.get("ok"))
+
+        status, data = self._post("/api/cooldowns/clear", {"target_id": "test/model\ninjection"})
+        self.assertEqual(status, 400)
+        self.assertFalse(data.get("ok"))
+
+        # 5. Échec si target_id dépasse la longueur maximale autorisée (256 caractères)
+        status, data = self._post("/api/cooldowns/clear", {"target_id": "a" * 300})
+        self.assertEqual(status, 400)
+        self.assertFalse(data.get("ok"))
+        self.assertIn("invalide ou trop long", data.get("message", "").lower())
+
     def test_diff_section_accessibility_attributes(self) -> None:
         """Vérifie la présence des attributs d'accessibilité ARIA et focus sur la prévisualisation du diff."""
         status, html_bytes = self._get("/")
