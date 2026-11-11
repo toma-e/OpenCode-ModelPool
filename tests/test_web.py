@@ -466,6 +466,20 @@ class TestWeb(unittest.TestCase):
         self.assertIn('aria-label="Fermer la notification"', html)
         self.assertIn('hideBanner', html)
 
+    def test_agent_form_controls_accessibility_and_focus(self) -> None:
+        """Vérifie les attributs d'accessibilité sur les formulaires d'agents et la cible d'export."""
+        status, html_bytes = self._get("/")
+        self.assertEqual(status, 200)
+        html = html_bytes.decode("utf-8")
+        self.assertIn('aria-label="Destination de l\'exportation OpenCode"', html)
+        self.assertIn('for="prefer_tier1-${agentIdx}"', html)
+        self.assertIn('for="allow_free-${agentIdx}"', html)
+        self.assertIn('for="prefer_free-${agentIdx}"', html)
+        self.assertIn('for="req_vision-${agentIdx}"', html)
+        self.assertIn('for="req_reasoning-${agentIdx}"', html)
+        self.assertIn('aria-label="Enregistrer les paramètres pour ${escapeHtml(agent.name)}"', html)
+        self.assertIn('targetBtn.focus()', html)
+
     def test_head_static_files(self) -> None:
         """Vérifie que HEAD sur / et /index.html renvoie 200, les en-têtes corrects et un corps vide."""
         for path in ("/", "/index.html"):

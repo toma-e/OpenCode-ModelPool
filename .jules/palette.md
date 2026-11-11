@@ -15,3 +15,7 @@
 ## 2026-11-04 - Accessible Reordering: Focus Preservation & Live Position Announcements
 **Learning:** In interactive re-orderable lists (like execution channel priority), re-rendering the list DOM after an item move resets active keyboard focus to the `body`, breaking the user's sequential workflow and requiring repetitive tabbing. Screen reader users also receive no feedback about the new item order unless polite live status regions announce the positional shift.
 **Action:** Whenever re-rendering a dynamically reordered list, explicitly maintain focus on the moved item's action button (or swap to its enabled sibling button when hitting the top/bottom boundary), and emit polite live region announcements (e.g. "[Item] déplacé en position X sur Y").
+
+## 2026-11-11 - Dynamic Form Re-rendering & Explicit Label Association
+**Learning:** Submitting asynchronous form updates that cause complete DOM re-renders of list items (such as agent configuration cards) resets keyboard focus back to the `document.body`, disorienting keyboard users who then lose their place in the hierarchy. Furthermore, wrapping checkboxes in `<label>` without explicit `for`/`id` pairing impairs accessibility tree inspection and assistive technology hit-testing in complex grid cards.
+**Action:** Always maintain explicit `for` and `id` bindings on all form inputs and checkboxes, and systematically refocus the invoked form's action button upon completing re-rendering using escaped identifier selectors (`CSS.escape`).
