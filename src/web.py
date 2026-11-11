@@ -340,8 +340,9 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
             if not isinstance(body, dict):
                 self._send_json(400, {"ok": False, "message": "Corps JSON attendu."})
                 return
-            target = body.get("target") or body.get("agent_name") or body.get("model_id")
-            if not isinstance(target, str) or not target.strip():
+            raw_target = body.get("target") or body.get("agent_name") or body.get("model_id")
+            target = str(raw_target) if raw_target is not None else ""
+            if not isinstance(raw_target, str) or not target.strip():
                 self._send_json(400, {"ok": False, "message": "Champ 'target' (ou 'agent_name') obligatoire."})
                 return
             reason = str(body.get("reason") or "rate_limit").strip()
