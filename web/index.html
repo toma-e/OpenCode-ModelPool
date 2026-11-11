@@ -364,7 +364,7 @@
       <button id="sync_or" type="button" title="Télécharge le catalogue public OpenRouter">Sync OpenRouter</button>
       <button id="sync_all" class="primary" type="button" title="Synchronise OpenRouter, Ollama et APIs directes">Sync Tous</button>
       <button id="preview_diff" type="button" title="Prévisualise le diff unifié OpenCode avant écriture">Prévisualiser</button>
-      <select id="export_target" title="Destination de l'exportation OpenCode" style="background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:0.35rem 0.5rem;font-size:0.85rem;">
+      <select id="export_target" title="Destination de l'exportation OpenCode" aria-label="Destination de l'exportation OpenCode" style="background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:0.35rem 0.5rem;font-size:0.85rem;">
         <option value="global" selected>OpenCode Global (~/.config/opencode)</option>
         <option value="project">Projet local (config/opencode.json)</option>
       </select>
@@ -889,26 +889,31 @@
             </div>
 
             <div class="form-group">
-              <label><input type="checkbox" id="prefer_tier1-${agentIdx}"${preferTier1 ? " checked" : ""}> Préférer Tier 1 (Labs majeurs)</label>
+              <input type="checkbox" id="prefer_tier1-${agentIdx}"${preferTier1 ? " checked" : ""}>
+              <label for="prefer_tier1-${agentIdx}">Préférer Tier 1 (Labs majeurs)</label>
             </div>
 
             <div class="form-group">
-              <label><input type="checkbox" id="allow_free-${agentIdx}"${allowFree ? " checked" : ""}> Autoriser gratuit</label>
+              <input type="checkbox" id="allow_free-${agentIdx}"${allowFree ? " checked" : ""}>
+              <label for="allow_free-${agentIdx}">Autoriser gratuit</label>
             </div>
 
             <div class="form-group">
-              <label><input type="checkbox" id="prefer_free-${agentIdx}"${preferFree ? " checked" : ""}> Préférer gratuit</label>
+              <input type="checkbox" id="prefer_free-${agentIdx}"${preferFree ? " checked" : ""}>
+              <label for="prefer_free-${agentIdx}">Préférer gratuit</label>
             </div>
 
             <div class="form-group">
-              <label><input type="checkbox" id="req_vision-${agentIdx}"${reqVision ? " checked" : ""}> Vision requise</label>
+              <input type="checkbox" id="req_vision-${agentIdx}"${reqVision ? " checked" : ""}>
+              <label for="req_vision-${agentIdx}">Vision requise</label>
             </div>
 
             <div class="form-group">
-              <label><input type="checkbox" id="req_reasoning-${agentIdx}"${reqReasoning ? " checked" : ""}> Raisonnement</label>
+              <input type="checkbox" id="req_reasoning-${agentIdx}"${reqReasoning ? " checked" : ""}>
+              <label for="req_reasoning-${agentIdx}">Raisonnement</label>
             </div>
 
-            <button type="submit" class="btn-sm">Appliquer</button>
+            <button type="submit" class="btn-sm" aria-label="Enregistrer les paramètres pour ${escapeHtml(agent.name)}">Appliquer</button>
             ${failoverControls}
           </form>
         </article>`;
@@ -974,7 +979,11 @@
         });
         const payload = await response.json();
         showBanner(Boolean(payload.ok), payload.message || (payload.ok ? "Enregistré" : "Erreur"));
-        if (payload.report) render(payload.report);
+        if (payload.report) {
+          render(payload.report);
+          const targetBtn = document.querySelector(`.agent-form[data-agent-name="${CSS.escape(agentName)}"] button[type="submit"]`);
+          if (targetBtn) targetBtn.focus();
+        }
       } catch (error) {
         showBanner(false, "Échec de l'enregistrement : " + error);
       }
