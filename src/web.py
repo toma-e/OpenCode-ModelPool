@@ -357,9 +357,17 @@ class LocalInterfaceHandler(BaseHTTPRequestHandler):
             )
             return
         if parsed.path == "/api/cooldowns/clear":
-            target_id = body.get("target_id") if isinstance(body, dict) else None
-            if target_id is not None and not isinstance(target_id, str):
-                target_id = None
+            target_id: Optional[str] = None
+            if isinstance(body, dict) and "target_id" in body and body["target_id"] is not None:
+                raw_target = body["target_id"]
+                if not isinstance(raw_target, str):
+                    self._send_json(400, {"ok": False, "message": "Champ 'target_id' doit être une chaîne."})
+                    return
+                # Validation de sécurité : rejet des caractères de contrôle et limitation de longueur
+                if len(raw_target) > 256 or any(c in raw_target for c in ("\0", "\n", "\r")):
+                    self._send_json(400, {"ok": False, "message": "Identifiant de cible invalide ou trop long."})
+                    return
+                target_id = raw_target.strip()
             auto_export = bool(body.get("auto_export", False)) if isinstance(body, dict) else False
             self._send_operation(
                 self.service.clear_cooldowns(
